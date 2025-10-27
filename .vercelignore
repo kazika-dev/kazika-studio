@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+
+# Environment variables
+.env*
+!.env.example
+
+# Local development
+.next
+.vercel
+
+# Documentation (optional, これらはデプロイに不要)
+*.md
+!README.md
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Logs
+*.log
