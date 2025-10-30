@@ -37,7 +37,9 @@ export async function updateSession(request: NextRequest) {
   // 認証が必要なパス
   const protectedPaths = ['/', '/workflow'];
   const isProtectedPath = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
+    path === '/'
+      ? request.nextUrl.pathname === '/'
+      : request.nextUrl.pathname.startsWith(path)
   );
 
   // 未認証でprotectedPathsにアクセスしようとした場合、/loginにリダイレクト

@@ -3,26 +3,29 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ImageIcon from '@mui/icons-material/Image';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 
-interface GeminiNodeData {
+interface NanobanaNodeData {
   label: string;
-  type: 'gemini';
+  type: 'nanobana';
   config: {
     name: string;
     description: string;
     prompt: string;
-    model: string;
-    response?: string;
+    aspectRatio?: string;
+    imageData?: {
+      mimeType: string;
+      data: string;
+    };
     status?: 'idle' | 'loading' | 'success' | 'error';
     error?: string;
   };
 }
 
-function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
+function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
   const [isExecuting, setIsExecuting] = useState(false);
 
   const handleExecute = async () => {
@@ -48,21 +51,21 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
     window.dispatchEvent(updateEvent);
 
     try {
-      const response = await fetch('/api/gemini', {
+      const response = await fetch('/api/nanobana', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           prompt: data.config.prompt,
-          model: data.config.model || 'gemini-2.5-flash',
+          aspectRatio: data.config.aspectRatio || '1:1',
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate response');
+        throw new Error(result.error || 'Failed to generate image');
       }
 
       // 成功時の状態更新
@@ -73,7 +76,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
             config: {
               ...data.config,
               status: 'success',
-              response: result.response,
+              imageData: result.imageData,
             },
           },
         },
@@ -120,7 +123,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         minWidth: 280,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
-        borderColor: selected ? '#ea80fc' : 'divider',
+        borderColor: selected ? '#ff6b9d' : 'divider',
         borderRadius: 2,
         transition: 'all 0.3s ease',
         bgcolor: 'background.paper',
@@ -136,7 +139,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ea80fc',
+          backgroundColor: '#ff6b9d',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -147,13 +150,13 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
           sx={{
             p: 1,
             borderRadius: 1.5,
-            bgcolor: 'rgba(234, 128, 252, 0.1)',
+            bgcolor: 'rgba(255, 107, 157, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <AutoAwesomeIcon sx={{ fontSize: 20, color: '#ea80fc' }} />
+          <ImageIcon sx={{ fontSize: 20, color: '#ff6b9d' }} />
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -193,10 +196,10 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
               onClick={handleExecute}
               disabled={isExecuting}
               sx={{
-                bgcolor: '#ea80fc',
+                bgcolor: '#ff6b9d',
                 color: 'white',
                 '&:hover': {
-                  bgcolor: '#d500f9',
+                  bgcolor: '#ff4081',
                 },
                 '&:disabled': {
                   bgcolor: 'action.disabledBackground',
@@ -230,13 +233,38 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         </Typography>
       )}
 
+      {data.config.imageData && (
+        <Box
+          sx={{
+            mt: 1,
+            borderRadius: 1,
+            overflow: 'hidden',
+            maxHeight: 150,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            bgcolor: 'action.hover',
+          }}
+        >
+          <img
+            src={`data:${data.config.imageData.mimeType};base64,${data.config.imageData.data}`}
+            alt="Generated"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '150px',
+              objectFit: 'contain',
+            }}
+          />
+        </Box>
+      )}
+
       <Handle
         type="source"
         position={Position.Bottom}
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ea80fc',
+          backgroundColor: '#ff6b9d',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -245,4 +273,4 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
   );
 }
 
-export default memo(GeminiNode);
+export default memo(NanobanaNode);

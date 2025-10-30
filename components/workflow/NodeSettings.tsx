@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
+import DeleteIcon from '@mui/icons-material/Delete';
 import TagIcon from '@mui/icons-material/Tag';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 
@@ -22,9 +23,10 @@ interface NodeSettingsProps {
   node: Node;
   onClose: () => void;
   onUpdate: (nodeId: string, config: any) => void;
+  onDelete: () => void;
 }
 
-export default function NodeSettings({ node, onClose, onUpdate }: NodeSettingsProps) {
+export default function NodeSettings({ node, onClose, onUpdate, onDelete }: NodeSettingsProps) {
   const [name, setName] = useState(node.data.config?.name || '');
   const [description, setDescription] = useState(node.data.config?.description || '');
 
@@ -58,6 +60,9 @@ export default function NodeSettings({ node, onClose, onUpdate }: NodeSettingsPr
       anchor="right"
       open={true}
       onClose={onClose}
+      sx={{
+        zIndex: 1300,
+      }}
       PaperProps={{
         sx: {
           width: 400,
@@ -189,6 +194,28 @@ export default function NodeSettings({ node, onClose, onUpdate }: NodeSettingsPr
             }}
           >
             保存
+          </Button>
+
+          {/* Delete Button */}
+          <Button
+            variant="outlined"
+            fullWidth
+            size="large"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => {
+              if (confirm('このノードを削除してもよろしいですか？')) {
+                onDelete();
+                onClose();
+              }
+            }}
+            sx={{
+              py: 1.5,
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            ノードを削除
           </Button>
         </Stack>
       </Box>

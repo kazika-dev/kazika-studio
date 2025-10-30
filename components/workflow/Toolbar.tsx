@@ -1,21 +1,18 @@
 'use client';
 
-import { Node } from 'reactflow';
 import { Paper, Box, Typography, Button, Divider, Stack } from '@mui/material';
 import InputIcon from '@mui/icons-material/Input';
 import SettingsIcon from '@mui/icons-material/Settings';
 import OutputIcon from '@mui/icons-material/Output';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ImageIcon from '@mui/icons-material/Image';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini') => void;
-  onDeleteNode: () => void;
-  selectedNode: Node | null;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana') => void;
 }
 
-export default function Toolbar({ onAddNode, onDeleteNode, selectedNode }: ToolbarProps) {
+export default function Toolbar({ onAddNode }: ToolbarProps) {
   return (
     <Paper
       elevation={3}
@@ -102,27 +99,25 @@ export default function Toolbar({ onAddNode, onDeleteNode, selectedNode }: Toolb
         >
           Gemini AI
         </Button>
-      </Stack>
 
-      {selectedNode && (
-        <>
-          <Divider sx={{ my: 2 }} />
-          <Button
-            fullWidth
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteNode}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              py: 1,
-            }}
-          >
-            選択ノードを削除
-          </Button>
-        </>
-      )}
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<ImageIcon />}
+          onClick={() => onAddNode('nanobana')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#ff6b9d',
+            '&:hover': {
+              bgcolor: '#ff4081',
+            },
+          }}
+        >
+          Nanobana 画像生成
+        </Button>
+      </Stack>
     </Paper>
   );
 }

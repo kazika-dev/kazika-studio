@@ -20,46 +20,46 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ImageIcon from '@mui/icons-material/Image';
 
-interface GeminiNodeSettingsProps {
+interface NanobanaNodeSettingsProps {
   node: Node;
   onClose: () => void;
   onUpdate: (nodeId: string, config: any) => void;
   onDelete: () => void;
 }
 
-export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }: GeminiNodeSettingsProps) {
+export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete }: NanobanaNodeSettingsProps) {
   const [name, setName] = useState(node.data.config?.name || '');
   const [description, setDescription] = useState(node.data.config?.description || '');
   const [prompt, setPrompt] = useState(node.data.config?.prompt || '');
-  const [model, setModel] = useState(node.data.config?.model || 'gemini-2.5-flash');
+  const [aspectRatio, setAspectRatio] = useState(node.data.config?.aspectRatio || '1:1');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     setName(node.data.config?.name || '');
     setDescription(node.data.config?.description || '');
     setPrompt(node.data.config?.prompt || '');
-    setModel(node.data.config?.model || 'gemini-2.5-flash');
+    setAspectRatio(node.data.config?.aspectRatio || '1:1');
   }, [node]);
 
   const handleSave = () => {
-    console.log('Saving Gemini node config:', {
+    console.log('Saving Nanobana node config:', {
       nodeId: node.id,
       name,
       description,
       prompt,
       promptLength: prompt.length,
-      model,
+      aspectRatio,
     });
 
     onUpdate(node.id, {
       name,
       description,
       prompt,
-      model,
+      aspectRatio,
       status: node.data.config?.status || 'idle',
-      response: node.data.config?.response,
+      imageData: node.data.config?.imageData,
       error: node.data.config?.error,
     });
 
@@ -98,9 +98,9 @@ export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <AutoAwesomeIcon sx={{ color: '#ea80fc' }} />
+          <ImageIcon sx={{ color: '#ff6b9d' }} />
           <Typography variant="h6" fontWeight={600}>
-            Gemini ノード設定
+            Nanobana ノード設定
           </Typography>
         </Box>
         <IconButton onClick={onClose} size="small">
@@ -134,10 +134,10 @@ export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }
               ノードタイプ
             </Typography>
             <Chip
-              label="Gemini AI"
+              label="Nanobana 画像生成"
               sx={{
-                bgcolor: 'rgba(234, 128, 252, 0.1)',
-                color: '#ea80fc',
+                bgcolor: 'rgba(255, 107, 157, 0.1)',
+                color: '#ff6b9d',
                 fontWeight: 500,
               }}
             />
@@ -167,38 +167,42 @@ export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }
 
           <Divider />
 
-          {/* Gemini Configuration */}
+          {/* Nanobana Configuration */}
           <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-            Gemini 設定
+            Nanobana 設定
           </Typography>
 
           <Alert severity="info" sx={{ fontSize: '0.875rem' }}>
-            APIキーは環境変数（.env.local）から自動的に読み込まれます
+            Gemini 2.5 Flash Image モデルを使用します。APIキーは環境変数から読み込まれます。
           </Alert>
 
           <TextField
-            label="モデル"
+            label="アスペクト比"
             fullWidth
             select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
+            value={aspectRatio}
+            onChange={(e) => setAspectRatio(e.target.value)}
             variant="outlined"
+            helperText="生成する画像のアスペクト比を選択"
           >
-            <MenuItem value="gemini-2.5-flash">Gemini 2.5 Flash (推奨)</MenuItem>
-            <MenuItem value="gemini-2.5-pro">Gemini 2.5 Pro (高性能)</MenuItem>
-            <MenuItem value="gemini-2.0-flash">Gemini 2.0 Flash</MenuItem>
+            <MenuItem value="1:1">1:1 (正方形)</MenuItem>
+            <MenuItem value="16:9">16:9 (横長)</MenuItem>
+            <MenuItem value="9:16">9:16 (縦長)</MenuItem>
+            <MenuItem value="4:3">4:3 (横長)</MenuItem>
+            <MenuItem value="3:4">3:4 (縦長)</MenuItem>
           </TextField>
 
           <Box>
             <TextField
-              label="プロンプト"
+              label="画像生成プロンプト"
               fullWidth
               multiline
               rows={6}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               variant="outlined"
-              placeholder="ここにプロンプトを入力してください..."
+              placeholder="生成したい画像の説明を入力してください..."
+              helperText="プロンプトは英語で記述することを推奨します"
             />
             <Alert severity="info" sx={{ mt: 1, fontSize: '0.8rem' }}>
               <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
@@ -211,24 +215,32 @@ export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }
             </Alert>
           </Box>
 
-          {/* Response Display */}
-          {node.data.config?.response && (
+          {/* Image Display */}
+          {node.data.config?.imageData && (
             <Box>
               <Typography variant="subtitle2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
-                レスポンス
+                生成された画像
               </Typography>
               <Paper
                 variant="outlined"
                 sx={{
                   p: 2,
                   bgcolor: 'action.hover',
-                  maxHeight: 300,
-                  overflow: 'auto',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
                 }}
               >
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {node.data.config.response}
-                </Typography>
+                <img
+                  src={`data:${node.data.config.imageData.mimeType};base64,${node.data.config.imageData.data}`}
+                  alt="Generated"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '400px',
+                    objectFit: 'contain',
+                    borderRadius: '8px',
+                  }}
+                />
               </Paper>
             </Box>
           )}
@@ -252,9 +264,9 @@ export default function GeminiNodeSettings({ node, onClose, onUpdate, onDelete }
               py: 1.5,
               textTransform: 'none',
               fontWeight: 600,
-              bgcolor: '#ea80fc',
+              bgcolor: '#ff6b9d',
               '&:hover': {
-                bgcolor: '#d500f9',
+                bgcolor: '#ff4081',
               },
             }}
           >

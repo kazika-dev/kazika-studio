@@ -12,16 +12,20 @@ import ReactFlow, {
   Edge,
   Node,
   BackgroundVariant,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { ThemeProvider, createTheme, Box } from '@mui/material';
+import { ThemeProvider, createTheme, Box, Fab, Tooltip } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 import CustomNode from './CustomNode';
 import GeminiNode from './GeminiNode';
+import NanobanaNode from './NanobanaNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
+import NanobanaNodeSettings from './NanobanaNodeSettings';
 import Toolbar from './Toolbar';
-import WorkflowToolbar from './WorkflowToolbar';
+import ExecutionPanel from './ExecutionPanel';
 
 const theme = createTheme({
   palette: {
@@ -59,6 +63,7 @@ const theme = createTheme({
 const nodeTypes = {
   custom: CustomNode,
   gemini: GeminiNode,
+  nanobana: NanobanaNode,
 };
 
 const initialNodes: Node[] = [
@@ -83,7 +88,9 @@ export default function WorkflowEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
+  const [currentWorkflowName, setCurrentWorkflowName] = useState<string | undefined>(undefined);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // 初回ロード時に最新のワークフローを自動読み込み
@@ -103,6 +110,7 @@ export default function WorkflowEditor() {
             setNodes(workflowData.workflow.nodes || []);
             setEdges(workflowData.workflow.edges || []);
             setCurrentWorkflowId(workflowData.workflow.id);
+            setCurrentWorkflowName(workflowData.workflow.name);
             console.log('Loaded latest workflow:', workflowData.workflow.name);
           }
         } else {
@@ -154,25 +162,83 @@ export default function WorkflowEditor() {
 
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
-  }, []);
+    setSelectedEdge(null);
+
+    // 全てのエッジのスタイルをリセット
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        style: {
+          strokeWidth: 2,
+          stroke: '#90caf9',
+        },
+        animated: false,
+      }))
+    );
+  }, [setEdges]);
+
+  const onEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      setSelectedEdge(edge);
+      setSelectedNode(null);
+
+      // 選択されたエッジのスタイルを更新
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edge.id
+            ? {
+                ...e,
+                style: {
+                  ...e.style,
+                  stroke: '#f44336',
+                  strokeWidth: 3,
+                },
+                animated: true,
+              }
+            : {
+                ...e,
+                style: {
+                  strokeWidth: 2,
+                  stroke: '#90caf9',
+                },
+                animated: false,
+              }
+        )
+      );
+    },
+    [setEdges]
+  );
+
+  const deleteEdge = useCallback(() => {
+    if (selectedEdge) {
+      setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id));
+      setSelectedEdge(null);
+    }
+  }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'gemini' ? 'Gemini AI' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
-          config: type === 'gemini' ? {
+          config: type === 'nanobana' ? {
+            name: `Nanobana ノード${nodes.length + 1}`,
+            description: 'Nanobanaで画像を生成します',
+            prompt: '',
+            aspectRatio: '1:1',
+            status: 'idle',
+          } : type === 'gemini' ? {
             name: `Gemini ノード${nodes.length + 1}`,
             description: 'Gemini AIに問い合わせます',
             prompt: '',
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash',
             status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
@@ -200,15 +266,44 @@ export default function WorkflowEditor() {
     }
   }, [selectedNode, setNodes, setEdges]);
 
+  // キーボードショートカット（Delete/Backspace）
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        // 入力フィールドにフォーカスがある場合は無視
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+
+        if (selectedEdge) {
+          event.preventDefault();
+          deleteEdge();
+        } else if (selectedNode) {
+          event.preventDefault();
+          deleteNode();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedEdge, selectedNode, deleteEdge, deleteNode]);
+
   const updateNodeConfig = useCallback(
     (nodeId: string, config: any) => {
-      setNodes((nds) =>
-        nds.map((node) =>
+      console.log('Updating node config:', { nodeId, config });
+      setNodes((nds) => {
+        const updated = nds.map((node) =>
           node.id === nodeId
             ? { ...node, data: { ...node.data, config } }
             : node
-        )
-      );
+        );
+        console.log('Updated nodes:', updated.find(n => n.id === nodeId));
+        return updated;
+      });
     },
     [setNodes]
   );
@@ -229,6 +324,7 @@ export default function WorkflowEditor() {
       const data = await response.json();
       if (data.success) {
         setCurrentWorkflowId(data.workflow.id);
+        setCurrentWorkflowName(name);
       } else {
         throw new Error(data.error);
       }
@@ -236,40 +332,17 @@ export default function WorkflowEditor() {
     [currentWorkflowId, nodes, edges]
   );
 
-  const handleLoadWorkflow = useCallback(
-    async (workflowId: number) => {
-      const response = await fetch(`/api/workflows/${workflowId}`);
-      const data = await response.json();
-
-      if (data.success) {
-        const workflow = data.workflow;
-        setNodes(workflow.nodes);
-        setEdges(workflow.edges);
-        setCurrentWorkflowId(workflow.id);
-      } else {
-        throw new Error(data.error);
-      }
-    },
-    [setNodes, setEdges]
-  );
-
-  const handleNewWorkflow = useCallback(() => {
-    setNodes([]);
-    setEdges([]);
-    setCurrentWorkflowId(undefined);
-    setSelectedNode(null);
-  }, [setNodes, setEdges]);
-
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex', height: '100%', width: '100%', bgcolor: 'background.default' }}>
         <Box sx={{ flex: 1, position: 'relative' }}>
-          <Toolbar onAddNode={addNode} onDeleteNode={deleteNode} selectedNode={selectedNode} />
-          <WorkflowToolbar
+          <Toolbar onAddNode={addNode} />
+          <ExecutionPanel
+            nodes={nodes}
+            edges={edges}
             onSave={handleSaveWorkflow}
-            onLoad={handleLoadWorkflow}
-            onNew={handleNewWorkflow}
             currentWorkflowId={currentWorkflowId}
+            currentWorkflowName={currentWorkflowName}
           />
           <ReactFlow
             nodes={nodes}
@@ -278,13 +351,16 @@ export default function WorkflowEditor() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
             fitView
             defaultEdgeOptions={{
               style: { strokeWidth: 2, stroke: '#90caf9' },
               type: 'smoothstep',
+              animated: false,
             }}
+            deleteKeyCode={null}
           >
             <Controls
               style={{
@@ -306,6 +382,8 @@ export default function WorkflowEditor() {
                     return '#9c27b0';
                   case 'gemini':
                     return '#ea80fc';
+                  case 'nanobana':
+                    return '#ff6b9d';
                   default:
                     return '#999';
                 }
@@ -322,19 +400,48 @@ export default function WorkflowEditor() {
               color="#e0e0e0"
             />
           </ReactFlow>
+
+          {/* エッジ削除ボタン */}
+          {selectedEdge && (
+            <Tooltip title="接続を削除 (Deleteキー)" placement="left">
+              <Fab
+                color="error"
+                size="medium"
+                onClick={deleteEdge}
+                sx={{
+                  position: 'absolute',
+                  bottom: 24,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 10,
+                }}
+              >
+                <DeleteIcon />
+              </Fab>
+            </Tooltip>
+          )}
         </Box>
         {selectedNode && (
-          selectedNode.data.type === 'gemini' ? (
+          selectedNode.data.type === 'nanobana' ? (
+            <NanobanaNodeSettings
+              node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.data.type === 'gemini' ? (
             <GeminiNodeSettings
               node={selectedNode}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
             />
           ) : (
             <NodeSettings
               node={selectedNode}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
             />
           )
         )}
