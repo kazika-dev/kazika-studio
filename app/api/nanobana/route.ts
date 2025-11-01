@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest, NextResponse } from 'next/server';
+import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 export async function POST(request: NextRequest) {
   try {
@@ -88,12 +89,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // GCP Storageに画像をアップロード
+    let storageUrl: string | undefined;
+    try {
+      storageUrl = await uploadImageToStorage(
+        imageData.data,
+        imageData.mimeType
+      );
+      console.log('Image uploaded to GCP Storage:', storageUrl);
+    } catch (storageError: any) {
+      console.error('Failed to upload to GCP Storage:', storageError);
+      // Storageへのアップロードが失敗してもエラーにはせず、警告として記録
+      // Base64データは引き続き返す
+    }
+
     return NextResponse.json({
       success: true,
       imageData: {
         mimeType: imageData.mimeType,
         data: imageData.data, // Base64エンコードされた画像データ
       },
+      storageUrl, // GCP StorageのURL（アップロード成功時のみ）
       model: 'gemini-2.5-flash-image',
     });
   } catch (error: any) {

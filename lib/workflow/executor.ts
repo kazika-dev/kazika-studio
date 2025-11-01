@@ -7,6 +7,7 @@ export interface ExecutionResult {
   requestBody?: any;
   output: any;
   error?: string;
+  errorDetails?: any; // APIから返された詳細なエラー情報
 }
 
 export interface WorkflowExecutionResult {
@@ -151,7 +152,9 @@ async function executeNode(
         const geminiData = await geminiResponse.json();
 
         if (!geminiResponse.ok) {
-          throw new Error(geminiData.error || 'Gemini API call failed');
+          const error: any = new Error(geminiData.error || 'Gemini API call failed');
+          error.apiErrorDetails = geminiData; // API全体のエラーレスポンスを保存
+          throw error;
         }
 
         output = {
@@ -223,11 +226,14 @@ async function executeNode(
         const nanobanaData = await nanobanaResponse.json();
 
         if (!nanobanaResponse.ok) {
-          throw new Error(nanobanaData.error || 'Nanobana API call failed');
+          const error: any = new Error(nanobanaData.error || 'Nanobana API call failed');
+          error.apiErrorDetails = nanobanaData; // API全体のエラーレスポンスを保存
+          throw error;
         }
 
         output = {
           imageData: nanobanaData.imageData,
+          storageUrl: nanobanaData.storageUrl, // GCP StorageのURL
           nodeId: node.id,
         };
         break;
@@ -251,6 +257,7 @@ async function executeNode(
       requestBody,
       output: null,
       error: error.message,
+      errorDetails: error.apiErrorDetails, // APIからの詳細なエラー情報
     };
   }
 }

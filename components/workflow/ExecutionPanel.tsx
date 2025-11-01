@@ -396,7 +396,37 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                       {result?.error && (
                         <Box sx={{ mb: 2 }}>
                           <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
-                            {result.error}
+                            <Typography variant="body2" fontWeight={600} sx={{ mb: result.errorDetails ? 1 : 0 }}>
+                              {result.error}
+                            </Typography>
+                            {result.errorDetails && (
+                              <Paper
+                                variant="outlined"
+                                sx={{
+                                  p: 1.5,
+                                  mt: 1,
+                                  bgcolor: 'rgba(0, 0, 0, 0.05)',
+                                  maxHeight: 200,
+                                  overflow: 'auto',
+                                }}
+                              >
+                                <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
+                                  エラー詳細:
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  component="pre"
+                                  sx={{
+                                    fontSize: '0.7rem',
+                                    fontFamily: 'monospace',
+                                    margin: 0,
+                                    whiteSpace: 'pre-wrap',
+                                  }}
+                                >
+                                  {JSON.stringify(result.errorDetails, null, 2)}
+                                </Typography>
+                              </Paper>
+                            )}
                           </Alert>
                         </Box>
                       )}
@@ -410,28 +440,64 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                           {/* Nanobanaの画像表示 */}
                           {node.data.type === 'nanobana' &&
                             result.output.imageData && (
-                              <Box
-                                sx={{
-                                  mt: 1,
-                                  borderRadius: 1,
-                                  overflow: 'hidden',
-                                  bgcolor: 'action.hover',
-                                  p: 1,
-                                  display: 'flex',
-                                  justifyContent: 'center',
-                                }}
-                              >
-                                <img
-                                  src={`data:${result.output.imageData.mimeType};base64,${result.output.imageData.data}`}
-                                  alt="Generated"
-                                  style={{
-                                    maxWidth: '100%',
-                                    maxHeight: '300px',
-                                    objectFit: 'contain',
-                                    borderRadius: '4px',
+                              <>
+                                <Box
+                                  sx={{
+                                    mt: 1,
+                                    borderRadius: 1,
+                                    overflow: 'hidden',
+                                    bgcolor: 'action.hover',
+                                    p: 1,
+                                    display: 'flex',
+                                    justifyContent: 'center',
                                   }}
-                                />
-                              </Box>
+                                >
+                                  <img
+                                    src={`data:${result.output.imageData.mimeType};base64,${result.output.imageData.data}`}
+                                    alt="Generated"
+                                    style={{
+                                      maxWidth: '100%',
+                                      maxHeight: '300px',
+                                      objectFit: 'contain',
+                                      borderRadius: '4px',
+                                    }}
+                                  />
+                                </Box>
+                                {/* GCP Storage URL表示 */}
+                                {result.output.storageUrl && (
+                                  <Paper
+                                    variant="outlined"
+                                    sx={{
+                                      p: 1.5,
+                                      mt: 1,
+                                      bgcolor: 'success.lighter',
+                                    }}
+                                  >
+                                    <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
+                                      GCP Storage URL
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      component="a"
+                                      href={result.output.storageUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      sx={{
+                                        fontSize: '0.7rem',
+                                        fontFamily: 'monospace',
+                                        color: 'primary.main',
+                                        textDecoration: 'none',
+                                        '&:hover': {
+                                          textDecoration: 'underline',
+                                        },
+                                        wordBreak: 'break-all',
+                                      }}
+                                    >
+                                      {result.output.storageUrl}
+                                    </Typography>
+                                  </Paper>
+                                )}
+                              </>
                             )}
 
                           {/* Geminiのテキスト表示 */}
