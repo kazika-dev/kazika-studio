@@ -186,10 +186,12 @@ export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete
             helperText="生成する画像のアスペクト比を選択"
           >
             <MenuItem value="1:1">1:1 (正方形)</MenuItem>
-            <MenuItem value="16:9">16:9 (横長)</MenuItem>
-            <MenuItem value="9:16">9:16 (縦長)</MenuItem>
-            <MenuItem value="4:3">4:3 (横長)</MenuItem>
-            <MenuItem value="3:4">3:4 (縦長)</MenuItem>
+            <MenuItem value="16:9">16:9 (横長・ワイド)</MenuItem>
+            <MenuItem value="9:16">9:16 (縦長・ポートレート)</MenuItem>
+            <MenuItem value="4:3">4:3 (横長・標準)</MenuItem>
+            <MenuItem value="3:4">3:4 (縦長・標準)</MenuItem>
+            <MenuItem value="3:2">3:2 (横長・写真)</MenuItem>
+            <MenuItem value="2:3">2:3 (縦長・写真)</MenuItem>
           </TextField>
 
           <Box>

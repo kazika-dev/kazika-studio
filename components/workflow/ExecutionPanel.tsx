@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Node, Edge } from 'reactflow';
 import {
   Box,
@@ -28,7 +28,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
-import { executeWorkflow, ExecutionResult } from '@/lib/workflow/executor';
+import { executeWorkflow, ExecutionResult, topologicalSort } from '@/lib/workflow/executor';
 
 interface ExecutionPanelProps {
   nodes: Node[];
@@ -49,11 +49,28 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
   const [workflowName, setWorkflowName] = useState('');
   const [workflowDescription, setWorkflowDescription] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  // ノードを実行順序でソート
+  const sortedNodes = useMemo(() => {
+    try {
+      if (nodes.length === 0) return [];
+      const executionOrder = topologicalSort(nodes, edges);
+      return executionOrder
+        .map(nodeId => nodes.find(n => n.id === nodeId))
+        .filter((node): node is Node => node !== undefined);
+    } catch (error) {
+      // 循環参照などのエラーがある場合は元の順序を返す
+      console.error('Failed to sort nodes:', error);
+      return nodes;
+    }
+  }, [nodes, edges]);
 
   const handleExecute = async () => {
     setIsExecuting(true);
     setError(null);
     setResults(new Map());
+    setExpandedNodes(new Set());
 
     // 実行前にノードの状態をログ出力
     console.log('=== Starting workflow execution ===');
@@ -75,12 +92,28 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
     setNodeStatuses(initialStatuses);
 
     try {
-      const result = await executeWorkflow(nodes, edges, (nodeId, status) => {
+      const result = await executeWorkflow(nodes, edges, (nodeId, status, executionResult) => {
         setNodeStatuses((prev) => {
           const newStatuses = new Map(prev);
           newStatuses.set(nodeId, status);
           return newStatuses;
         });
+
+        // 処理が完了したノードの結果を即座に表示
+        if ((status === 'completed' || status === 'failed') && executionResult) {
+          setResults((prev) => {
+            const newResults = new Map(prev);
+            newResults.set(nodeId, executionResult);
+            return newResults;
+          });
+
+          // 処理が完了したノードを自動的に展開
+          setExpandedNodes((prev) => {
+            const newExpanded = new Set(prev);
+            newExpanded.add(nodeId);
+            return newExpanded;
+          });
+        }
       });
 
       setResults(result.results);
@@ -228,18 +261,31 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
             実行状態
           </Typography>
 
-          {nodes.length === 0 ? (
+          {sortedNodes.length === 0 ? (
             <Alert severity="info">ノードがありません</Alert>
           ) : (
             <Stack spacing={1}>
-              {nodes.map((node) => {
+              {sortedNodes.map((node, index) => {
                 const status = nodeStatuses.get(node.id) || 'idle';
                 const result = results.get(node.id);
+                const isExpanded = expandedNodes.has(node.id);
 
                 return (
                   <Accordion
                     key={node.id}
                     disabled={status === 'idle'}
+                    expanded={isExpanded}
+                    onChange={(_, expanded) => {
+                      setExpandedNodes((prev) => {
+                        const newExpanded = new Set(prev);
+                        if (expanded) {
+                          newExpanded.add(node.id);
+                        } else {
+                          newExpanded.delete(node.id);
+                        }
+                        return newExpanded;
+                      });
+                    }}
                     sx={{
                       border: '1px solid',
                       borderColor: 'divider',
@@ -256,6 +302,16 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                           width: '100%',
                         }}
                       >
+                        <Chip
+                          label={index + 1}
+                          size="small"
+                          sx={{
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            bgcolor: 'action.selected',
+                            minWidth: '28px',
+                          }}
+                        />
                         {getStatusIcon(status)}
                         <Typography
                           variant="body2"
@@ -274,14 +330,83 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                     </AccordionSummary>
 
                     <AccordionDetails>
-                      {result?.error && (
-                        <Alert severity="error" sx={{ mb: 1, fontSize: '0.8rem' }}>
-                          {result.error}
-                        </Alert>
+                      {/* 入力値セクション */}
+                      {result?.input && Object.keys(result.input).length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
+                            入力値
+                          </Typography>
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              p: 1.5,
+                              bgcolor: 'action.hover',
+                              maxHeight: 150,
+                              overflow: 'auto',
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              component="pre"
+                              sx={{
+                                fontSize: '0.7rem',
+                                fontFamily: 'monospace',
+                                margin: 0,
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {JSON.stringify(result.input, null, 2)}
+                            </Typography>
+                          </Paper>
+                        </Box>
                       )}
 
-                      {result?.success && result.output && (
+                      {/* APIリクエストボディセクション */}
+                      {result?.requestBody && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
+                            APIリクエスト
+                          </Typography>
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              p: 1.5,
+                              bgcolor: 'info.lighter',
+                              maxHeight: 150,
+                              overflow: 'auto',
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              component="pre"
+                              sx={{
+                                fontSize: '0.7rem',
+                                fontFamily: 'monospace',
+                                margin: 0,
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {JSON.stringify(result.requestBody, null, 2)}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                      )}
+
+                      {/* エラー表示 */}
+                      {result?.error && (
+                        <Box sx={{ mb: 2 }}>
+                          <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
+                            {result.error}
+                          </Alert>
+                        </Box>
+                      )}
+
+                      {/* 出力値セクション */}
+                      {result?.output && (
                         <Box>
+                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
+                            出力値
+                          </Typography>
                           {/* Nanobanaの画像表示 */}
                           {node.data.type === 'nanobana' &&
                             result.output.imageData && (

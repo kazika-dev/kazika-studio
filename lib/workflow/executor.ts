@@ -3,6 +3,8 @@ import { Node, Edge } from 'reactflow';
 export interface ExecutionResult {
   success: boolean;
   nodeId: string;
+  input?: any;
+  requestBody?: any;
   output: any;
   error?: string;
 }
@@ -73,11 +75,12 @@ async function executeNode(
   edges: Edge[],
   nodes: Node[]
 ): Promise<ExecutionResult> {
+  // 入力データを収集（前ノードの出力）
+  const inputData = collectInputData(node.id, edges, previousResults, nodes);
+  let requestBody: any = undefined;
+
   try {
     const nodeType = node.data.type;
-
-    // 入力データを収集（前ノードの出力）
-    const inputData = collectInputData(node.id, edges, previousResults, nodes);
 
     let output: any;
 
@@ -133,13 +136,16 @@ async function executeNode(
           throw new Error(`Geminiノード "${node.data.config?.name || node.id}" のプロンプト変数が置換できませんでした。元のプロンプト: "${node.data.config?.prompt}"`);
         }
 
+        // リクエストボディを保存
+        requestBody = {
+          prompt: geminiPrompt,
+          model: node.data.config?.model || 'gemini-2.5-flash',
+        };
+
         const geminiResponse = await fetch('/api/gemini', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: geminiPrompt,
-            model: node.data.config?.model || 'gemini-2.5-flash',
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const geminiData = await geminiResponse.json();
@@ -156,10 +162,35 @@ async function executeNode(
 
       case 'nanobana':
         // Nanobana APIを呼び出し
-        const nanobanaPrompt = replaceVariables(
+        let nanobanaPrompt = replaceVariables(
           node.data.config?.prompt || '',
           inputData
         );
+
+        // 前のノードからのテキスト出力を自動的に追加
+        const inputTexts: string[] = [];
+        Object.values(inputData).forEach((input: any) => {
+          if (input && typeof input === 'object') {
+            // geminiノードからのresponseフィールドを追加
+            if (input.response && typeof input.response === 'string') {
+              inputTexts.push(input.response);
+            }
+            // その他のvalueフィールドを追加
+            else if (input.value !== undefined && input.value !== null) {
+              inputTexts.push(String(input.value));
+            }
+          }
+        });
+
+        // prompt欄の内容と前のノードの出力を組み合わせ
+        if (inputTexts.length > 0) {
+          const combinedText = inputTexts.join(' ');
+          if (nanobanaPrompt.trim()) {
+            nanobanaPrompt = (nanobanaPrompt + ' ' + combinedText).trim();
+          } else {
+            nanobanaPrompt = combinedText;
+          }
+        }
 
         console.log('Nanobana execution:', {
           nodeId: node.id,
@@ -168,25 +199,25 @@ async function executeNode(
           promptLength: (node.data.config?.prompt || '').length,
           inputData,
           inputDataKeys: Object.keys(inputData),
-          replacedPrompt: nanobanaPrompt,
-          replacedPromptLength: nanobanaPrompt.length,
+          inputTexts,
+          finalPrompt: nanobanaPrompt,
+          finalPromptLength: nanobanaPrompt.length,
         });
 
-        if (!node.data.config?.prompt || !node.data.config.prompt.trim()) {
-          throw new Error(`Nanobanaノード "${node.data.config?.name || node.id}" のプロンプトが設定されていません。ノードの設定を開いてプロンプトを入力し、保存してください。`);
+        if (!nanobanaPrompt.trim()) {
+          throw new Error(`Nanobanaノード "${node.data.config?.name || node.id}" のプロンプトが空です。プロンプトを入力するか、前のノードから値を受け取ってください。`);
         }
 
-        if (!nanobanaPrompt.trim()) {
-          throw new Error(`Nanobanaノード "${node.data.config?.name || node.id}" のプロンプト変数が置換できませんでした。元のプロンプト: "${node.data.config?.prompt}"`);
-        }
+        // リクエストボディを保存
+        requestBody = {
+          prompt: nanobanaPrompt,
+          aspectRatio: node.data.config?.aspectRatio || '1:1',
+        };
 
         const nanobanaResponse = await fetch('/api/nanobana', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: nanobanaPrompt,
-            aspectRatio: node.data.config?.aspectRatio || '1:1',
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const nanobanaData = await nanobanaResponse.json();
@@ -208,12 +239,16 @@ async function executeNode(
     return {
       success: true,
       nodeId: node.id,
+      input: inputData,
+      requestBody,
       output,
     };
   } catch (error: any) {
     return {
       success: false,
       nodeId: node.id,
+      input: inputData,
+      requestBody,
       output: null,
       error: error.message,
     };
@@ -309,7 +344,7 @@ function replaceVariables(template: string, inputs: any): string {
 export async function executeWorkflow(
   nodes: Node[],
   edges: Edge[],
-  onProgress?: (nodeId: string, status: 'running' | 'completed' | 'failed') => void
+  onProgress?: (nodeId: string, status: 'running' | 'completed' | 'failed', result?: ExecutionResult) => void
 ): Promise<WorkflowExecutionResult> {
   try {
     // 実行順序を決定
@@ -332,8 +367,8 @@ export async function executeWorkflow(
       const result = await executeNode(node, results, edges, nodes);
       results.set(nodeId, result);
 
-      // 完了/失敗を通知
-      onProgress?.(nodeId, result.success ? 'completed' : 'failed');
+      // 完了/失敗を通知（結果も一緒に渡す）
+      onProgress?.(nodeId, result.success ? 'completed' : 'failed', result);
 
       // エラー時は中断
       if (!result.success) {
