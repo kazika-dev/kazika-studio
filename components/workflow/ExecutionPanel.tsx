@@ -120,11 +120,138 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
 
       if (!result.success) {
         setError(result.error || 'ワークフローの実行に失敗しました');
+      } else {
+        // ワークフロー実行成功後、アウトプットをDBに保存
+        await saveOutputsToDatabase(result.results, currentWorkflowId);
       }
     } catch (error: any) {
       setError(error.message);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  // アウトプットをDBに保存する関数（最後のノードの出力のみ）
+  const saveOutputsToDatabase = async (results: Map<string, ExecutionResult>, workflowId?: number) => {
+    console.log('Saving final output to database...');
+
+    // 実行順序を取得して最後のノードを特定
+    let executionOrder: string[];
+    try {
+      executionOrder = topologicalSort(nodes, edges);
+    } catch (error) {
+      console.error('Failed to get execution order:', error);
+      return;
+    }
+
+    if (executionOrder.length === 0) {
+      console.log('No nodes to save');
+      return;
+    }
+
+    // 最後のノードIDを取得
+    const lastNodeId = executionOrder[executionOrder.length - 1];
+    const result = results.get(lastNodeId);
+
+    if (!result || !result.success || !result.output) {
+      console.log('No valid output from final node');
+      return;
+    }
+
+    const node = nodes.find(n => n.id === lastNodeId);
+    if (!node) {
+      console.error('Final node not found');
+      return;
+    }
+
+    console.log(`Saving output from final node: ${node.data.config?.name || node.data.label} (${node.data.type})`);
+
+    try {
+      // Nanobanaノードの画像を保存（GCP Storage内部パスを使用）
+      if (node.data.type === 'nanobana' && result.output.storagePath) {
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'image',
+            content: {
+              path: result.output.storagePath, // GCP Storage内部パス
+            },
+            prompt: result.requestBody?.prompt || '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              aspectRatio: result.requestBody?.aspectRatio,
+              model: 'gemini-2.5-flash-image',
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+
+      // Geminiノードのテキストを保存
+      else if (node.data.type === 'gemini' && result.output.response) {
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'text',
+            content: result.output.response,
+            prompt: result.requestBody?.prompt || '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              model: result.requestBody?.model || 'gemini-2.5-flash',
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+
+      // その他のノード（output、processなど）
+      else if (result.output) {
+        // JSONとして保存
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'json',
+            content: '', // content_textは不要
+            prompt: '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              nodeType: node.data.type,
+              output: result.output,
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+    } catch (error) {
+      console.error(`Error saving final output:`, error);
+      // エラーが発生してもワークフロー実行は成功としておく
     }
   };
 
@@ -463,8 +590,8 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                     }}
                                   />
                                 </Box>
-                                {/* GCP Storage URL表示 */}
-                                {result.output.storageUrl && (
+                                {/* GCP Storage Path表示 */}
+                                {result.output.storagePath && (
                                   <Paper
                                     variant="outlined"
                                     sx={{
@@ -474,26 +601,18 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                     }}
                                   >
                                     <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
-                                      GCP Storage URL
+                                      GCP Storage Path
                                     </Typography>
                                     <Typography
                                       variant="caption"
-                                      component="a"
-                                      href={result.output.storageUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
                                       sx={{
                                         fontSize: '0.7rem',
                                         fontFamily: 'monospace',
-                                        color: 'primary.main',
-                                        textDecoration: 'none',
-                                        '&:hover': {
-                                          textDecoration: 'underline',
-                                        },
+                                        color: 'text.secondary',
                                         wordBreak: 'break-all',
                                       }}
                                     >
-                                      {result.output.storageUrl}
+                                      {result.output.storagePath}
                                     </Typography>
                                   </Paper>
                                 )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   useReactTable,
   getCoreRowModel,
@@ -21,10 +22,12 @@ interface Workflow {
 }
 
 export default function WorkflowList() {
+  const router = useRouter();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
 
   // ワークフロー一覧を取得
   const fetchWorkflows = async () => {
@@ -48,6 +51,50 @@ export default function WorkflowList() {
   useEffect(() => {
     fetchWorkflows();
   }, []);
+
+  // ワークフロー新規作成
+  const handleCreate = async () => {
+    setIsCreating(true);
+    try {
+      const response = await fetch('/api/workflows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `新規ワークフロー ${new Date().toLocaleString('ja-JP')}`,
+          description: '',
+          nodes: [
+            {
+              id: '1',
+              type: 'custom',
+              position: { x: 250, y: 100 },
+              data: {
+                label: '入力ノード',
+                type: 'input',
+                config: {
+                  name: '入力ノード1',
+                  description: 'データの入力を受け付けます',
+                }
+              },
+            },
+          ],
+          edges: [],
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // 作成したワークフローのIDでリダイレクト
+        router.push(`/workflow?id=${data.workflow.id}`);
+      } else {
+        alert('ワークフローの作成に失敗しました: ' + data.error);
+        setIsCreating(false);
+      }
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      alert('ワークフローの作成に失敗しました');
+      setIsCreating(false);
+    }
+  };
 
   // ワークフロー削除
   const handleDelete = async (id: string) => {
@@ -170,13 +217,14 @@ export default function WorkflowList() {
             作成済みのワークフローを管理します
           </p>
         </div>
-        <a
-          href="/workflow"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        <button
+          onClick={handleCreate}
+          disabled={isCreating}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus size={20} />
-          新規作成
-        </a>
+          {isCreating ? '作成中...' : '新規作成'}
+        </button>
       </div>
 
       {/* 検索バー */}
@@ -197,13 +245,14 @@ export default function WorkflowList() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             ワークフローがまだありません
           </p>
-          <a
-            href="/workflow"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          <button
+            onClick={handleCreate}
+            disabled={isCreating}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} />
-            最初のワークフローを作成
-          </a>
+            {isCreating ? '作成中...' : '最初のワークフローを作成'}
+          </button>
         </div>
       ) : (
         <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">

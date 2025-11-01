@@ -32,9 +32,9 @@ export function getStorageClient(): Storage {
 }
 
 /**
- * Base64画像をGCP Storageにアップロード
- * @param base64Data Base64エンコードされた画像データ
- * @param mimeType 画像のMIMEタイプ（例: 'image/png'）
+ * Base64ファイルをGCP Storageにアップロード
+ * @param base64Data Base64エンコードされたファイルデータ
+ * @param mimeType ファイルのMIMEタイプ（例: 'image/png', 'video/mp4', 'audio/mpeg'）
  * @param fileName ファイル名（省略時は自動生成）
  * @returns 公開URL
  */
@@ -55,37 +55,48 @@ export async function uploadImageToStorage(
   // ファイル名を生成（タイムスタンプ + ランダム文字列）
   const timestamp = Date.now();
   const randomStr = Math.random().toString(36).substring(2, 15);
-  const extension = mimeType.split('/')[1] || 'png';
-  const finalFileName = fileName || `nanobana-${timestamp}-${randomStr}.${extension}`;
+  const extension = mimeType.split('/')[1] || 'bin';
+  const finalFileName = fileName || `output-${timestamp}-${randomStr}.${extension}`;
 
-  const file = bucket.file(`images/${finalFileName}`);
+  // MIMEタイプに応じてフォルダを分ける
+  let folder = 'files';
+  if (mimeType.startsWith('image/')) {
+    folder = 'images';
+  } else if (mimeType.startsWith('video/')) {
+    folder = 'videos';
+  } else if (mimeType.startsWith('audio/')) {
+    folder = 'audio';
+  }
+
+  const file = bucket.file(`${folder}/${finalFileName}`);
 
   // Base64をBufferに変換
   const buffer = Buffer.from(base64Data, 'base64');
 
-  // ファイルをアップロード
+  // ファイルをアップロード（非公開）
   await file.save(buffer, {
     metadata: {
       contentType: mimeType,
-      cacheControl: 'public, max-age=31536000', // 1年間キャッシュ
+      cacheControl: 'private, max-age=3600', // 1時間キャッシュ
     },
-    // uniform bucket-level accessが有効な場合はpublic: trueは使えない
   });
 
-  // ファイルを公開アクセス可能にする
-  await file.makePublic();
+  // ファイルパスを返す（公開URLではなく内部パス）
+  const filePath = `${folder}/${finalFileName}`;
 
-  // 公開URLを生成
-  const publicUrl = `https://storage.googleapis.com/${bucketName}/images/${finalFileName}`;
-
-  return publicUrl;
+  return filePath;
 }
 
 /**
- * 画像を削除
- * @param fileUrl 画像の公開URL
+ * ファイルの署名付きURLを生成（認証済みアクセス用）
+ * @param filePath GCP Storage内のファイルパス（例: "images/output-xxx.png"）
+ * @param expiresInMinutes 有効期限（分）デフォルト: 60分
+ * @returns 署名付きURL
  */
-export async function deleteImageFromStorage(fileUrl: string): Promise<void> {
+export async function getSignedUrl(
+  filePath: string,
+  expiresInMinutes: number = 60
+): Promise<string> {
   const storage = getStorageClient();
   const bucketName = process.env.GCP_STORAGE_BUCKET;
 
@@ -93,17 +104,76 @@ export async function deleteImageFromStorage(fileUrl: string): Promise<void> {
     throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
   }
 
-  // URLからファイルパスを抽出
-  const urlPattern = new RegExp(`https://storage.googleapis.com/${bucketName}/(.+)`);
-  const match = fileUrl.match(urlPattern);
-
-  if (!match) {
-    throw new Error('Invalid file URL format');
-  }
-
-  const filePath = match[1];
   const bucket = storage.bucket(bucketName);
   const file = bucket.file(filePath);
+
+  // 署名付きURLを生成
+  const [signedUrl] = await file.getSignedUrl({
+    version: 'v4',
+    action: 'read',
+    expires: Date.now() + expiresInMinutes * 60 * 1000,
+  });
+
+  return signedUrl;
+}
+
+/**
+ * GCP Storageからファイルデータを取得
+ * @param filePath GCP Storage内のファイルパス
+ * @returns ファイルデータとメタデータ
+ */
+export async function getFileFromStorage(filePath: string): Promise<{
+  data: Buffer;
+  contentType: string;
+}> {
+  const storage = getStorageClient();
+  const bucketName = process.env.GCP_STORAGE_BUCKET;
+
+  if (!bucketName) {
+    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  }
+
+  const bucket = storage.bucket(bucketName);
+  const file = bucket.file(filePath);
+
+  // ファイルのメタデータを取得
+  const [metadata] = await file.getMetadata();
+
+  // ファイルデータをダウンロード
+  const [data] = await file.download();
+
+  return {
+    data,
+    contentType: metadata.contentType || 'application/octet-stream',
+  };
+}
+
+/**
+ * 画像を削除
+ * @param filePath ファイルパスまたはURL
+ */
+export async function deleteImageFromStorage(filePath: string): Promise<void> {
+  const storage = getStorageClient();
+  const bucketName = process.env.GCP_STORAGE_BUCKET;
+
+  if (!bucketName) {
+    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  }
+
+  // URLの場合はファイルパスを抽出
+  let path = filePath;
+  const urlPattern = new RegExp(`https://storage.googleapis.com/${bucketName}/(.+)`);
+  const match = filePath.match(urlPattern);
+
+  if (match) {
+    path = match[1];
+  }
+
+  // 署名付きURLの場合（?で始まるクエリパラメータを削除）
+  path = path.split('?')[0];
+
+  const bucket = storage.bucket(bucketName);
+  const file = bucket.file(path);
 
   await file.delete();
 }

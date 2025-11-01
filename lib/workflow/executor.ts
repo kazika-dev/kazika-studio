@@ -251,7 +251,82 @@ async function executeNode(
 
         output = {
           imageData: nanobanaData.imageData,
-          storageUrl: nanobanaData.storageUrl, // GCP StorageのURL
+          storagePath: nanobanaData.storagePath, // GCP Storage内部パス
+          nodeId: node.id,
+        };
+        break;
+
+      case 'elevenlabs':
+        // ElevenLabs Text-to-Speech APIを呼び出し
+        let elevenLabsText = replaceVariables(
+          node.data.config?.text || '',
+          inputData
+        );
+
+        // 前のノードからのテキスト出力を自動的に追加
+        const elevenLabsInputTexts: string[] = [];
+        Object.values(inputData).forEach((input: any) => {
+          if (input && typeof input === 'object') {
+            // geminiノードからのresponseフィールドを追加
+            if (input.response && typeof input.response === 'string') {
+              elevenLabsInputTexts.push(input.response);
+            }
+            // その他のvalueフィールドを追加
+            else if (input.value !== undefined && input.value !== null) {
+              elevenLabsInputTexts.push(String(input.value));
+            }
+          }
+        });
+
+        // text欄の内容と前のノードの出力を組み合わせ
+        if (elevenLabsInputTexts.length > 0) {
+          const combinedText = elevenLabsInputTexts.join(' ');
+          if (elevenLabsText.trim()) {
+            elevenLabsText = (elevenLabsText + ' ' + combinedText).trim();
+          } else {
+            elevenLabsText = combinedText;
+          }
+        }
+
+        console.log('ElevenLabs execution:', {
+          nodeId: node.id,
+          nodeName: node.data.config?.name,
+          originalText: node.data.config?.text,
+          textLength: (node.data.config?.text || '').length,
+          inputData,
+          inputDataKeys: Object.keys(inputData),
+          elevenLabsInputTexts,
+          finalText: elevenLabsText,
+          finalTextLength: elevenLabsText.length,
+        });
+
+        if (!elevenLabsText.trim()) {
+          throw new Error(`ElevenLabsノード "${node.data.config?.name || node.id}" のテキストが空です。テキストを入力するか、前のノードから値を受け取ってください。`);
+        }
+
+        // リクエストボディを保存
+        requestBody = {
+          text: elevenLabsText,
+          voiceId: node.data.config?.voiceId || 'JBFqnCBsd6RMkjVDRZzb',
+          modelId: node.data.config?.modelId || 'eleven_multilingual_v2',
+        };
+
+        const elevenLabsResponse = await fetch('/api/elevenlabs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        const elevenLabsData = await elevenLabsResponse.json();
+
+        if (!elevenLabsResponse.ok) {
+          const error: any = new Error(elevenLabsData.error || 'ElevenLabs API call failed');
+          error.apiErrorDetails = elevenLabsData; // API全体のエラーレスポンスを保存
+          throw error;
+        }
+
+        output = {
+          audioData: elevenLabsData.audioData,
           nodeId: node.id,
         };
         break;

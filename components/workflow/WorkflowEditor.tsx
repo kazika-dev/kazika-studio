@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -22,10 +23,12 @@ import CustomNode from './CustomNode';
 import GeminiNode from './GeminiNode';
 import NanobanaNode from './NanobanaNode';
 import ImageInputNode from './ImageInputNode';
+import ElevenLabsNode from './ElevenLabsNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
 import ImageInputNodeSettings from './ImageInputNodeSettings';
+import ElevenLabsNodeSettings from './ElevenLabsNodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 
@@ -67,6 +70,7 @@ const nodeTypes = {
   gemini: GeminiNode,
   nanobana: NanobanaNode,
   imageInput: ImageInputNode,
+  elevenlabs: ElevenLabsNode,
 };
 
 const initialNodes: Node[] = [
@@ -88,6 +92,8 @@ const initialNodes: Node[] = [
 const initialEdges: Edge[] = [];
 
 export default function WorkflowEditor() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -96,17 +102,16 @@ export default function WorkflowEditor() {
   const [currentWorkflowName, setCurrentWorkflowName] = useState<string | undefined>(undefined);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // 初回ロード時に最新のワークフローを自動読み込み
+  // 初回ロード時にURLパラメータまたは最新のワークフローを自動読み込み
   useEffect(() => {
-    const loadLatestWorkflow = async () => {
+    const loadWorkflow = async () => {
       try {
-        const response = await fetch('/api/workflows');
-        const data = await response.json();
+        // URLパラメータからworkflowIdを取得
+        const workflowIdParam = searchParams.get('id');
 
-        if (data.success && data.workflows && data.workflows.length > 0) {
-          // 最新のワークフロー（一番最初のもの）を読み込む
-          const latestWorkflow = data.workflows[0];
-          const workflowResponse = await fetch(`/api/workflows/${latestWorkflow.id}`);
+        if (workflowIdParam) {
+          // URLパラメータにIDがある場合は、そのワークフローを読み込む
+          const workflowResponse = await fetch(`/api/workflows/${workflowIdParam}`);
           const workflowData = await workflowResponse.json();
 
           if (workflowData.success) {
@@ -114,13 +119,31 @@ export default function WorkflowEditor() {
             setEdges(workflowData.workflow.edges || []);
             setCurrentWorkflowId(workflowData.workflow.id);
             setCurrentWorkflowName(workflowData.workflow.name);
-            console.log('Loaded latest workflow:', workflowData.workflow.name);
+            console.log('Loaded workflow from URL:', workflowData.workflow.name);
           }
         } else {
-          console.log('No saved workflows found, using initial state');
+          // URLパラメータにIDがない場合は、最新のワークフローを読み込む
+          const response = await fetch('/api/workflows');
+          const data = await response.json();
+
+          if (data.success && data.workflows && data.workflows.length > 0) {
+            const latestWorkflow = data.workflows[0];
+            const workflowResponse = await fetch(`/api/workflows/${latestWorkflow.id}`);
+            const workflowData = await workflowResponse.json();
+
+            if (workflowData.success) {
+              setNodes(workflowData.workflow.nodes || []);
+              setEdges(workflowData.workflow.edges || []);
+              setCurrentWorkflowId(workflowData.workflow.id);
+              setCurrentWorkflowName(workflowData.workflow.name);
+              console.log('Loaded latest workflow:', workflowData.workflow.name);
+            }
+          } else {
+            console.log('No saved workflows found, using initial state');
+          }
         }
       } catch (error) {
-        console.error('Failed to load latest workflow:', error);
+        console.error('Failed to load workflow:', error);
         // エラーの場合は初期状態のまま
       } finally {
         setIsInitialLoad(false);
@@ -128,9 +151,9 @@ export default function WorkflowEditor() {
     };
 
     if (isInitialLoad) {
-      loadLatestWorkflow();
+      loadWorkflow();
     }
-  }, [isInitialLoad, setNodes, setEdges]);
+  }, [isInitialLoad, searchParams, setNodes, setEdges]);
 
   // ノード更新イベントのリスナー
   useEffect(() => {
@@ -220,16 +243,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -247,6 +270,13 @@ export default function WorkflowEditor() {
             name: `画像入力${nodes.length + 1}`,
             description: '参照画像を設定します',
             imageData: null,
+          } : type === 'elevenlabs' ? {
+            name: `ElevenLabs ノード${nodes.length + 1}`,
+            description: 'テキストを音声に変換します',
+            text: '',
+            voiceId: 'JBFqnCBsd6RMkjVDRZzb',
+            modelId: 'eleven_multilingual_v2',
+            status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
             description: '',
@@ -332,11 +362,15 @@ export default function WorkflowEditor() {
       if (data.success) {
         setCurrentWorkflowId(data.workflow.id);
         setCurrentWorkflowName(name);
+        // 新規作成の場合はURLを更新
+        if (!currentWorkflowId) {
+          router.push(`/workflow?id=${data.workflow.id}`);
+        }
       } else {
         throw new Error(data.error);
       }
     },
-    [currentWorkflowId, nodes, edges]
+    [currentWorkflowId, nodes, edges, router]
   );
 
   return (
@@ -440,6 +474,13 @@ export default function WorkflowEditor() {
             />
           ) : selectedNode.data.type === 'gemini' ? (
             <GeminiNodeSettings
+              node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.data.type === 'elevenlabs' ? (
+            <ElevenLabsNodeSettings
               node={selectedNode}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}

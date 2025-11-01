@@ -120,14 +120,14 @@ export async function POST(request: NextRequest) {
     }
 
     // GCP Storageに画像をアップロード（環境変数が設定されている場合のみ）
-    let storageUrl: string | undefined;
+    let storagePath: string | undefined;
     if (process.env.GCP_SERVICE_ACCOUNT_KEY && process.env.GCP_STORAGE_BUCKET) {
       try {
-        storageUrl = await uploadImageToStorage(
+        storagePath = await uploadImageToStorage(
           imageData.data,
           imageData.mimeType
         );
-        console.log('Image uploaded to GCP Storage:', storageUrl);
+        console.log('Image uploaded to GCP Storage:', storagePath);
       } catch (storageError: any) {
         console.error('Failed to upload to GCP Storage:', storageError);
         // Storageへのアップロードが失敗してもエラーにはせず、警告として記録
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
         mimeType: imageData.mimeType,
         data: imageData.data, // Base64エンコードされた画像データ
       },
-      storageUrl, // GCP StorageのURL（アップロード成功時のみ）
+      storagePath, // GCP Storage内部パス（アップロード成功時のみ）
       model: 'gemini-2.5-flash-image',
     });
   } catch (error: any) {

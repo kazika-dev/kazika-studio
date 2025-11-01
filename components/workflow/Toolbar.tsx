@@ -8,9 +8,10 @@ import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ImageIcon from '@mui/icons-material/Image';
 import CollectionsIcon from '@mui/icons-material/Collections';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -135,6 +136,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           Nanobana 画像生成
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<RecordVoiceOverIcon />}
+          onClick={() => onAddNode('elevenlabs')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#4fc3f7',
+            '&:hover': {
+              bgcolor: '#29b6f6',
+            },
+          }}
+        >
+          ElevenLabs 音声合成
         </Button>
       </Stack>
     </Paper>

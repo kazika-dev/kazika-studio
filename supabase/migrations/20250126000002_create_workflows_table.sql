@@ -80,3 +80,12 @@ CREATE TRIGGER on_workflows_updated
 COMMENT ON TABLE kazikastudio.workflows IS 'Stores user workflow definitions with nodes and edges';
 COMMENT ON COLUMN kazikastudio.workflows.nodes IS 'JSON array of workflow nodes';
 COMMENT ON COLUMN kazikastudio.workflows.edges IS 'JSON array of workflow edges/connections';
+
+-- Grant permissions on the newly created table
+GRANT ALL ON kazikastudio.workflows TO anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE kazikastudio.workflows_id_seq TO anon, authenticated;
+
+-- Set default privileges for future objects
+ALTER DEFAULT PRIVILEGES IN SCHEMA kazikastudio GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA kazikastudio GRANT ALL ON SEQUENCES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA kazikastudio GRANT ALL ON FUNCTIONS TO anon, authenticated;
