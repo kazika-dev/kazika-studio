@@ -4,7 +4,7 @@ import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, aspectRatio = '1:1' } = await request.json();
+    const { prompt, aspectRatio = '1:1', referenceImages } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -38,8 +38,24 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    // コンテンツのpartsを構築（プロンプト + 参照画像）
+    const parts: any[] = [{ text: prompt }];
+
+    // 参照画像がある場合は追加
+    if (referenceImages && referenceImages.length > 0) {
+      console.log(`Adding ${referenceImages.length} reference image(s) to Nanobana request`);
+      referenceImages.forEach((img: { mimeType: string; data: string }) => {
+        parts.push({
+          inline_data: {
+            mime_type: img.mimeType,
+            data: img.data
+          }
+        });
+      });
+    }
+
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: generationConfig as any,
     });
 

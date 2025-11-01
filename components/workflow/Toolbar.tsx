@@ -7,9 +7,10 @@ import OutputIcon from '@mui/icons-material/Output';
 import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ImageIcon from '@mui/icons-material/Image';
+import CollectionsIcon from '@mui/icons-material/Collections';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -81,6 +82,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
         </Button>
 
         <Divider sx={{ my: 1 }} />
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<CollectionsIcon />}
+          onClick={() => onAddNode('imageInput')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#9c27b0',
+            '&:hover': {
+              bgcolor: '#7b1fa2',
+            },
+          }}
+        >
+          画像入力
+        </Button>
 
         <Button
           fullWidth

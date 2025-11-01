@@ -11,7 +11,11 @@ const MODEL_MAPPING: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, model: requestedModel = 'gemini-2.5-flash' } = await request.json();
+    const {
+      prompt,
+      model: requestedModel = 'gemini-2.5-flash',
+      images
+    } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -40,7 +44,29 @@ export async function POST(request: NextRequest) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const generativeModel = genAI.getGenerativeModel({ model });
 
-    const result = await generativeModel.generateContent(prompt);
+    // 画像がある場合はマルチモーダルリクエストを構築
+    let result;
+    if (images && images.length > 0) {
+      console.log(`Sending multimodal request with ${images.length} image(s)`);
+
+      const parts: any[] = [{ text: prompt }];
+
+      // 画像をinline_data形式で追加
+      images.forEach((img: { mimeType: string; data: string }) => {
+        parts.push({
+          inline_data: {
+            mime_type: img.mimeType,
+            data: img.data
+          }
+        });
+      });
+
+      result = await generativeModel.generateContent({ contents: [{ role: 'user', parts }] });
+    } else {
+      // テキストのみの場合は従来通り
+      result = await generativeModel.generateContent(prompt);
+    }
+
     const response = result.response;
     const text = response.text();
 

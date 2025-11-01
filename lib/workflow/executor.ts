@@ -94,6 +94,14 @@ async function executeNode(
         };
         break;
 
+      case 'imageInput':
+        // 画像入力ノードは画像データをそのまま出力
+        output = {
+          imageData: node.data.config?.imageData || null,
+          nodeId: node.id,
+        };
+        break;
+
       case 'process':
         // 処理ノードは入力データを加工
         output = {
@@ -118,6 +126,9 @@ async function executeNode(
           inputData
         );
 
+        // 入力データから画像を抽出
+        const geminiImages = extractImagesFromInput(inputData);
+
         console.log('Gemini execution:', {
           nodeId: node.id,
           nodeName: node.data.config?.name,
@@ -127,6 +138,7 @@ async function executeNode(
           inputDataKeys: Object.keys(inputData),
           replacedPrompt: geminiPrompt,
           replacedPromptLength: geminiPrompt.length,
+          imageCount: geminiImages.length,
         });
 
         if (!node.data.config?.prompt || !node.data.config.prompt.trim()) {
@@ -137,10 +149,11 @@ async function executeNode(
           throw new Error(`Geminiノード "${node.data.config?.name || node.id}" のプロンプト変数が置換できませんでした。元のプロンプト: "${node.data.config?.prompt}"`);
         }
 
-        // リクエストボディを保存
+        // リクエストボディを保存（画像がある場合は含める）
         requestBody = {
           prompt: geminiPrompt,
           model: node.data.config?.model || 'gemini-2.5-flash',
+          images: geminiImages.length > 0 ? geminiImages : undefined,
         };
 
         const geminiResponse = await fetch('/api/gemini', {
@@ -195,6 +208,9 @@ async function executeNode(
           }
         }
 
+        // 入力データから画像を抽出（参照画像として使用、最大3枚）
+        const nanobanaImages = extractImagesFromInput(inputData).slice(0, 3);
+
         console.log('Nanobana execution:', {
           nodeId: node.id,
           nodeName: node.data.config?.name,
@@ -205,16 +221,18 @@ async function executeNode(
           inputTexts,
           finalPrompt: nanobanaPrompt,
           finalPromptLength: nanobanaPrompt.length,
+          imageCount: nanobanaImages.length,
         });
 
         if (!nanobanaPrompt.trim()) {
           throw new Error(`Nanobanaノード "${node.data.config?.name || node.id}" のプロンプトが空です。プロンプトを入力するか、前のノードから値を受け取ってください。`);
         }
 
-        // リクエストボディを保存
+        // リクエストボディを保存（参照画像がある場合は含める）
         requestBody = {
           prompt: nanobanaPrompt,
           aspectRatio: node.data.config?.aspectRatio || '1:1',
+          referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
         };
 
         const nanobanaResponse = await fetch('/api/nanobana', {
@@ -293,6 +311,36 @@ function collectInputData(
   });
 
   return inputs;
+}
+
+/**
+ * 入力データから画像データを抽出
+ */
+function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data: string }> {
+  const images: Array<{ mimeType: string; data: string }> = [];
+
+  Object.values(inputData).forEach((input: any) => {
+    if (input && typeof input === 'object') {
+      // imageInputノードからの画像データ
+      if (input.imageData && input.imageData.mimeType && input.imageData.data) {
+        images.push({
+          mimeType: input.imageData.mimeType,
+          data: input.imageData.data,
+        });
+      }
+      // nanobananaノードからの生成画像
+      else if (input.imageData && typeof input.imageData === 'object') {
+        if (input.imageData.mimeType && input.imageData.data) {
+          images.push({
+            mimeType: input.imageData.mimeType,
+            data: input.imageData.data,
+          });
+        }
+      }
+    }
+  });
+
+  return images;
 }
 
 /**

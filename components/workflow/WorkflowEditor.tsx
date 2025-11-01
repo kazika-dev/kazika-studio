@@ -21,9 +21,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import CustomNode from './CustomNode';
 import GeminiNode from './GeminiNode';
 import NanobanaNode from './NanobanaNode';
+import ImageInputNode from './ImageInputNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
+import ImageInputNodeSettings from './ImageInputNodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 
@@ -64,6 +66,7 @@ const nodeTypes = {
   custom: CustomNode,
   gemini: GeminiNode,
   nanobana: NanobanaNode,
+  imageInput: ImageInputNode,
 };
 
 const initialNodes: Node[] = [
@@ -217,16 +220,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -240,6 +243,10 @@ export default function WorkflowEditor() {
             prompt: '',
             model: 'gemini-2.5-flash',
             status: 'idle',
+          } : type === 'imageInput' ? {
+            name: `画像入力${nodes.length + 1}`,
+            description: '参照画像を設定します',
+            imageData: null,
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
             description: '',
@@ -373,7 +380,7 @@ export default function WorkflowEditor() {
               pannable
               zoomable
               nodeColor={(node) => {
-                switch (node.data.type) {
+                switch (node.data.type || node.type) {
                   case 'input':
                     return '#1976d2';
                   case 'process':
@@ -384,6 +391,8 @@ export default function WorkflowEditor() {
                     return '#ea80fc';
                   case 'nanobana':
                     return '#ff6b9d';
+                  case 'imageInput':
+                    return '#9c27b0';
                   default:
                     return '#999';
                 }
@@ -431,6 +440,13 @@ export default function WorkflowEditor() {
             />
           ) : selectedNode.data.type === 'gemini' ? (
             <GeminiNodeSettings
+              node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.type === 'imageInput' ? (
+            <ImageInputNodeSettings
               node={selectedNode}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
