@@ -58,6 +58,19 @@ export async function POST(request: NextRequest) {
     // 画像データを探す
     let imageData = null;
     for (const candidate of candidates) {
+      // finishReasonをチェック
+      if (candidate.finishReason && candidate.finishReason.toString() === 'NO_IMAGE') {
+        console.error('Model did not generate an image. FinishReason:', candidate.finishReason);
+        return NextResponse.json(
+          {
+            error: 'Image generation failed',
+            message: 'The model could not generate an image for this prompt. The prompt may be blocked by safety filters or may not be suitable for image generation. Try a different prompt.',
+            finishReason: candidate.finishReason,
+          },
+          { status: 400 }
+        );
+      }
+
       if (candidate.content?.parts) {
         for (const part of candidate.content.parts) {
           if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
@@ -79,28 +92,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'No image data found in response',
-          message: 'The model did not return image data. Check API configuration.',
+          message: 'The model did not return image data. The prompt may have been blocked by safety filters or is not suitable for image generation.',
           debug: {
             candidatesCount: candidates.length,
             hasContent: !!candidates[0]?.content,
+            finishReasons: candidates.map(c => c.finishReason),
           }
         },
         { status: 500 }
       );
     }
 
-    // GCP Storageに画像をアップロード
+    // GCP Storageに画像をアップロード（環境変数が設定されている場合のみ）
     let storageUrl: string | undefined;
-    try {
-      storageUrl = await uploadImageToStorage(
-        imageData.data,
-        imageData.mimeType
-      );
-      console.log('Image uploaded to GCP Storage:', storageUrl);
-    } catch (storageError: any) {
-      console.error('Failed to upload to GCP Storage:', storageError);
-      // Storageへのアップロードが失敗してもエラーにはせず、警告として記録
-      // Base64データは引き続き返す
+    if (process.env.GCP_SERVICE_ACCOUNT_KEY && process.env.GCP_STORAGE_BUCKET) {
+      try {
+        storageUrl = await uploadImageToStorage(
+          imageData.data,
+          imageData.mimeType
+        );
+        console.log('Image uploaded to GCP Storage:', storageUrl);
+      } catch (storageError: any) {
+        console.error('Failed to upload to GCP Storage:', storageError);
+        // Storageへのアップロードが失敗してもエラーにはせず、警告として記録
+        // Base64データは引き続き返す
+      }
+    } else {
+      console.log('GCP Storage not configured, skipping upload');
     }
 
     return NextResponse.json({

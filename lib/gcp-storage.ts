@@ -69,8 +69,11 @@ export async function uploadImageToStorage(
       contentType: mimeType,
       cacheControl: 'public, max-age=31536000', // 1年間キャッシュ
     },
-    public: true, // 公開アクセス可能にする
+    // uniform bucket-level accessが有効な場合はpublic: trueは使えない
   });
+
+  // ファイルを公開アクセス可能にする
+  await file.makePublic();
 
   // 公開URLを生成
   const publicUrl = `https://storage.googleapis.com/${bucketName}/images/${finalFileName}`;
