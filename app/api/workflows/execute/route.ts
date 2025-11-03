@@ -5,7 +5,7 @@ import { Node } from 'reactflow';
 import { createClient } from '@/lib/supabase/server';
 
 // Next.jsのルートハンドラの設定（ワークフロー実行は時間がかかる可能性がある）
-export const maxDuration = 600; // 10分（秒単位）
+export const maxDuration = 300; // 5分（秒単位）- Vercel hobby plan limit
 
 export async function POST(request: NextRequest) {
   let workflowId: number | undefined;

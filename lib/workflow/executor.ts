@@ -224,7 +224,16 @@ async function executeNode(
           body: JSON.stringify(requestBody),
         });
 
-        const geminiData = await geminiResponse.json();
+        // レスポンスのテキストを取得してからJSONとしてパース
+        const responseText = await geminiResponse.text();
+        let geminiData;
+
+        try {
+          geminiData = responseText ? JSON.parse(responseText) : { error: 'Empty response from Gemini API' };
+        } catch (parseError) {
+          console.error('Failed to parse Gemini API response:', responseText);
+          throw new Error(`Gemini APIのレスポンスが不正です: ${responseText.substring(0, 200)}`);
+        }
 
         if (!geminiResponse.ok) {
           const error: any = new Error(geminiData.error || 'Gemini API call failed');
@@ -303,7 +312,15 @@ async function executeNode(
           body: JSON.stringify(requestBody),
         });
 
-        const nanobanaData = await nanobanaResponse.json();
+        const nanobanaResponseText = await nanobanaResponse.text();
+        let nanobanaData;
+
+        try {
+          nanobanaData = nanobanaResponseText ? JSON.parse(nanobanaResponseText) : { error: 'Empty response from Nanobana API' };
+        } catch (parseError) {
+          console.error('Failed to parse Nanobana API response:', nanobanaResponseText);
+          throw new Error(`Nanobana APIのレスポンスが不正です: ${nanobanaResponseText.substring(0, 200)}`);
+        }
 
         if (!nanobanaResponse.ok) {
           const error: any = new Error(nanobanaData.error || 'Nanobana API call failed');
@@ -379,7 +396,15 @@ async function executeNode(
           body: JSON.stringify(requestBody),
         });
 
-        const elevenLabsData = await elevenLabsResponse.json();
+        const elevenLabsResponseText = await elevenLabsResponse.text();
+        let elevenLabsData;
+
+        try {
+          elevenLabsData = elevenLabsResponseText ? JSON.parse(elevenLabsResponseText) : { error: 'Empty response from ElevenLabs API' };
+        } catch (parseError) {
+          console.error('Failed to parse ElevenLabs API response:', elevenLabsResponseText);
+          throw new Error(`ElevenLabs APIのレスポンスが不正です: ${elevenLabsResponseText.substring(0, 200)}`);
+        }
 
         if (!elevenLabsResponse.ok) {
           const error: any = new Error(elevenLabsData.error || 'ElevenLabs API call failed');
@@ -470,7 +495,15 @@ async function executeNode(
           body: JSON.stringify(requestBody),
         });
 
-        const higgsfieldData = await higgsfieldResponse.json();
+        const higgsfieldResponseText = await higgsfieldResponse.text();
+        let higgsfieldData;
+
+        try {
+          higgsfieldData = higgsfieldResponseText ? JSON.parse(higgsfieldResponseText) : { error: 'Empty response from Higgsfield API' };
+        } catch (parseError) {
+          console.error('Failed to parse Higgsfield API response:', higgsfieldResponseText);
+          throw new Error(`Higgsfield APIのレスポンスが不正です: ${higgsfieldResponseText.substring(0, 200)}`);
+        }
 
         // 202 Accepted（処理中）の場合も成功として扱う
         if (!higgsfieldResponse.ok && higgsfieldResponse.status !== 202) {
@@ -581,7 +614,15 @@ async function executeNode(
           body: JSON.stringify(requestBody),
         });
 
-        const seedream4Data = await seedream4Response.json();
+        const seedream4ResponseText = await seedream4Response.text();
+        let seedream4Data;
+
+        try {
+          seedream4Data = seedream4ResponseText ? JSON.parse(seedream4ResponseText) : { error: 'Empty response from Seedream4 API' };
+        } catch (parseError) {
+          console.error('Failed to parse Seedream4 API response:', seedream4ResponseText);
+          throw new Error(`Seedream4 APIのレスポンスが不正です: ${seedream4ResponseText.substring(0, 200)}`);
+        }
 
         // 202 Accepted（処理中）の場合も成功として扱う
         if (!seedream4Response.ok && seedream4Response.status !== 202) {

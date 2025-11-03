@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSignedUrl } from '@/lib/gcp-storage';
 
 // Next.jsのルートハンドラの設定
-export const maxDuration = 600; // 10分（秒単位）
+export const maxDuration = 300; // 5分（秒単位）- Vercel hobby plan limit
 
 // ジョブステータスをポーリングする間隔（ミリ秒）
 const POLLING_INTERVAL = 5000; // 5秒
-// 最大ポーリング時間（10分）
-const MAX_POLLING_TIME = 600000; // 10分 = 600秒
+// 最大ポーリング時間（5分）
+const MAX_POLLING_TIME = 300000; // 5分 = 300秒
 
 export async function POST(request: NextRequest) {
   try {
