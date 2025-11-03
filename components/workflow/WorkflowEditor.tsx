@@ -35,6 +35,7 @@ import HiggsfieldNodeSettings from './HiggsfieldNodeSettings';
 import Seedream4NodeSettings from './Seedream4NodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
+import FormConfigEditor from './FormConfigEditor';
 
 const theme = createTheme({
   palette: {
@@ -369,6 +370,7 @@ export default function WorkflowEditor() {
 
   const handleSaveWorkflow = useCallback(
     async (name: string, description: string) => {
+      // form_configはAPI側で自動生成されるため、クライアントからは送信しない
       const method = currentWorkflowId ? 'PUT' : 'POST';
       const body = currentWorkflowId
         ? { id: currentWorkflowId, name, description, nodes, edges }
@@ -400,6 +402,16 @@ export default function WorkflowEditor() {
       <Box sx={{ display: 'flex', height: '100%', width: '100%', bgcolor: 'background.default' }}>
         <Box sx={{ flex: 1, position: 'relative' }}>
           <Toolbar onAddNode={addNode} />
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 24,
+              left: 290,
+              zIndex: 10,
+            }}
+          >
+            <FormConfigEditor nodes={nodes} />
+          </Box>
           <ExecutionPanel
             nodes={nodes}
             edges={edges}

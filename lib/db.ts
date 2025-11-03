@@ -34,7 +34,7 @@ export async function query(text: string, params?: any[]) {
 
 export async function getWorkflowById(id: number) {
   const result = await query(
-    'SELECT * FROM workflows WHERE id = $1',
+    'SELECT * FROM kazikastudio.workflows WHERE id = $1',
     [id]
   );
 

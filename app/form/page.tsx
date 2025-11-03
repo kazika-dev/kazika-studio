@@ -16,7 +16,11 @@ import {
   Divider,
   Stack,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -31,6 +35,33 @@ interface Workflow {
   form_config?: {
     fields: FormFieldConfig[];
   };
+}
+
+// 画像データを省略してログ表示用に整形
+function sanitizeRequestBody(obj: any): any {
+  if (!obj) return obj;
+  if (typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeRequestBody(item));
+  }
+
+  const sanitized: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'data' && typeof value === 'string' && value.length > 100) {
+      sanitized[key] = `[BASE64_DATA: ${value.length} bytes]`;
+    } else if (key === 'images' && Array.isArray(value)) {
+      sanitized[key] = value.map((img: any) => ({
+        ...img,
+        data: img.data ? `[BASE64_DATA: ${img.data.length} bytes]` : img.data,
+      }));
+    } else if (typeof value === 'object') {
+      sanitized[key] = sanitizeRequestBody(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
 }
 
 export default function FormPage() {
@@ -111,6 +142,14 @@ export default function FormPage() {
       setError(null);
       setResult(null);
 
+      console.log('========================================');
+      console.log('Sending workflow execution request');
+      console.log('========================================');
+      console.log('Workflow ID:', workflowId);
+      console.log('Form values:', formValues);
+      console.log('Form value keys:', Object.keys(formValues));
+      console.log('========================================');
+
       const response = await fetch('/api/workflows/execute', {
         method: 'POST',
         headers: {
@@ -127,11 +166,30 @@ export default function FormPage() {
       if (data.success) {
         setResult(data);
       } else {
-        setError(data.error || 'ワークフローの実行に失敗しました');
+        console.error('========================================');
+        console.error('Workflow execution failed');
+        console.error('========================================');
+        console.error('Error:', data.error);
+        console.error('Details:', data.details);
+        console.error('Error type:', data.errorType);
+        console.error('Error code:', data.errorCode);
+        console.error('Error cause:', data.errorCause);
+        console.error('Stack:', data.stack);
+        console.error('Full response:', data);
+        console.error('========================================');
+
+        setError(data.details || data.error || 'ワークフローの実行に失敗しました');
       }
     } catch (err: any) {
-      setError('ワークフローの実行中にエラーが発生しました');
-      console.error(err);
+      console.error('========================================');
+      console.error('Workflow execution exception');
+      console.error('========================================');
+      console.error('Error:', err);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+      console.error('========================================');
+
+      setError('ワークフローの実行中にエラーが発生しました: ' + (err.message || ''));
     } finally {
       setExecuting(false);
     }
@@ -265,7 +323,20 @@ export default function FormPage() {
                       </Typography>
                     </Box>
 
-                    {output.output?.imageData && (
+                    {/* 入力ノードの値を表示 */}
+                    {output.nodeType === 'input' && output.output?.value && (
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                          入力値
+                        </Typography>
+                        <Typography variant="body2">
+                          {output.output.value}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* 画像入力ノードの画像を表示 */}
+                    {output.nodeType === 'imageInput' && output.output?.imageData && (
                       <CardMedia
                         component="img"
                         image={`data:${output.output.imageData.mimeType};base64,${output.output.imageData.data}`}
@@ -274,6 +345,17 @@ export default function FormPage() {
                       />
                     )}
 
+                    {/* AIノードからの画像データ */}
+                    {output.output?.imageData && !['imageInput'].includes(output.nodeType) && (
+                      <CardMedia
+                        component="img"
+                        image={`data:${output.output.imageData.mimeType};base64,${output.output.imageData.data}`}
+                        alt={nodeName}
+                        sx={{ maxHeight: 400, objectFit: 'contain', mt: 2, borderRadius: 1 }}
+                      />
+                    )}
+
+                    {/* AIノードからの画像URL */}
                     {output.output?.imageUrl && (
                       <CardMedia
                         component="img"
@@ -283,10 +365,16 @@ export default function FormPage() {
                       />
                     )}
 
+                    {/* AIノードからのテキスト応答 */}
                     {output.output?.response && (
-                      <Typography variant="body2" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
-                        {output.output.response}
-                      </Typography>
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                          応答
+                        </Typography>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {output.output.response}
+                        </Typography>
+                      </Box>
                     )}
 
                     {output.output?.videoUrl && (
@@ -309,6 +397,31 @@ export default function FormPage() {
                       <Alert severity="error" sx={{ mt: 2 }}>
                         {output.error}
                       </Alert>
+                    )}
+
+                    {output.requestBody && (
+                      <Accordion sx={{ mt: 2 }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography variant="body2" fontWeight={600}>
+                            APIリクエスト詳細
+                          </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Box
+                            component="pre"
+                            sx={{
+                              bgcolor: 'grey.100',
+                              p: 2,
+                              borderRadius: 1,
+                              overflow: 'auto',
+                              fontSize: '0.875rem',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {JSON.stringify(sanitizeRequestBody(output.requestBody), null, 2)}
+                          </Box>
+                        </AccordionDetails>
+                      </Accordion>
                     )}
                   </CardContent>
                 </Card>

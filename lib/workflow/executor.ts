@@ -1,4 +1,5 @@
 import { Node, Edge } from 'reactflow';
+import { getApiUrl } from '@/lib/utils/apiUrl';
 
 export interface ExecutionResult {
   success: boolean;
@@ -14,6 +15,34 @@ export interface WorkflowExecutionResult {
   success: boolean;
   results: Map<string, ExecutionResult>;
   error?: string;
+}
+
+/**
+ * ログ出力用に画像データを省略する
+ */
+function sanitizeForLog(obj: any): any {
+  if (!obj) return obj;
+  if (typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForLog(item));
+  }
+
+  const sanitized: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'imageData' && value) {
+      sanitized[key] = '[IMAGE_DATA_OMITTED]';
+    } else if (key === 'data' && typeof value === 'string' && value.length > 1000) {
+      sanitized[key] = `[LARGE_DATA_OMITTED: ${value.length} bytes]`;
+    } else if (typeof value === 'string' && value.length > 1000 && value.startsWith('data:image')) {
+      sanitized[key] = '[BASE64_IMAGE_OMITTED]';
+    } else if (typeof value === 'object') {
+      sanitized[key] = sanitizeForLog(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
 }
 
 /**
@@ -102,20 +131,25 @@ async function executeNode(
         let imageStoragePath: string | undefined;
         if (imageInputData && imageInputData.data && imageInputData.mimeType) {
           try {
-            // GCP Storageにアップロード（APIルート経由）
-            const uploadResponse = await fetch('/api/upload-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                base64Data: imageInputData.data,
-                mimeType: imageInputData.mimeType,
-              }),
-            });
+            // クライアントサイドでのみGCP Storageにアップロード
+            // サーバーサイド（API実行）では相対URLが使えないためスキップ
+            if (typeof window !== 'undefined') {
+              const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  base64Data: imageInputData.data,
+                  mimeType: imageInputData.mimeType,
+                }),
+              });
 
-            if (uploadResponse.ok) {
-              const uploadData = await uploadResponse.json();
-              imageStoragePath = uploadData.storagePath;
-              console.log('Image uploaded to storage:', imageStoragePath);
+              if (uploadResponse.ok) {
+                const uploadData = await uploadResponse.json();
+                imageStoragePath = uploadData.storagePath;
+                console.log('Image uploaded to storage:', imageStoragePath);
+              }
+            } else {
+              console.log('Skipping image upload on server-side execution (using base64 data directly)');
             }
           } catch (error) {
             console.error('Failed to upload image to storage:', error);
@@ -162,7 +196,7 @@ async function executeNode(
           nodeName: node.data.config?.name,
           originalPrompt: node.data.config?.prompt,
           promptLength: (node.data.config?.prompt || '').length,
-          inputData,
+          inputData: sanitizeForLog(inputData),
           inputDataKeys: Object.keys(inputData),
           replacedPrompt: geminiPrompt,
           replacedPromptLength: geminiPrompt.length,
@@ -184,7 +218,7 @@ async function executeNode(
           images: geminiImages.length > 0 ? geminiImages : undefined,
         };
 
-        const geminiResponse = await fetch('/api/gemini', {
+        const geminiResponse = await fetch(getApiUrl('/api/gemini'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -244,7 +278,7 @@ async function executeNode(
           nodeName: node.data.config?.name,
           originalPrompt: node.data.config?.prompt,
           promptLength: (node.data.config?.prompt || '').length,
-          inputData,
+          inputData: sanitizeForLog(inputData),
           inputDataKeys: Object.keys(inputData),
           inputTexts,
           finalPrompt: nanobanaPrompt,
@@ -263,7 +297,7 @@ async function executeNode(
           referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
         };
 
-        const nanobanaResponse = await fetch('/api/nanobana', {
+        const nanobanaResponse = await fetch(getApiUrl('/api/nanobana'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -321,7 +355,7 @@ async function executeNode(
           nodeName: node.data.config?.name,
           originalText: node.data.config?.text,
           textLength: (node.data.config?.text || '').length,
-          inputData,
+          inputData: sanitizeForLog(inputData),
           inputDataKeys: Object.keys(inputData),
           elevenLabsInputTexts,
           finalText: elevenLabsText,
@@ -339,7 +373,7 @@ async function executeNode(
           modelId: node.data.config?.modelId || 'eleven_multilingual_v2',
         };
 
-        const elevenLabsResponse = await fetch('/api/elevenlabs', {
+        const elevenLabsResponse = await fetch(getApiUrl('/api/elevenlabs'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -396,7 +430,7 @@ async function executeNode(
           nodeName: node.data.config?.name,
           originalPrompt: node.data.config?.prompt,
           promptLength: (node.data.config?.prompt || '').length,
-          inputData,
+          inputData: sanitizeForLog(inputData),
           inputDataKeys: Object.keys(inputData),
           higgsfieldInputTexts,
           finalPrompt: higgsfieldPrompt,
@@ -430,7 +464,7 @@ async function executeNode(
           inputImagePath: inputImagePath, // 画像パス（署名付きURL生成用）
         };
 
-        const higgsfieldResponse = await fetch('/api/higgsfield', {
+        const higgsfieldResponse = await fetch(getApiUrl('/api/higgsfield'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -516,7 +550,7 @@ async function executeNode(
           nodeName: node.data.config?.name,
           originalPrompt: node.data.config?.prompt,
           promptLength: (node.data.config?.prompt || '').length,
-          inputData,
+          inputData: sanitizeForLog(inputData),
           inputDataKeys: Object.keys(inputData),
           seedream4InputTexts,
           finalPrompt: seedream4Prompt,
@@ -541,7 +575,7 @@ async function executeNode(
           inputImagePaths: limitedImagePaths,
         };
 
-        const seedream4Response = await fetch('/api/seedream4', {
+        const seedream4Response = await fetch(getApiUrl('/api/seedream4'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -590,6 +624,33 @@ async function executeNode(
       output,
     };
   } catch (error: any) {
+    // 詳細なエラー情報をログ出力
+    console.error('========================================');
+    console.error('Node execution error');
+    console.error('========================================');
+    console.error('Node ID:', node.id);
+    console.error('Node type:', node.data.type);
+    console.error('Node name:', node.data.config?.name);
+    console.error('Error type:', error.constructor?.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error cause:', error.cause);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', JSON.stringify(requestBody, null, 2));
+
+    // fetchエラーの場合、causeに詳細情報があることが多い
+    if (error.cause) {
+      console.error('Error cause details:');
+      console.error('  Type:', error.cause.constructor?.name);
+      console.error('  Message:', error.cause.message);
+      console.error('  Code:', error.cause.code);
+      console.error('  Stack:', error.cause.stack);
+    }
+
+    // 全てのエラープロパティを出力
+    console.error('All error properties:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error('========================================');
+
     return {
       success: false,
       nodeId: node.id,

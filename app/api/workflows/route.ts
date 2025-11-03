@@ -1,5 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { Node } from 'reactflow';
+
+/**
+ * ノード情報からform_configを自動生成
+ */
+function generateFormConfig(nodes: Node[]): any {
+  const fields: any[] = [];
+
+  nodes.forEach((node: Node) => {
+    const nodeType = node.data.type;
+    const nodeId = node.id;
+    const nodeName = node.data.config?.name || nodeId;
+
+    // 入力ノード
+    if (nodeType === 'input') {
+      fields.push({
+        name: `input_${nodeId}`,
+        label: nodeName,
+        type: 'text',
+        required: false,
+        description: node.data.config?.description || 'データの入力を受け付けます',
+      });
+    }
+
+    // 画像入力ノード
+    if (nodeType === 'imageInput') {
+      fields.push({
+        name: `image_${nodeId}`,
+        label: nodeName,
+        type: 'image',
+        required: false,
+        description: node.data.config?.description || '画像を入力します',
+      });
+    }
+
+    // プロンプトを持つノード (Gemini, Nanobana, Higgsfield, Seedream4)
+    if (['gemini', 'nanobana', 'higgsfield', 'seedream4'].includes(nodeType)) {
+      fields.push({
+        name: `${nodeType}_prompt_${nodeId}`,
+        label: `${nodeName} プロンプト`,
+        type: 'textarea',
+        required: false,
+        description: node.data.config?.description || 'プロンプトを入力します',
+        placeholder: node.data.config?.prompt || '',
+      });
+    }
+  });
+
+  return fields.length > 0 ? { fields } : null;
+}
 
 // ワークフロー一覧取得
 export async function GET() {
@@ -55,7 +105,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { name, description, nodes, edges } = await request.json();
+    const { name, description, nodes, edges, form_config } = await request.json();
 
     if (!name || !nodes || !edges) {
       return NextResponse.json(
@@ -63,6 +113,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // form_configを自動生成（手動設定がなければ）
+    const finalFormConfig = form_config || generateFormConfig(nodes);
+
+    console.log('Creating workflow with auto-generated form_config:', finalFormConfig);
 
     // user_idを自動設定してRLSポリシーを適用
     const { data, error } = await supabase
@@ -72,6 +127,7 @@ export async function POST(request: NextRequest) {
         description: description || '',
         nodes,
         edges,
+        form_config: finalFormConfig,
         user_id: user.id,
       })
       .select('id, name, description, created_at, updated_at')
@@ -117,7 +173,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id, name, description, nodes, edges } = await request.json();
+    const { id, name, description, nodes, edges, form_config } = await request.json();
 
     if (!id || !name || !nodes || !edges) {
       return NextResponse.json(
@@ -125,6 +181,11 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // form_configを自動生成（手動設定がなければ）
+    const finalFormConfig = form_config || generateFormConfig(nodes);
+
+    console.log('Updating workflow with auto-generated form_config:', finalFormConfig);
 
     // RLSポリシーにより、自分のワークフローのみ更新可能
     const { data, error } = await supabase
@@ -134,6 +195,7 @@ export async function PUT(request: NextRequest) {
         description: description || '',
         nodes,
         edges,
+        form_config: finalFormConfig,
       })
       .eq('id', id)
       .select('id, name, description, created_at, updated_at')
