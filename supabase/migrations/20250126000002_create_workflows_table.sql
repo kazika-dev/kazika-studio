@@ -25,6 +25,7 @@ CREATE TABLE kazikastudio.workflows (
   description TEXT DEFAULT '',
   nodes JSONB NOT NULL DEFAULT '[]'::jsonb,
   edges JSONB NOT NULL DEFAULT '[]'::jsonb,
+  form_config JSONB DEFAULT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -80,6 +81,7 @@ CREATE TRIGGER on_workflows_updated
 COMMENT ON TABLE kazikastudio.workflows IS 'Stores user workflow definitions with nodes and edges';
 COMMENT ON COLUMN kazikastudio.workflows.nodes IS 'JSON array of workflow nodes';
 COMMENT ON COLUMN kazikastudio.workflows.edges IS 'JSON array of workflow edges/connections';
+COMMENT ON COLUMN kazikastudio.workflows.form_config IS 'フォーム設定（フィールド定義をJSON形式で保存）';
 
 -- Grant permissions on the newly created table
 GRANT ALL ON kazikastudio.workflows TO anon, authenticated;

@@ -21,7 +21,7 @@ export async function GET(
     // RLSポリシーにより、自動的にuser_idでフィルタリングされる
     const { data, error } = await supabase
       .from('workflows')
-      .select('id, name, description, nodes, edges, created_at, updated_at')
+      .select('id, name, description, nodes, edges, form_config, created_at, updated_at')
       .eq('id', id)
       .single();
 

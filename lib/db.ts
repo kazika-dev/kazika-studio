@@ -31,3 +31,16 @@ export async function query(text: string, params?: any[]) {
   const result = await pool.query(text, params);
   return result;
 }
+
+export async function getWorkflowById(id: number) {
+  const result = await query(
+    'SELECT * FROM workflows WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}

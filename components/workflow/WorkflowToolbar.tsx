@@ -25,6 +25,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 interface WorkflowToolbarProps {
   onSave: (name: string, description: string) => Promise<void>;
@@ -206,13 +207,27 @@ export default function WorkflowToolbar({ onSave, onLoad, onNew, currentWorkflow
                   key={workflow.id}
                   disablePadding
                   secondaryAction={
-                    <IconButton
-                      edge="end"
-                      onClick={(e) => handleDelete(workflow.id, e)}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    <Stack direction="row" spacing={1}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`/form?id=${workflow.id}`, '_blank');
+                        }}
+                        color="primary"
+                        title="フォームで実行"
+                      >
+                        <PlayArrowIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleDelete(workflow.id, e)}
+                        color="error"
+                        title="削除"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Stack>
                   }
                 >
                   <ListItemButton onClick={() => handleLoad(workflow.id)}>

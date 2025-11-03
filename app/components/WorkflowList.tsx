@@ -11,7 +11,7 @@ import {
   createColumnHelper,
   SortingState,
 } from '@tanstack/react-table';
-import { Pencil, Trash2, Plus, FileText } from 'lucide-react';
+import { Pencil, Trash2, Plus, FileText, Play } from 'lucide-react';
 
 interface Workflow {
   id: string;
@@ -162,6 +162,13 @@ export default function WorkflowList() {
         header: 'アクション',
         cell: (props) => (
           <div className="flex gap-2">
+            <a
+              href={`/form?id=${props.row.original.id}`}
+              className="p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-md transition-colors"
+              title="実行"
+            >
+              <Play size={16} />
+            </a>
             <a
               href={`/workflow?id=${props.row.original.id}`}
               className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-md transition-colors"
