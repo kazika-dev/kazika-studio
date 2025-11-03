@@ -222,6 +222,99 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
         }
       }
 
+      // ElevenLabsノードの音声を保存
+      else if (node.data.type === 'elevenlabs' && result.output.audioData) {
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'audio',
+            content: {
+              base64: result.output.audioData.data, // 'data' key from API response
+              mimeType: result.output.audioData.mimeType,
+            },
+            prompt: result.requestBody?.text || '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              voiceId: result.requestBody?.voiceId || 'JBFqnCBsd6RMkjVDRZzb',
+              modelId: result.requestBody?.modelId || 'eleven_multilingual_v2',
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+
+      // Seedream4ノードの画像を保存
+      else if (node.data.type === 'seedream4' && result.output.imageUrl) {
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'image',
+            content: {
+              url: result.output.imageUrl, // Seedream4 returns a URL
+            },
+            prompt: result.requestBody?.prompt || '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              jobId: result.output.jobId,
+              aspectRatio: result.requestBody?.aspectRatio || '4:3',
+              quality: result.requestBody?.quality || 'basic',
+              model: 'seedream4',
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+
+      // Higgsfieldノードの動画を保存
+      else if (node.data.type === 'higgsfield' && result.output.videoUrl) {
+        const response = await fetch('/api/outputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: workflowId,
+            outputType: 'video',
+            content: {
+              url: result.output.videoUrl, // Higgsfield returns a URL
+            },
+            prompt: result.requestBody?.prompt || '',
+            metadata: {
+              nodeId: lastNodeId,
+              nodeName: node.data.config?.name || node.data.label,
+              jobId: result.output.jobId,
+              duration: result.output.duration || 5,
+              cfgScale: result.requestBody?.cfgScale || 0.5,
+              enhancePrompt: result.requestBody?.enhancePrompt || false,
+              model: 'kling-v2-5-turbo',
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Saved final output:`, data);
+        } else {
+          console.error(`Failed to save final output:`, await response.text());
+        }
+      }
+
       // その他のノード（output、processなど）
       else if (result.output) {
         // JSONとして保存
@@ -644,9 +737,200 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                               </Paper>
                             )}
 
+                          {/* ElevenLabsの音声表示 */}
+                          {node.data.type === 'elevenlabs' &&
+                            result.output.audioData && (
+                              <Box
+                                sx={{
+                                  mt: 1,
+                                  p: 1.5,
+                                  bgcolor: 'action.hover',
+                                  borderRadius: 1,
+                                }}
+                              >
+                                <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                  生成された音声
+                                </Typography>
+                                <audio
+                                  controls
+                                  style={{ width: '100%' }}
+                                  src={`data:${result.output.audioData.mimeType};base64,${result.output.audioData.data}`}
+                                />
+                              </Box>
+                            )}
+
+                          {/* Seedream4の画像表示 */}
+                          {node.data.type === 'seedream4' && (
+                            <Box
+                              sx={{
+                                mt: 1,
+                                p: 1.5,
+                                bgcolor: 'action.hover',
+                                borderRadius: 1,
+                              }}
+                            >
+                              {result.output.imageUrl ? (
+                                <>
+                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                    生成された画像
+                                  </Typography>
+                                  <Box sx={{ textAlign: 'center' }}>
+                                    <img
+                                      style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '4px' }}
+                                      src={result.output.imageUrl}
+                                      alt="Generated"
+                                    />
+                                  </Box>
+                                  {result.output.jobId && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: 'block',
+                                        mt: 1,
+                                        fontSize: '0.65rem',
+                                        fontFamily: 'monospace',
+                                        color: 'text.secondary',
+                                      }}
+                                    >
+                                      Job ID: {result.output.jobId}
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : result.output.status === 'processing' ? (
+                                <>
+                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                    画像生成中
+                                  </Typography>
+                                  <Alert severity="info" sx={{ fontSize: '0.75rem' }}>
+                                    {result.output.message}
+                                  </Alert>
+                                  {result.output.jobId && (
+                                    <Box sx={{ mt: 1 }}>
+                                      <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
+                                        Job Set ID: {result.output.jobSetId}
+                                      </Typography>
+                                      <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
+                                        Job ID: {result.output.jobId}
+                                      </Typography>
+                                      {result.output.dashboardUrl && (
+                                        <Button
+                                          size="small"
+                                          href={result.output.dashboardUrl}
+                                          target="_blank"
+                                          sx={{ mt: 1, fontSize: '0.7rem' }}
+                                        >
+                                          ダッシュボードで確認
+                                        </Button>
+                                      )}
+                                    </Box>
+                                  )}
+                                  {result.output.note && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: 'block',
+                                        mt: 1,
+                                        fontSize: '0.65rem',
+                                        color: 'text.secondary',
+                                        fontStyle: 'italic',
+                                      }}
+                                    >
+                                      {result.output.note}
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : null}
+                            </Box>
+                          )}
+
+                          {/* Higgsfieldの動画表示 */}
+                          {node.data.type === 'higgsfield' && (
+                            <Box
+                              sx={{
+                                mt: 1,
+                                p: 1.5,
+                                bgcolor: 'action.hover',
+                                borderRadius: 1,
+                              }}
+                            >
+                              {result.output.videoUrl ? (
+                                <>
+                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                    生成された動画
+                                  </Typography>
+                                  <video
+                                    controls
+                                    style={{ width: '100%', maxHeight: '400px', borderRadius: '4px' }}
+                                    src={result.output.videoUrl}
+                                  />
+                                  {result.output.jobId && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: 'block',
+                                        mt: 1,
+                                        fontSize: '0.65rem',
+                                        fontFamily: 'monospace',
+                                        color: 'text.secondary',
+                                      }}
+                                    >
+                                      Job ID: {result.output.jobId}
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : result.output.status === 'processing' ? (
+                                <>
+                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                    動画生成中
+                                  </Typography>
+                                  <Alert severity="info" sx={{ fontSize: '0.75rem' }}>
+                                    {result.output.message}
+                                  </Alert>
+                                  {result.output.jobId && (
+                                    <Box sx={{ mt: 1 }}>
+                                      <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
+                                        Job Set ID: {result.output.jobSetId}
+                                      </Typography>
+                                      <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', mb: 0.5 }}>
+                                        Job ID: {result.output.jobId}
+                                      </Typography>
+                                      {result.output.dashboardUrl && (
+                                        <Button
+                                          size="small"
+                                          href={result.output.dashboardUrl}
+                                          target="_blank"
+                                          sx={{ mt: 1, fontSize: '0.7rem' }}
+                                        >
+                                          ダッシュボードで確認
+                                        </Button>
+                                      )}
+                                    </Box>
+                                  )}
+                                  {result.output.note && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: 'block',
+                                        mt: 1,
+                                        fontSize: '0.65rem',
+                                        color: 'text.secondary',
+                                        fontStyle: 'italic',
+                                      }}
+                                    >
+                                      {result.output.note}
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : null}
+                            </Box>
+                          )}
+
                           {/* その他のノードの出力 */}
                           {node.data.type !== 'nanobana' &&
-                            node.data.type !== 'gemini' && (
+                            node.data.type !== 'gemini' &&
+                            node.data.type !== 'elevenlabs' &&
+                            node.data.type !== 'higgsfield' &&
+                            node.data.type !== 'seedream4' && (
                               <Paper
                                 variant="outlined"
                                 sx={{

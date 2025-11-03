@@ -24,11 +24,15 @@ import GeminiNode from './GeminiNode';
 import NanobanaNode from './NanobanaNode';
 import ImageInputNode from './ImageInputNode';
 import ElevenLabsNode from './ElevenLabsNode';
+import HiggsfieldNode from './HiggsfieldNode';
+import Seedream4Node from './Seedream4Node';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
 import ImageInputNodeSettings from './ImageInputNodeSettings';
 import ElevenLabsNodeSettings from './ElevenLabsNodeSettings';
+import HiggsfieldNodeSettings from './HiggsfieldNodeSettings';
+import Seedream4NodeSettings from './Seedream4NodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 
@@ -71,6 +75,8 @@ const nodeTypes = {
   nanobana: NanobanaNode,
   imageInput: ImageInputNode,
   elevenlabs: ElevenLabsNode,
+  higgsfield: HiggsfieldNode,
+  seedream4: Seedream4Node,
 };
 
 const initialNodes: Node[] = [
@@ -243,16 +249,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -276,6 +282,22 @@ export default function WorkflowEditor() {
             text: '',
             voiceId: 'JBFqnCBsd6RMkjVDRZzb',
             modelId: 'eleven_multilingual_v2',
+            status: 'idle',
+          } : type === 'higgsfield' ? {
+            name: `Higgsfield ノード${nodes.length + 1}`,
+            description: '画像から動画を生成します（要：画像入力）',
+            prompt: '',
+            duration: 5,
+            cfgScale: 0.5,
+            enhancePrompt: false,
+            negativePrompt: '',
+            status: 'idle',
+          } : type === 'seedream4' ? {
+            name: `Seedream4 ノード${nodes.length + 1}`,
+            description: '参照画像から新しい画像を生成します（要：画像入力）',
+            prompt: '',
+            aspectRatio: '4:3',
+            quality: 'basic',
             status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
@@ -468,6 +490,8 @@ export default function WorkflowEditor() {
           selectedNode.data.type === 'nanobana' ? (
             <NanobanaNodeSettings
               node={selectedNode}
+              nodes={nodes}
+              edges={edges}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
               onDelete={deleteNode}
@@ -482,6 +506,24 @@ export default function WorkflowEditor() {
           ) : selectedNode.data.type === 'elevenlabs' ? (
             <ElevenLabsNodeSettings
               node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.data.type === 'higgsfield' ? (
+            <HiggsfieldNodeSettings
+              node={selectedNode}
+              nodes={nodes}
+              edges={edges}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.data.type === 'seedream4' ? (
+            <Seedream4NodeSettings
+              node={selectedNode}
+              nodes={nodes}
+              edges={edges}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
               onDelete={deleteNode}

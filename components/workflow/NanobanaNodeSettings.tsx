@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Node } from 'reactflow';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Node, Edge } from 'reactflow';
 import {
   Box,
   Drawer,
@@ -21,27 +21,99 @@ import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ImageIcon from '@mui/icons-material/Image';
+import UploadIcon from '@mui/icons-material/Upload';
+import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 
 interface NanobanaNodeSettingsProps {
   node: Node;
+  nodes: Node[];
+  edges: Edge[];
   onClose: () => void;
   onUpdate: (nodeId: string, config: any) => void;
   onDelete: () => void;
 }
 
-export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete }: NanobanaNodeSettingsProps) {
+export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUpdate, onDelete }: NanobanaNodeSettingsProps) {
   const [name, setName] = useState(node.data.config?.name || '');
   const [description, setDescription] = useState(node.data.config?.description || '');
   const [prompt, setPrompt] = useState(node.data.config?.prompt || '');
   const [aspectRatio, setAspectRatio] = useState(node.data.config?.aspectRatio || '1:1');
+  const [referenceImages, setReferenceImages] = useState<Array<{ mimeType: string; data: string }>>(
+    node.data.config?.referenceImages || []
+  );
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 上流ノードから引き継ぐ画像を検出
+  const incomingImages = useMemo(() => {
+    const images: Array<{ nodeName: string; hasImage: boolean }> = [];
+    const incomingEdges = edges.filter(edge => edge.target === node.id);
+
+    incomingEdges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      if (sourceNode) {
+        const nodeName = sourceNode.data.config?.name || sourceNode.id;
+        // 画像を生成・提供するノードタイプをチェック
+        const hasImage = sourceNode.data.type === 'imageInput' ||
+                        sourceNode.data.type === 'nanobana' ||
+                        sourceNode.data.type === 'seedream4' ||
+                        (sourceNode.data.config?.imageData && true);
+        images.push({ nodeName, hasImage });
+      }
+    });
+
+    return images;
+  }, [nodes, edges, node.id]);
 
   useEffect(() => {
     setName(node.data.config?.name || '');
     setDescription(node.data.config?.description || '');
     setPrompt(node.data.config?.prompt || '');
     setAspectRatio(node.data.config?.aspectRatio || '1:1');
+    setReferenceImages(node.data.config?.referenceImages || []);
   }, [node]);
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const newImages: Array<{ mimeType: string; data: string }> = [];
+
+    Array.from(files).forEach((file) => {
+      // 画像ファイルのみ受け付ける
+      if (!file.type.startsWith('image/')) {
+        alert('画像ファイルのみアップロードできます');
+        return;
+      }
+
+      // ファイルサイズチェック（5MB以下）
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`${file.name} のサイズが5MBを超えています`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = e.target?.result as string;
+        const base64Data = base64.split(',')[1];
+
+        newImages.push({
+          mimeType: file.type,
+          data: base64Data,
+        });
+
+        // 全ての画像の読み込みが完了したら state を更新
+        if (newImages.length === Array.from(files).filter(f => f.type.startsWith('image/')).length) {
+          setReferenceImages([...referenceImages, ...newImages]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setReferenceImages(referenceImages.filter((_, i) => i !== index));
+  };
 
   const handleSave = () => {
     console.log('Saving Nanobana node config:', {
@@ -51,6 +123,7 @@ export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete
       prompt,
       promptLength: prompt.length,
       aspectRatio,
+      referenceImagesCount: referenceImages.length,
     });
 
     onUpdate(node.id, {
@@ -58,6 +131,7 @@ export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete
       description,
       prompt,
       aspectRatio,
+      referenceImages,
       status: node.data.config?.status || 'idle',
       imageData: node.data.config?.imageData,
       error: node.data.config?.error,
@@ -216,6 +290,120 @@ export default function NanobanaNodeSettings({ node, onClose, onUpdate, onDelete
               </Typography>
             </Alert>
           </Box>
+
+          <Divider />
+
+          {/* Incoming Images Info */}
+          {incomingImages.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
+                上流ノードからの画像
+              </Typography>
+              <Alert
+                severity={incomingImages.some(img => img.hasImage) ? "success" : "info"}
+                sx={{ fontSize: '0.875rem' }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                  接続されているノード:
+                </Typography>
+                {incomingImages.map((img, index) => (
+                  <Typography
+                    key={index}
+                    variant="caption"
+                    sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                  >
+                    • {img.nodeName} {img.hasImage ? '✓ 画像あり' : '(画像なし)'}
+                  </Typography>
+                ))}
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
+                  これらのノードから画像が参照画像として自動的に使用されます（最大3枚）
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {/* Reference Images Upload */}
+          <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+            参照画像（オプション）
+          </Typography>
+
+          <Alert severity="info" sx={{ fontSize: '0.875rem' }}>
+            参照画像を追加すると、その画像のスタイルや要素を元に画像を生成します。画像サイズは各5MB以下にしてください。
+          </Alert>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleImageUpload}
+          />
+
+          <Button
+            variant="outlined"
+            fullWidth
+            size="large"
+            startIcon={<UploadIcon />}
+            onClick={() => fileInputRef.current?.click()}
+            sx={{
+              py: 1.5,
+              textTransform: 'none',
+              borderStyle: 'dashed',
+              borderWidth: 2,
+            }}
+          >
+            参照画像を追加
+          </Button>
+
+          {referenceImages.length > 0 && (
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                {referenceImages.length} 枚の参照画像
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                {referenceImages.map((img, index) => (
+                  <Box key={index} sx={{ width: 'calc(50% - 8px)' }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        position: 'relative',
+                        p: 1,
+                        bgcolor: 'action.hover',
+                      }}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveImage(index)}
+                        sx={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'error.light',
+                            color: 'white',
+                          },
+                        }}
+                      >
+                        <CloseOutlinedIcon fontSize="small" />
+                      </IconButton>
+                      <img
+                        src={`data:${img.mimeType};base64,${img.data}`}
+                        alt={`Reference ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                        }}
+                      />
+                    </Paper>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
 
           {/* Image Display */}
           {node.data.config?.imageData && (

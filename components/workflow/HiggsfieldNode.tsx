@@ -3,29 +3,29 @@
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip } from '@mui/material';
-import ImageIcon from '@mui/icons-material/Image';
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 
-interface NanobanaNodeData {
+interface HiggsfieldNodeData {
   label: string;
-  type: 'nanobana';
+  type: 'higgsfield';
   config: {
     name: string;
     description: string;
     prompt: string;
-    aspectRatio?: string;
-    imageData?: {
-      mimeType: string;
-      data: string;
-    };
+    duration?: number;
+    cfgScale?: number;
+    enhancePrompt?: boolean;
+    negativePrompt?: string;
+    videoUrl?: string;
     status?: 'idle' | 'loading' | 'success' | 'error';
     error?: string;
   };
 }
 
-function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
+function HiggsfieldNode({ data, selected, id }: NodeProps<HiggsfieldNodeData>) {
   const [isExecuting, setIsExecuting] = useState(false);
 
   const handleExecute = async () => {
@@ -51,22 +51,24 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
     window.dispatchEvent(updateEvent);
 
     try {
-      const response = await fetch('/api/nanobana', {
+      const response = await fetch('/api/higgsfield', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           prompt: data.config.prompt,
-          aspectRatio: data.config.aspectRatio || '1:1',
-          referenceImages: (data.config as any).referenceImages || [],
+          duration: data.config.duration || 5,
+          cfgScale: data.config.cfgScale || 0.5,
+          enhancePrompt: data.config.enhancePrompt || false,
+          negativePrompt: data.config.negativePrompt || '',
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate image');
+        throw new Error(result.error || 'Failed to generate video');
       }
 
       // 成功時の状態更新
@@ -77,7 +79,7 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
             config: {
               ...data.config,
               status: 'success',
-              imageData: result.imageData,
+              videoUrl: result.videoUrl,
             },
           },
         },
@@ -124,7 +126,7 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
         minWidth: 280,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
-        borderColor: selected ? '#ff6b9d' : 'divider',
+        borderColor: selected ? '#9c27b0' : 'divider',
         borderRadius: 2,
         transition: 'all 0.3s ease',
         bgcolor: 'background.paper',
@@ -140,7 +142,7 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ff6b9d',
+          backgroundColor: '#9c27b0',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -151,13 +153,13 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
           sx={{
             p: 1,
             borderRadius: 1.5,
-            bgcolor: 'rgba(255, 107, 157, 0.1)',
+            bgcolor: 'rgba(156, 39, 176, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <ImageIcon sx={{ fontSize: 20, color: '#ff6b9d' }} />
+          <VideoLibraryIcon sx={{ fontSize: 20, color: '#9c27b0' }} />
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -197,10 +199,10 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
               onClick={handleExecute}
               disabled={isExecuting}
               sx={{
-                bgcolor: '#ff6b9d',
+                bgcolor: '#9c27b0',
                 color: 'white',
                 '&:hover': {
-                  bgcolor: '#ff4081',
+                  bgcolor: '#7b1fa2',
                 },
                 '&:disabled': {
                   bgcolor: 'action.disabledBackground',
@@ -234,27 +236,56 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
         </Typography>
       )}
 
-      {data.config.imageData && (
+      {/* 動画設定の表示 */}
+      {(data.config.duration || data.config.cfgScale) && (
+        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {data.config.duration && (
+            <Typography
+              variant="caption"
+              sx={{
+                px: 1,
+                py: 0.5,
+                bgcolor: 'rgba(156, 39, 176, 0.1)',
+                borderRadius: 1,
+                fontSize: '0.65rem',
+                color: '#9c27b0',
+              }}
+            >
+              {data.config.duration}秒
+            </Typography>
+          )}
+          {data.config.cfgScale !== undefined && (
+            <Typography
+              variant="caption"
+              sx={{
+                px: 1,
+                py: 0.5,
+                bgcolor: 'rgba(156, 39, 176, 0.1)',
+                borderRadius: 1,
+                fontSize: '0.65rem',
+                color: '#9c27b0',
+              }}
+            >
+              CFG: {data.config.cfgScale}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {/* 動画プレビュー */}
+      {data.config.videoUrl && (
         <Box
           sx={{
             mt: 1,
             borderRadius: 1,
             overflow: 'hidden',
-            maxHeight: 150,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
             bgcolor: 'action.hover',
           }}
         >
-          <img
-            src={`data:${data.config.imageData.mimeType};base64,${data.config.imageData.data}`}
-            alt="Generated"
-            style={{
-              maxWidth: '100%',
-              maxHeight: '150px',
-              objectFit: 'contain',
-            }}
+          <video
+            controls
+            style={{ width: '100%', maxHeight: '150px' }}
+            src={data.config.videoUrl}
           />
         </Box>
       )}
@@ -265,7 +296,7 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ff6b9d',
+          backgroundColor: '#9c27b0',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -274,4 +305,4 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
   );
 }
 
-export default memo(NanobanaNode);
+export default memo(HiggsfieldNode);

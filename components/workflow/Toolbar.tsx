@@ -9,9 +9,11 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ImageIcon from '@mui/icons-material/Image';
 import CollectionsIcon from '@mui/icons-material/Collections';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import ImageSearchIcon from '@mui/icons-material/ImageSearch';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -154,6 +156,42 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           ElevenLabs 音声合成
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<VideoLibraryIcon />}
+          onClick={() => onAddNode('higgsfield')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#9c27b0',
+            '&:hover': {
+              bgcolor: '#7b1fa2',
+            },
+          }}
+        >
+          Higgsfield 動画生成
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<ImageSearchIcon />}
+          onClick={() => onAddNode('seedream4')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#ff9800',
+            '&:hover': {
+              bgcolor: '#f57c00',
+            },
+          }}
+        >
+          Seedream4 画像生成
         </Button>
       </Stack>
     </Paper>
