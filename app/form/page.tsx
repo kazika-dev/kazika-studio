@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Box,
@@ -64,7 +64,7 @@ function sanitizeRequestBody(obj: any): any {
   return sanitized;
 }
 
-export default function FormPage() {
+function FormPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const workflowId = searchParams.get('id');
@@ -431,5 +431,20 @@ export default function FormPage() {
         )}
       </Stack>
     </Container>
+  );
+}
+
+export default function FormPage() {
+  return (
+    <Suspense
+      fallback={
+        <Container maxWidth="md" sx={{ mt: 4, textAlign: 'center' }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>読み込んでいます...</Typography>
+        </Container>
+      }
+    >
+      <FormPageContent />
+    </Suspense>
   );
 }
