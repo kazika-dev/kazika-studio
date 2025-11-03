@@ -44,3 +44,487 @@ export async function getWorkflowById(id: number) {
 
   return result.rows[0];
 }
+
+// =====================================================
+// スタジオ関連の関数
+// =====================================================
+
+/**
+ * ユーザーの全スタジオを取得
+ */
+export async function getStudiosByUserId(userId: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.studios WHERE user_id = $1 ORDER BY updated_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * スタジオIDでスタジオを取得
+ */
+export async function getStudioById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.studios WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * スタジオを作成
+ */
+export async function createStudio(data: {
+  user_id: string;
+  name: string;
+  description?: string;
+  thumbnail_url?: string;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.studios (user_id, name, description, thumbnail_url, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.name,
+      data.description || '',
+      data.thumbnail_url || null,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * スタジオを更新
+ */
+export async function updateStudio(id: number, data: {
+  name?: string;
+  description?: string;
+  thumbnail_url?: string;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.thumbnail_url !== undefined) {
+    updates.push(`thumbnail_url = $${paramIndex++}`);
+    values.push(data.thumbnail_url);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.studios SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * スタジオを削除
+ */
+export async function deleteStudio(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.studios WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+// =====================================================
+// ストーリーボード関連の関数
+// =====================================================
+
+/**
+ * スタジオの全ボードを取得（時系列順）
+ */
+export async function getBoardsByStudioId(studioId: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.studio_boards WHERE studio_id = $1 ORDER BY sequence_order ASC',
+    [studioId]
+  );
+  return result.rows;
+}
+
+/**
+ * ボードIDでボードを取得
+ */
+export async function getBoardById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.studio_boards WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ボードを作成
+ */
+export async function createBoard(data: {
+  studio_id: number;
+  sequence_order: number;
+  title?: string;
+  description?: string;
+  workflow_id?: number;
+  prompt_text?: string;
+  duration_seconds?: number;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.studio_boards
+     (studio_id, sequence_order, title, description, workflow_id, prompt_text, duration_seconds, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [
+      data.studio_id,
+      data.sequence_order,
+      data.title || '',
+      data.description || '',
+      data.workflow_id || null,
+      data.prompt_text || '',
+      data.duration_seconds || null,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ボードを更新
+ */
+export async function updateBoard(id: number, data: {
+  title?: string;
+  description?: string;
+  workflow_id?: number | null;
+  audio_output_id?: number | null;
+  image_output_id?: number | null;
+  video_output_id?: number | null;
+  custom_audio_url?: string | null;
+  custom_image_url?: string | null;
+  custom_video_url?: string | null;
+  prompt_text?: string;
+  duration_seconds?: number | null;
+  status?: 'draft' | 'processing' | 'completed' | 'error';
+  error_message?: string | null;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.title !== undefined) {
+    updates.push(`title = $${paramIndex++}`);
+    values.push(data.title);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.workflow_id !== undefined) {
+    updates.push(`workflow_id = $${paramIndex++}`);
+    values.push(data.workflow_id);
+  }
+  if (data.audio_output_id !== undefined) {
+    updates.push(`audio_output_id = $${paramIndex++}`);
+    values.push(data.audio_output_id);
+  }
+  if (data.image_output_id !== undefined) {
+    updates.push(`image_output_id = $${paramIndex++}`);
+    values.push(data.image_output_id);
+  }
+  if (data.video_output_id !== undefined) {
+    updates.push(`video_output_id = $${paramIndex++}`);
+    values.push(data.video_output_id);
+  }
+  if (data.custom_audio_url !== undefined) {
+    updates.push(`custom_audio_url = $${paramIndex++}`);
+    values.push(data.custom_audio_url);
+  }
+  if (data.custom_image_url !== undefined) {
+    updates.push(`custom_image_url = $${paramIndex++}`);
+    values.push(data.custom_image_url);
+  }
+  if (data.custom_video_url !== undefined) {
+    updates.push(`custom_video_url = $${paramIndex++}`);
+    values.push(data.custom_video_url);
+  }
+  if (data.prompt_text !== undefined) {
+    updates.push(`prompt_text = $${paramIndex++}`);
+    values.push(data.prompt_text);
+  }
+  if (data.duration_seconds !== undefined) {
+    updates.push(`duration_seconds = $${paramIndex++}`);
+    values.push(data.duration_seconds);
+  }
+  if (data.status !== undefined) {
+    updates.push(`status = $${paramIndex++}`);
+    values.push(data.status);
+  }
+  if (data.error_message !== undefined) {
+    updates.push(`error_message = $${paramIndex++}`);
+    values.push(data.error_message);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.studio_boards SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ボードを削除
+ */
+export async function deleteBoard(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.studio_boards WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * ボードの順序を更新
+ * @param studioId スタジオID
+ * @param boardIds 新しい順序でのボードIDの配列
+ */
+export async function reorderBoards(studioId: number, boardIds: number[]) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 各ボードのsequence_orderを更新
+    for (let i = 0; i < boardIds.length; i++) {
+      await client.query(
+        'UPDATE kazikastudio.studio_boards SET sequence_order = $1 WHERE id = $2 AND studio_id = $3',
+        [i, boardIds[i], studioId]
+      );
+    }
+
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// =====================================================
+// ボードワークフローステップ関連の関数
+// =====================================================
+
+/**
+ * ボードの全ステップを取得（順序順）
+ */
+export async function getStepsByBoardId(boardId: number) {
+  const result = await query(
+    `SELECT s.*, w.name as workflow_name, w.description as workflow_description
+     FROM kazikastudio.board_workflow_steps s
+     LEFT JOIN kazikastudio.workflows w ON s.workflow_id = w.id
+     WHERE s.board_id = $1
+     ORDER BY s.step_order ASC`,
+    [boardId]
+  );
+  return result.rows;
+}
+
+/**
+ * ステップIDでステップを取得
+ */
+export async function getStepById(id: number) {
+  const result = await query(
+    `SELECT s.*, w.name as workflow_name
+     FROM kazikastudio.board_workflow_steps s
+     LEFT JOIN kazikastudio.workflows w ON s.workflow_id = w.id
+     WHERE s.id = $1`,
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ステップを作成
+ */
+export async function createStep(data: {
+  board_id: number;
+  workflow_id: number;
+  step_order: number;
+  input_config?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.board_workflow_steps
+     (board_id, workflow_id, step_order, input_config)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.board_id,
+      data.workflow_id,
+      data.step_order,
+      data.input_config || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ステップを更新
+ */
+export async function updateStep(id: number, data: {
+  workflow_id?: number;
+  input_config?: any;
+  execution_status?: 'pending' | 'running' | 'completed' | 'failed';
+  output_data?: any;
+  error_message?: string | null;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.workflow_id !== undefined) {
+    updates.push(`workflow_id = $${paramIndex++}`);
+    values.push(data.workflow_id);
+  }
+  if (data.input_config !== undefined) {
+    updates.push(`input_config = $${paramIndex++}`);
+    values.push(data.input_config);
+  }
+  if (data.execution_status !== undefined) {
+    updates.push(`execution_status = $${paramIndex++}`);
+    values.push(data.execution_status);
+  }
+  if (data.output_data !== undefined) {
+    updates.push(`output_data = $${paramIndex++}`);
+    values.push(data.output_data);
+  }
+  if (data.error_message !== undefined) {
+    updates.push(`error_message = $${paramIndex++}`);
+    values.push(data.error_message);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.board_workflow_steps SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ステップを削除
+ */
+export async function deleteStep(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.board_workflow_steps WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * ステップの順序を更新
+ * @param boardId ボードID
+ * @param stepIds 新しい順序でのステップIDの配列
+ */
+export async function reorderSteps(boardId: number, stepIds: number[]) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 各ステップのstep_orderを更新
+    for (let i = 0; i < stepIds.length; i++) {
+      await client.query(
+        'UPDATE kazikastudio.board_workflow_steps SET step_order = $1 WHERE id = $2 AND board_id = $3',
+        [i, stepIds[i], boardId]
+      );
+    }
+
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * ボードの全ステップをリセット（全てpendingに戻す）
+ */
+export async function resetBoardSteps(boardId: number) {
+  const result = await query(
+    `UPDATE kazikastudio.board_workflow_steps
+     SET execution_status = 'pending', output_data = NULL, error_message = NULL
+     WHERE board_id = $1
+     RETURNING *`,
+    [boardId]
+  );
+  return result.rows;
+}

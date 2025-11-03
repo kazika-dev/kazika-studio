@@ -34,8 +34,34 @@ export async function POST(request: NextRequest) {
     }
 
     // ワークフローのノードとエッジを取得
-    const nodes = workflow.nodes || [];
-    const edges = workflow.edges || [];
+    // DBから取得したデータは文字列の場合があるのでパース
+    let nodes = workflow.nodes;
+    let edges = workflow.edges;
+
+    if (typeof nodes === 'string') {
+      try {
+        nodes = JSON.parse(nodes);
+      } catch (e) {
+        return NextResponse.json(
+          { error: `Failed to parse workflow nodes: ${e}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (typeof edges === 'string') {
+      try {
+        edges = JSON.parse(edges);
+      } catch (e) {
+        return NextResponse.json(
+          { error: `Failed to parse workflow edges: ${e}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    nodes = nodes || [];
+    edges = edges || [];
 
     if (nodes.length === 0) {
       return NextResponse.json(
@@ -299,12 +325,12 @@ export async function POST(request: NextRequest) {
           // ノードタイプに応じて保存
           if (nodeType === 'nanobana' || nodeType === 'higgsfield' || nodeType === 'seedream4') {
             // 画像生成ノード
-            if (output.imageData || output.storagePath) {
+            if (output.imageData || output.storagePath || output.imageUrl) {
               const insertData: any = {
                 user_id: user.id,
                 workflow_id: workflowId,
                 output_type: 'image',
-                content_url: output.storagePath || null,
+                content_url: output.storagePath || output.imageUrl || null,
                 prompt: prompt,
                 metadata: {
                   nodeId,

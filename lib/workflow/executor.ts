@@ -131,8 +131,7 @@ async function executeNode(
         let imageStoragePath: string | undefined;
         if (imageInputData && imageInputData.data && imageInputData.mimeType) {
           try {
-            // クライアントサイドでのみGCP Storageにアップロード
-            // サーバーサイド（API実行）では相対URLが使えないためスキップ
+            // クライアントサイドの場合はAPI経由でアップロード
             if (typeof window !== 'undefined') {
               const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
                 method: 'POST',
@@ -146,10 +145,16 @@ async function executeNode(
               if (uploadResponse.ok) {
                 const uploadData = await uploadResponse.json();
                 imageStoragePath = uploadData.storagePath;
-                console.log('Image uploaded to storage:', imageStoragePath);
+                console.log('Image uploaded to storage (client-side):', imageStoragePath);
               }
             } else {
-              console.log('Skipping image upload on server-side execution (using base64 data directly)');
+              // サーバーサイドの場合は直接uploadImageToStorage関数を呼び出す
+              const { uploadImageToStorage } = await import('@/lib/gcp-storage');
+              imageStoragePath = await uploadImageToStorage(
+                imageInputData.data,
+                imageInputData.mimeType
+              );
+              console.log('Image uploaded to storage (server-side):', imageStoragePath);
             }
           } catch (error) {
             console.error('Failed to upload image to storage:', error);

@@ -18,6 +18,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-table": "^8.21.3",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.548.0",
     "next": "16.0.0",
     "pg": "^8.16.3",

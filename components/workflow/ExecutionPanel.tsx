@@ -21,6 +21,7 @@ import {
   DialogActions,
   TextField,
   Snackbar,
+  IconButton,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
@@ -28,6 +29,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
+import EditIcon from '@mui/icons-material/Edit';
 import { executeWorkflow, ExecutionResult, topologicalSort } from '@/lib/workflow/executor';
 
 interface ExecutionPanelProps {
@@ -36,11 +38,12 @@ interface ExecutionPanelProps {
   onSave: (name: string, description: string) => Promise<void>;
   currentWorkflowId?: number;
   currentWorkflowName?: string;
+  onWorkflowNameChange?: (name: string) => void;
 }
 
 type NodeStatus = 'idle' | 'running' | 'completed' | 'failed';
 
-export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId, currentWorkflowName }: ExecutionPanelProps) {
+export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId, currentWorkflowName, onWorkflowNameChange }: ExecutionPanelProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [nodeStatuses, setNodeStatuses] = useState<Map<string, NodeStatus>>(new Map());
   const [results, setResults] = useState<Map<string, ExecutionResult>>(new Map());
@@ -50,6 +53,8 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
   const [workflowDescription, setWorkflowDescription] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
+  const [editingName, setEditingName] = useState('');
 
   // ノードを実行順序でソート
   const sortedNodes = useMemo(() => {
@@ -383,6 +388,29 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
     }
   };
 
+  const handleEditNameClick = () => {
+    setEditingName(currentWorkflowName || '');
+    setEditNameDialogOpen(true);
+  };
+
+  const handleEditNameSave = async () => {
+    if (!editingName.trim()) {
+      setSnackbar({ open: true, message: 'ワークフロー名を入力してください', severity: 'error' });
+      return;
+    }
+
+    try {
+      await onSave(editingName, '');
+      if (onWorkflowNameChange) {
+        onWorkflowNameChange(editingName);
+      }
+      setEditNameDialogOpen(false);
+      setSnackbar({ open: true, message: 'ワークフロー名を変更しました', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: '名前の変更に失敗しました', severity: 'error' });
+    }
+  };
+
   const getStatusIcon = (status: NodeStatus) => {
     switch (status) {
       case 'running':
@@ -426,9 +454,23 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
           borderRadius: 2,
         }}
       >
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-          {currentWorkflowName || 'ワークフロー'}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>
+            {currentWorkflowName || 'ワークフロー'}
+          </Typography>
+          {currentWorkflowId && (
+            <IconButton
+              size="small"
+              onClick={handleEditNameClick}
+              sx={{
+                color: 'text.secondary',
+                '&:hover': { color: 'primary.main' }
+              }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Box>
 
         <Stack spacing={2}>
           {/* 保存と実行ボタン */}
@@ -1003,6 +1045,25 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
         {snackbar.message}
       </Alert>
     </Snackbar>
+
+    {/* ワークフロー名編集ダイアログ */}
+    <Dialog open={editNameDialogOpen} onClose={() => setEditNameDialogOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>ワークフロー名を変更</DialogTitle>
+      <DialogContent>
+        <TextField
+          label="ワークフロー名"
+          fullWidth
+          value={editingName}
+          onChange={(e) => setEditingName(e.target.value)}
+          autoFocus
+          sx={{ mt: 1 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setEditNameDialogOpen(false)}>キャンセル</Button>
+        <Button onClick={handleEditNameSave} variant="contained">保存</Button>
+      </DialogActions>
+    </Dialog>
   </>
   );
 }

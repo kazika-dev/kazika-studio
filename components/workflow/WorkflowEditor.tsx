@@ -397,6 +397,10 @@ export default function WorkflowEditor() {
     [currentWorkflowId, nodes, edges, router]
   );
 
+  const handleWorkflowNameChange = useCallback((name: string) => {
+    setCurrentWorkflowName(name);
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex', height: '100%', width: '100%', bgcolor: 'background.default' }}>
@@ -418,6 +422,7 @@ export default function WorkflowEditor() {
             onSave={handleSaveWorkflow}
             currentWorkflowId={currentWorkflowId}
             currentWorkflowName={currentWorkflowName}
+            onWorkflowNameChange={handleWorkflowNameChange}
           />
           <ReactFlow
             nodes={nodes}
