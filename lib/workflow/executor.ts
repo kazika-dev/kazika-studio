@@ -698,27 +698,37 @@ function collectInputData(
 
 /**
  * 入力データから画像データを抽出
+ * 重複を防ぐため、同じ画像データは1回のみ追加する
  */
 function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data: string }> {
   const images: Array<{ mimeType: string; data: string }> = [];
+  const seenImageData = new Set<string>();
 
   Object.values(inputData).forEach((input: any) => {
     if (input && typeof input === 'object') {
+      let imageData: { mimeType: string; data: string } | null = null;
+
       // imageInputノードからの画像データ
       if (input.imageData && input.imageData.mimeType && input.imageData.data) {
-        images.push({
+        imageData = {
           mimeType: input.imageData.mimeType,
           data: input.imageData.data,
-        });
+        };
       }
       // nanobananaノードからの生成画像
       else if (input.imageData && typeof input.imageData === 'object') {
         if (input.imageData.mimeType && input.imageData.data) {
-          images.push({
+          imageData = {
             mimeType: input.imageData.mimeType,
             data: input.imageData.data,
-          });
+          };
         }
+      }
+
+      // 画像データが見つかり、かつまだ追加されていない場合のみ追加
+      if (imageData && !seenImageData.has(imageData.data)) {
+        seenImageData.add(imageData.data);
+        images.push(imageData);
       }
     }
   });
