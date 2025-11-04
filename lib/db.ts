@@ -622,3 +622,116 @@ export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
   );
   return result.rows;
 }
+
+// =====================================================
+// キャラクターシート関連の関数
+// =====================================================
+
+/**
+ * ユーザーの全キャラクターシートを取得
+ */
+export async function getCharacterSheetsByUserId(userId: string) {
+  const result = await query(
+    'SELECT * FROM public.character_sheets WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * IDでキャラクターシートを取得
+ */
+export async function getCharacterSheetById(id: number) {
+  const result = await query(
+    'SELECT * FROM public.character_sheets WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * キャラクターシートを作成
+ */
+export async function createCharacterSheet(data: {
+  user_id: string;
+  name: string;
+  image_url: string;
+  description?: string;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO public.character_sheets (user_id, name, image_url, description, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.name,
+      data.image_url,
+      data.description || '',
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * キャラクターシートを更新
+ */
+export async function updateCharacterSheet(id: number, data: {
+  name?: string;
+  image_url?: string;
+  description?: string;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.image_url !== undefined) {
+    updates.push(`image_url = $${paramIndex++}`);
+    values.push(data.image_url);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const sql = `UPDATE public.character_sheets SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  const result = await query(sql, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * キャラクターシートを削除
+ */
+export async function deleteCharacterSheet(id: number) {
+  const result = await query(
+    'DELETE FROM public.character_sheets WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
