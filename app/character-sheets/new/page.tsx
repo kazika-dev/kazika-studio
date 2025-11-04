@@ -2,13 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Upload, Loader2 } from 'lucide-react';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  TextField,
+  Typography,
+  CircularProgress,
+  Container,
+  Paper,
+} from '@mui/material';
+import { ArrowBack as ArrowBackIcon, Upload as UploadIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
+import { Toaster } from 'sonner';
 import Image from 'next/image';
 
 export default function NewCharacterSheetPage() {
@@ -102,131 +109,137 @@ export default function NewCharacterSheetPage() {
   };
 
   return (
-    <div className="container max-w-2xl mx-auto py-8">
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Toaster position="top-center" />
+
       <Button
-        variant="ghost"
+        startIcon={<ArrowBackIcon />}
         onClick={() => router.back()}
-        className="mb-4"
+        sx={{ mb: 2 }}
       >
-        <ArrowLeft className="mr-2 h-4 w-4" />
         戻る
       </Button>
 
       <Card>
-        <CardHeader>
-          <CardTitle>キャラクターシート新規作成</CardTitle>
-          <CardDescription>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h5" component="h1" gutterBottom>
+            キャラクターシート新規作成
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             キャラクターシート画像を登録します
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="name">キャラクター名 *</Label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="キャラクター名を入力"
-                disabled={loading}
-              />
-            </div>
+          </Typography>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">説明（任意）</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="キャラクターの説明を入力"
-                rows={3}
-                disabled={loading}
-              />
-            </div>
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <TextField
+              label="キャラクター名"
+              required
+              fullWidth
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+            />
 
-            <div className="space-y-2">
-              <Label htmlFor="image">画像 *</Label>
-              <div className="border-2 border-dashed rounded-lg p-6">
+            <TextField
+              label="説明（任意）"
+              fullWidth
+              multiline
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={loading}
+            />
+
+            <Box>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                画像 *
+              </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 3,
+                  border: '2px dashed',
+                  borderColor: 'divider',
+                  textAlign: 'center',
+                }}
+              >
                 {imagePreview ? (
-                  <div className="space-y-4">
-                    <div className="relative aspect-[3/4] w-full max-w-md mx-auto">
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ position: 'relative', aspectRatio: '3/4', maxWidth: '400px', mx: 'auto' }}>
                       <Image
                         src={imagePreview}
                         alt="プレビュー"
                         fill
-                        className="object-contain"
+                        style={{ objectFit: 'contain' }}
                       />
-                    </div>
+                    </Box>
                     <Button
-                      type="button"
-                      variant="outline"
+                      variant="outlined"
                       onClick={() => {
                         setImageFile(null);
                         setImagePreview(null);
                       }}
                       disabled={loading}
-                      className="w-full"
                     >
                       画像を変更
                     </Button>
-                  </div>
+                  </Box>
                 ) : (
-                  <div className="text-center">
-                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <div className="mt-4">
-                      <Label
-                        htmlFor="image"
-                        className="cursor-pointer text-primary hover:underline"
-                      >
-                        画像を選択
-                      </Label>
-                      <Input
-                        id="image"
+                  <Box>
+                    <UploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                    <Button
+                      variant="outlined"
+                      component="label"
+                      disabled={loading}
+                    >
+                      画像を選択
+                      <input
                         type="file"
+                        hidden
                         accept="image/*"
                         onChange={handleImageChange}
-                        disabled={loading}
-                        className="sr-only"
                       />
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">
+                    </Button>
+                    <Typography variant="caption" display="block" sx={{ mt: 1 }} color="text.secondary">
                       PNG, JPG, GIF (最大10MB)
-                    </p>
-                  </div>
+                    </Typography>
+                  </Box>
                 )}
-              </div>
-            </div>
+              </Paper>
+            </Box>
 
-            <div className="flex gap-4">
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
-                type="button"
-                variant="outline"
+                variant="outlined"
+                fullWidth
                 onClick={() => router.back()}
                 disabled={loading}
-                className="flex-1"
               >
                 キャンセル
               </Button>
-              <Button type="submit" disabled={loading} className="flex-1">
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={loading}
+              >
                 {uploading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <CircularProgress size={20} sx={{ mr: 1 }} />
                     画像をアップロード中...
                   </>
                 ) : loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <CircularProgress size={20} sx={{ mr: 1 }} />
                     作成中...
                   </>
                 ) : (
                   '作成'
                 )}
               </Button>
-            </div>
-          </form>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
-    </div>
+    </Container>
   );
 }

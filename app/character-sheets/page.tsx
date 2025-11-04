@@ -2,21 +2,25 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit } from 'lucide-react';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardActions,
+  CardMedia,
+  Typography,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Container,
+} from '@mui/material';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
-import Image from 'next/image';
+import { Toaster } from 'sonner';
 
 interface CharacterSheet {
   id: number;
@@ -94,103 +98,126 @@ export default function CharacterSheetsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="flex justify-center items-center min-h-[400px]">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
-      </div>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">キャラクターシート</h1>
-          <p className="text-muted-foreground mt-2">
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Toaster position="top-center" />
+
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            キャラクターシート
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             キャラクターシート画像を管理します
-          </p>
-        </div>
-        <Button onClick={handleNewSheet}>
-          <PlusCircle className="mr-2 h-4 w-4" />
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleNewSheet}
+        >
           新規作成
         </Button>
-      </div>
+      </Box>
 
       {characterSheets.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <p className="text-muted-foreground mb-4">
+          <CardContent sx={{ textAlign: 'center', py: 8 }}>
+            <Typography variant="body1" color="text.secondary" gutterBottom>
               キャラクターシートがまだありません
-            </p>
-            <Button onClick={handleNewSheet}>
-              <PlusCircle className="mr-2 h-4 w-4" />
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleNewSheet}
+              sx={{ mt: 2 }}
+            >
               最初のキャラクターシートを作成
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: 'repeat(3, 1fr)',
+            },
+            gap: 3,
+          }}
+        >
           {characterSheets.map((sheet) => (
-            <Card key={sheet.id} className="overflow-hidden">
-              <div className="relative aspect-[3/4] w-full">
-                <Image
-                  src={sheet.image_url}
-                  alt={sheet.name}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <CardHeader>
-                <CardTitle>{sheet.name}</CardTitle>
+            <Card key={sheet.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardMedia
+                component="img"
+                image={sheet.image_url}
+                alt={sheet.name}
+                sx={{ aspectRatio: '3/4', objectFit: 'cover' }}
+              />
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Typography variant="h6" component="h2" gutterBottom>
+                  {sheet.name}
+                </Typography>
                 {sheet.description && (
-                  <CardDescription>{sheet.description}</CardDescription>
+                  <Typography variant="body2" color="text.secondary">
+                    {sheet.description}
+                  </Typography>
                 )}
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => handleEdit(sheet)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    編集
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setSelectedSheet(sheet);
-                      setDeleteDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    削除
-                  </Button>
-                </div>
               </CardContent>
+              <CardActions>
+                <Button
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => handleEdit(sheet)}
+                >
+                  編集
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => {
+                    setSelectedSheet(sheet);
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  削除
+                </Button>
+              </CardActions>
             </Card>
           ))}
-        </div>
+        </Box>
       )}
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>キャラクターシートを削除しますか？</AlertDialogTitle>
-            <AlertDialogDescription>
-              この操作は取り消せません。キャラクターシート「{selectedSheet?.name}」を削除してもよろしいですか？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>削除</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+      >
+        <DialogTitle>キャラクターシートを削除しますか？</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            この操作は取り消せません。キャラクターシート「{selectedSheet?.name}」を削除してもよろしいですか？
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>
+            キャンセル
+          </Button>
+          <Button onClick={handleDelete} color="error" autoFocus>
+            削除
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
 }
