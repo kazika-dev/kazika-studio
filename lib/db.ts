@@ -370,7 +370,7 @@ export async function reorderBoards(studioId: number, boardIds: number[]) {
 export async function getStepsByBoardId(boardId: number) {
   const result = await query(
     `SELECT s.*, w.name as workflow_name, w.description as workflow_description
-     FROM kazikastudio.board_workflow_steps s
+     FROM kazikastudio.studio_board_workflow_steps s
      LEFT JOIN kazikastudio.workflows w ON s.workflow_id = w.id
      WHERE s.board_id = $1
      ORDER BY s.step_order ASC`,
@@ -385,7 +385,7 @@ export async function getStepsByBoardId(boardId: number) {
 export async function getStepById(id: number) {
   const result = await query(
     `SELECT s.*, w.name as workflow_name
-     FROM kazikastudio.board_workflow_steps s
+     FROM kazikastudio.studio_board_workflow_steps s
      LEFT JOIN kazikastudio.workflows w ON s.workflow_id = w.id
      WHERE s.id = $1`,
     [id]
@@ -408,7 +408,7 @@ export async function createStep(data: {
   input_config?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.board_workflow_steps
+    `INSERT INTO kazikastudio.studio_board_workflow_steps
      (board_id, workflow_id, step_order, input_config)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
@@ -431,10 +431,15 @@ export async function updateStep(id: number, data: {
   execution_status?: 'pending' | 'running' | 'completed' | 'failed';
   output_data?: any;
   error_message?: string | null;
+  metadata?: any;
 }) {
   const updates: string[] = [];
   const values: any[] = [];
   let paramIndex = 1;
+
+  console.log('=== updateStep called ===');
+  console.log('Step ID:', id);
+  console.log('Data to update:', JSON.stringify(data, null, 2));
 
   if (data.workflow_id !== undefined) {
     updates.push(`workflow_id = $${paramIndex++}`);
@@ -456,16 +461,29 @@ export async function updateStep(id: number, data: {
     updates.push(`error_message = $${paramIndex++}`);
     values.push(data.error_message);
   }
+  if (data.metadata !== undefined) {
+    console.log('Metadata is being updated');
+    console.log('Metadata value:', JSON.stringify(data.metadata, null, 2));
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
 
   if (updates.length === 0) {
     throw new Error('No fields to update');
   }
 
   values.push(id);
-  const result = await query(
-    `UPDATE kazikastudio.board_workflow_steps SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-    values
-  );
+  const sql = `UPDATE kazikastudio.studio_board_workflow_steps SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  console.log('SQL:', sql);
+  console.log('Values:', values.map((v, i) => `$${i + 1}: ${typeof v === 'object' ? JSON.stringify(v) : v}`));
+
+  const result = await query(sql, values);
+
+  console.log('Update result rows:', result.rows.length);
+  if (result.rows.length > 0) {
+    console.log('Updated row metadata:', result.rows[0].metadata);
+  }
 
   if (result.rows.length === 0) {
     return null;
@@ -479,7 +497,7 @@ export async function updateStep(id: number, data: {
  */
 export async function deleteStep(id: number) {
   const result = await query(
-    'DELETE FROM kazikastudio.board_workflow_steps WHERE id = $1 RETURNING *',
+    'DELETE FROM kazikastudio.studio_board_workflow_steps WHERE id = $1 RETURNING *',
     [id]
   );
   return result.rows.length > 0;
@@ -500,7 +518,7 @@ export async function reorderSteps(boardId: number, stepIds: number[]) {
     // 各ステップのstep_orderを更新
     for (let i = 0; i < stepIds.length; i++) {
       await client.query(
-        'UPDATE kazikastudio.board_workflow_steps SET step_order = $1 WHERE id = $2 AND board_id = $3',
+        'UPDATE kazikastudio.studio_board_workflow_steps SET step_order = $1 WHERE id = $2 AND board_id = $3',
         [i, stepIds[i], boardId]
       );
     }
@@ -520,11 +538,71 @@ export async function reorderSteps(boardId: number, stepIds: number[]) {
  */
 export async function resetBoardSteps(boardId: number) {
   const result = await query(
-    `UPDATE kazikastudio.board_workflow_steps
+    `UPDATE kazikastudio.studio_board_workflow_steps
      SET execution_status = 'pending', output_data = NULL, error_message = NULL
      WHERE board_id = $1
      RETURNING *`,
     [boardId]
+  );
+  return result.rows;
+}
+
+// =====================================================
+// ワークフロー出力関連の関数
+// =====================================================
+
+/**
+ * ワークフロー出力を作成
+ */
+export async function createWorkflowOutput(data: {
+  workflow_id: number;
+  step_id?: number;
+  output_type: 'image' | 'video' | 'audio' | 'text' | 'other';
+  node_id: string;
+  output_url?: string;
+  output_data?: any;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.workflow_outputs
+     (workflow_id, step_id, output_type, node_id, output_url, output_data, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [
+      data.workflow_id,
+      data.step_id || null,
+      data.output_type,
+      data.node_id,
+      data.output_url || null,
+      data.output_data || null,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ステップIDでワークフロー出力を取得
+ */
+export async function getWorkflowOutputsByStepId(stepId: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.workflow_outputs
+     WHERE step_id = $1
+     ORDER BY created_at ASC`,
+    [stepId]
+  );
+  return result.rows;
+}
+
+/**
+ * ワークフローIDでワークフロー出力を取得
+ */
+export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.workflow_outputs
+     WHERE workflow_id = $1
+     ORDER BY created_at DESC`,
+    [workflowId]
   );
   return result.rows;
 }

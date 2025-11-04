@@ -10,7 +10,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import WorkflowStepCard from './WorkflowStepCard';
 import AddWorkflowStepDialog from './AddWorkflowStepDialog';
 
@@ -25,21 +24,23 @@ interface WorkflowStep {
   execution_status: 'pending' | 'running' | 'completed' | 'failed';
   output_data: any;
   error_message: string | null;
+  metadata?: any;
   created_at: string;
   updated_at: string;
 }
 
 interface WorkflowStepListProps {
   boardId: number;
-  onExecute?: () => void;
+  onStepCountChange?: (count: number) => void;
 }
 
-export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepListProps) {
+export default function WorkflowStepList({ boardId, onStepCountChange }: WorkflowStepListProps) {
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [executing, setExecuting] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
 
   // ステップ一覧を読み込む
   const loadSteps = async () => {
@@ -52,6 +53,10 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
 
       if (data.success) {
         setSteps(data.steps);
+        // ステップ数の変更を通知
+        if (onStepCountChange) {
+          onStepCountChange(data.steps.length);
+        }
       } else {
         setError(data.error || 'ステップの読み込みに失敗しました');
       }
@@ -96,6 +101,39 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
     }
   };
 
+  // ステップを編集
+  const handleEditStep = (step: WorkflowStep) => {
+    setEditingStep(step);
+    setEditDialogOpen(true);
+  };
+
+  // ステップを更新
+  const handleUpdateStep = async (stepId: number, stepData: {
+    workflow_id: number;
+    input_config: any;
+  }) => {
+    try {
+      const response = await fetch(`/api/studios/steps/${stepId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stepData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadSteps();
+        setEditDialogOpen(false);
+        setEditingStep(null);
+      } else {
+        alert(data.error || 'ステップの更新に失敗しました');
+      }
+    } catch (err: any) {
+      console.error('Failed to update step:', err);
+      alert('ステップの更新中にエラーが発生しました');
+    }
+  };
+
   // ステップを削除
   const handleDeleteStep = async (stepId: number) => {
     if (!confirm('このステップを削除してもよろしいですか？')) {
@@ -120,8 +158,8 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
     }
   };
 
-  // ステップを更新
-  const handleUpdateStep = (updatedStep: WorkflowStep) => {
+  // ステップ状態を更新（実行時などに使用）
+  const handleStepUpdate = (updatedStep: WorkflowStep) => {
     setSteps((prevSteps) =>
       prevSteps.map((step) =>
         step.id === updatedStep.id ? updatedStep : step
@@ -129,21 +167,20 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
     );
   };
 
-  // 全ステップを実行
-  const handleExecuteAll = async () => {
-    if (steps.length === 0) {
-      alert('実行するステップがありません');
-      return;
-    }
+  // 個別ステップを実行
+  const handleExecuteStep = async (stepId: number) => {
+    const step = steps.find(s => s.id === stepId);
+    if (!step) return;
 
-    if (!confirm('全てのワークフローステップを順次実行しますか？')) {
+    if (!confirm(`ステップ ${step.step_order + 1}: ${step.workflow_name || 'ワークフロー'} を実行しますか？`)) {
       return;
     }
 
     try {
-      setExecuting(true);
+      // ステップのステータスを実行中に更新
+      handleStepUpdate({ ...step, execution_status: 'running' });
 
-      const response = await fetch(`/api/studios/boards/${boardId}/execute`, {
+      const response = await fetch(`/api/studios/steps/${stepId}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -151,25 +188,23 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
       const data = await response.json();
 
       if (data.success) {
-        // ステップを再読み込み
+        // ステップを再読み込みして最新状態を取得
         await loadSteps();
-        alert('全てのステップが正常に完了しました');
-        if (onExecute) {
-          onExecute();
-        }
       } else {
-        alert(data.error || '実行に失敗しました');
-        // エラーでも再読み込みして状態を更新
+        // エラー時も再読み込みしてエラーメッセージを表示
         await loadSteps();
+        // 詳細なエラー情報を表示
+        const errorMessage = data.error || 'ステップの実行に失敗しました';
+        const errorDetails = data.details ? `\n詳細: ${data.details}` : '';
+        alert(`${errorMessage}${errorDetails}\n\nエラーの詳細はステップカードを展開して確認してください。`);
       }
     } catch (err: any) {
-      console.error('Failed to execute board:', err);
-      alert('実行中にエラーが発生しました');
+      console.error('Failed to execute step:', err);
       await loadSteps();
-    } finally {
-      setExecuting(false);
+      alert(`ステップの実行中にエラーが発生しました\n\nエラー: ${err.message || '不明なエラー'}`);
     }
   };
+
 
   if (loading) {
     return (
@@ -188,9 +223,6 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
     );
   }
 
-  const hasRunningSteps = steps.some((step) => step.execution_status === 'running');
-  const allPending = steps.every((step) => step.execution_status === 'pending');
-
   return (
     <Box>
       {/* ヘッダー */}
@@ -199,23 +231,11 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
           ワークフローステップ
         </Typography>
         <Stack direction="row" spacing={1}>
-          {steps.length > 0 && (
-            <Button
-              variant="contained"
-              startIcon={executing || hasRunningSteps ? <CircularProgress size={16} color="inherit" /> : <PlayArrowIcon />}
-              size="small"
-              onClick={handleExecuteAll}
-              disabled={executing || hasRunningSteps}
-            >
-              {executing || hasRunningSteps ? '実行中...' : '全て実行'}
-            </Button>
-          )}
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
             size="small"
             onClick={() => setAddDialogOpen(true)}
-            disabled={executing || hasRunningSteps}
           >
             ステップを追加
           </Button>
@@ -255,8 +275,10 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
             <Box key={step.id} sx={{ position: 'relative' }}>
               <WorkflowStepCard
                 step={step}
-                onUpdate={handleUpdateStep}
+                onUpdate={handleStepUpdate}
                 onDelete={handleDeleteStep}
+                onEdit={handleEditStep}
+                onExecute={handleExecuteStep}
               />
               {/* 矢印 */}
               {step.step_order < steps.length - 1 && (
@@ -281,6 +303,19 @@ export default function WorkflowStepList({ boardId, onExecute }: WorkflowStepLis
         onClose={() => setAddDialogOpen(false)}
         onAdd={handleAddStep}
         hasPreviousSteps={steps.length > 0}
+      />
+
+      {/* ステップ編集ダイアログ */}
+      <AddWorkflowStepDialog
+        open={editDialogOpen}
+        onClose={() => {
+          setEditDialogOpen(false);
+          setEditingStep(null);
+        }}
+        onAdd={handleAddStep}
+        onUpdate={handleUpdateStep}
+        hasPreviousSteps={steps.length > 0}
+        editStep={editingStep}
       />
     </Box>
   );

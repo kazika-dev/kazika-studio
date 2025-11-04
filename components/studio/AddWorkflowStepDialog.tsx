@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -25,48 +25,81 @@ import {
   ListItemButton,
   ListItemText,
   Alert,
+  Stack,
+  Chip,
+  Paper,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import ImageIcon from '@mui/icons-material/Image';
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import AudiotrackIcon from '@mui/icons-material/Audiotrack';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import DynamicFormField, { FormFieldConfig } from '@/components/form/DynamicFormField';
 
 interface Workflow {
   id: number;
   name: string;
   description: string;
+  nodes?: any[];
+  edges?: any[];
+  form_config?: {
+    fields: FormFieldConfig[];
+  };
+}
+
+interface WorkflowStep {
+  id: number;
+  board_id: number;
+  workflow_id: number;
+  workflow_name?: string;
+  workflow_description?: string;
+  step_order: number;
+  input_config: any;
+  execution_status: 'pending' | 'running' | 'completed' | 'failed';
+  output_data: any;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface AddWorkflowStepDialogProps {
   open: boolean;
   onClose: () => void;
   onAdd: (stepData: { workflow_id: number; input_config: any }) => void;
+  onUpdate?: (stepId: number, stepData: { workflow_id: number; input_config: any }) => void;
   hasPreviousSteps: boolean;
+  editStep?: WorkflowStep | null;
 }
 
 export default function AddWorkflowStepDialog({
   open,
   onClose,
   onAdd,
+  onUpdate,
   hasPreviousSteps,
+  editStep = null,
 }: AddWorkflowStepDialogProps) {
+  const isEditMode = !!editStep;
+
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
+  const [loadingWorkflowDetails, setLoadingWorkflowDetails] = useState(false);
 
-  // 入力設定
-  const [usePrompt, setUsePrompt] = useState(true);
+  // 動的フォームの値
+  const [formValues, setFormValues] = useState<Record<string, any>>({});
+
+  // 入力設定（従来の設定も維持）
+  const [usePrompt, setUsePrompt] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [usePreviousImage, setUsePreviousImage] = useState(false);
   const [usePreviousVideo, setUsePreviousVideo] = useState(false);
   const [usePreviousAudio, setUsePreviousAudio] = useState(false);
   const [usePreviousText, setUsePreviousText] = useState(false);
-  const [customInputs, setCustomInputs] = useState('{}');
 
   // ワークフロー一覧を読み込む
-  useEffect(() => {
-    if (open) {
-      loadWorkflows();
-    }
-  }, [open]);
-
   const loadWorkflows = async () => {
     try {
       setLoadingWorkflows(true);
@@ -83,20 +116,158 @@ export default function AddWorkflowStepDialog({
     }
   };
 
-  const handleAdd = () => {
+  // ワークフロー詳細を読み込む
+  const loadWorkflowDetails = useCallback(async (workflowId: number) => {
+    try {
+      setLoadingWorkflowDetails(true);
+      const response = await fetch(`/api/workflows/${workflowId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSelectedWorkflow(data.workflow);
+
+        // フォームの初期値は既にuseEffectで設定済みなので、
+        // ここでは上書きしない（編集モードの値を保持）
+        console.log('Workflow details loaded, keeping existing form values');
+      }
+    } catch (err) {
+      console.error('Failed to load workflow details:', err);
+    } finally {
+      setLoadingWorkflowDetails(false);
+    }
+  }, []);
+
+  // ダイアログが開いたときの初期化
+  useEffect(() => {
+    if (open) {
+      loadWorkflows();
+      // 編集モードの場合、初期値を設定
+      if (isEditMode && editStep) {
+        console.log('Setting edit mode initial values:', {
+          workflow_id: editStep.workflow_id,
+          input_config: editStep.input_config,
+        });
+        setSelectedWorkflowId(editStep.workflow_id);
+        // フォームの値を復元
+        if (editStep.input_config?.workflowInputs) {
+          console.log('Restoring workflowInputs:', editStep.input_config.workflowInputs);
+          setFormValues(editStep.input_config.workflowInputs);
+        } else {
+          console.log('No workflowInputs to restore');
+          setFormValues({});
+        }
+        // その他の入力設定も復元
+        setUsePrompt(editStep.input_config?.usePrompt || false);
+        setPrompt(editStep.input_config?.prompt || '');
+        setUsePreviousImage(editStep.input_config?.usePreviousImage || false);
+        setUsePreviousVideo(editStep.input_config?.usePreviousVideo || false);
+        setUsePreviousAudio(editStep.input_config?.usePreviousAudio || false);
+        setUsePreviousText(editStep.input_config?.usePreviousText || false);
+      } else {
+        // 新規追加モードの場合は初期化
+        console.log('New step mode - resetting values');
+        setSelectedWorkflowId(null);
+        setFormValues({});
+        setUsePrompt(false);
+        setPrompt('');
+        setUsePreviousImage(false);
+        setUsePreviousVideo(false);
+        setUsePreviousAudio(false);
+        setUsePreviousText(false);
+      }
+    }
+  }, [open, isEditMode, editStep]);
+
+  // 選択されたワークフローの詳細を読み込む
+  useEffect(() => {
+    if (selectedWorkflowId) {
+      loadWorkflowDetails(selectedWorkflowId);
+    } else {
+      setSelectedWorkflow(null);
+      if (!isEditMode) {
+        setFormValues({});
+      }
+    }
+  }, [selectedWorkflowId, isEditMode, loadWorkflowDetails]);
+
+  // デバッグ: formValuesの変更を監視
+  useEffect(() => {
+    console.log('Form values changed:', formValues);
+  }, [formValues]);
+
+  // 出力タイプを判定する関数（最終ノードのみ）
+  const getWorkflowOutputTypes = (workflow: Workflow | null): string[] => {
+    if (!workflow?.nodes || workflow.nodes.length === 0) return [];
+
+    const outputTypes: string[] = [];
+
+    // エッジから最終ノードを特定（sourceとして使われていないノード）
+    const edges = workflow.edges || [];
+    const sourceNodeIds = new Set(edges.map((edge: any) => edge.source));
+
+    // 最終ノード（他のノードへの出力エッジがないノード）を見つける
+    const finalNodes = workflow.nodes.filter((node: any) => !sourceNodeIds.has(node.id));
+
+    console.log('Final nodes:', finalNodes.map((n: any) => ({ id: n.id, type: n.type || n.data?.type })));
+
+    // 最終ノードから出力タイプを判定
+    finalNodes.forEach((node: any) => {
+      const nodeType = node.type || node.data?.type;
+
+      // 画像生成系ノード
+      if (['geminiVision', 'nanobana', 'imageInput', 'imageGen'].includes(nodeType)) {
+        if (!outputTypes.includes('image')) outputTypes.push('image');
+      }
+
+      // 動画生成系ノード
+      if (['higgsfield', 'seedream4'].includes(nodeType)) {
+        if (!outputTypes.includes('video')) outputTypes.push('video');
+      }
+
+      // 音声生成系ノード
+      if (['elevenlabs', 'audioGen', 'textToSpeech', 'tts'].includes(nodeType)) {
+        if (!outputTypes.includes('audio')) outputTypes.push('audio');
+      }
+
+      // テキスト生成系ノード
+      if (['gemini', 'claude', 'openai', 'textGen', 'input'].includes(nodeType)) {
+        if (!outputTypes.includes('text')) outputTypes.push('text');
+      }
+    });
+
+    return outputTypes;
+  };
+
+  const renderOutputTypeChip = (type: string) => {
+    switch (type) {
+      case 'image':
+        return <Chip icon={<ImageIcon fontSize="small" />} label="画像" size="small" color="primary" variant="outlined" />;
+      case 'video':
+        return <Chip icon={<VideoLibraryIcon fontSize="small" />} label="動画" size="small" color="secondary" variant="outlined" />;
+      case 'audio':
+        return <Chip icon={<AudiotrackIcon fontSize="small" />} label="音声" size="small" color="success" variant="outlined" />;
+      case 'text':
+        return <Chip icon={<TextFieldsIcon fontSize="small" />} label="テキスト" size="small" color="info" variant="outlined" />;
+      default:
+        return null;
+    }
+  };
+
+  const handleSave = () => {
     if (!selectedWorkflowId) {
       alert('ワークフローを選択してください');
       return;
     }
 
-    // カスタム入力のJSONをパース
-    let parsedCustomInputs = {};
-    if (customInputs.trim()) {
-      try {
-        parsedCustomInputs = JSON.parse(customInputs);
-      } catch (err) {
-        alert('カスタム入力のJSON形式が正しくありません');
-        return;
+    // バリデーション: 必須フィールドのチェック
+    if (selectedWorkflow?.form_config?.fields) {
+      const requiredFields = selectedWorkflow.form_config.fields.filter(f => f.required);
+      for (const field of requiredFields) {
+        const value = formValues[field.name];
+        if (!value || (Array.isArray(value) && value.length === 0)) {
+          alert(`${field.label} は必須項目です`);
+          return;
+        }
       }
     }
 
@@ -107,41 +278,69 @@ export default function AddWorkflowStepDialog({
       usePreviousVideo: hasPreviousSteps ? usePreviousVideo : false,
       usePreviousAudio: hasPreviousSteps ? usePreviousAudio : false,
       usePreviousText: hasPreviousSteps ? usePreviousText : false,
-      customInputs: Object.keys(parsedCustomInputs).length > 0 ? parsedCustomInputs : undefined,
+      // 動的フォームの値を追加
+      workflowInputs: Object.keys(formValues).length > 0 ? formValues : undefined,
     };
 
-    onAdd({
+    const stepData = {
       workflow_id: selectedWorkflowId,
       input_config: inputConfig,
-    });
+    };
+
+    if (isEditMode && editStep && onUpdate) {
+      // 編集モード
+      onUpdate(editStep.id, stepData);
+    } else {
+      // 新規追加モード
+      onAdd(stepData);
+    }
 
     // フォームをリセット
-    setSelectedWorkflowId(null);
-    setUsePrompt(true);
-    setPrompt('');
-    setUsePreviousImage(false);
-    setUsePreviousVideo(false);
-    setUsePreviousAudio(false);
-    setUsePreviousText(false);
-    setCustomInputs('{}');
+    resetForm();
+  };
+
+  const resetForm = () => {
+    if (!isEditMode) {
+      setSelectedWorkflowId(null);
+      setSelectedWorkflow(null);
+      setFormValues({});
+      setUsePrompt(false);
+      setPrompt('');
+      setUsePreviousImage(false);
+      setUsePreviousVideo(false);
+      setUsePreviousAudio(false);
+      setUsePreviousText(false);
+    }
   };
 
   const handleClose = () => {
     onClose();
-    // フォームをリセット
-    setSelectedWorkflowId(null);
-    setUsePrompt(true);
-    setPrompt('');
-    setUsePreviousImage(false);
-    setUsePreviousVideo(false);
-    setUsePreviousAudio(false);
-    setUsePreviousText(false);
-    setCustomInputs('{}');
+    // ダイアログを閉じるときだけリセット
+    setTimeout(() => {
+      setSelectedWorkflowId(null);
+      setSelectedWorkflow(null);
+      setFormValues({});
+      setUsePrompt(false);
+      setPrompt('');
+      setUsePreviousImage(false);
+      setUsePreviousVideo(false);
+      setUsePreviousAudio(false);
+      setUsePreviousText(false);
+    }, 200);
   };
+
+  const handleFieldChange = (fieldName: string, value: any) => {
+    setFormValues(prev => ({
+      ...prev,
+      [fieldName]: value,
+    }));
+  };
+
+  const outputTypes = getWorkflowOutputTypes(selectedWorkflow);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>ワークフローステップを追加</DialogTitle>
+      <DialogTitle>{isEditMode ? 'ワークフローステップを編集' : 'ワークフローステップを追加'}</DialogTitle>
       <DialogContent>
         {loadingWorkflows ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -157,6 +356,7 @@ export default function AddWorkflowStepDialog({
                 value={selectedWorkflowId || ''}
                 onChange={(e) => setSelectedWorkflowId(Number(e.target.value))}
                 label="ワークフロー"
+                disabled={isEditMode}
               >
                 {workflows.map((workflow) => (
                   <MenuItem key={workflow.id} value={workflow.id}>
@@ -164,15 +364,68 @@ export default function AddWorkflowStepDialog({
                   </MenuItem>
                 ))}
               </Select>
+              {isEditMode && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                  編集モードではワークフローの変更はできません
+                </Typography>
+              )}
             </FormControl>
 
-            {selectedWorkflowId && (
+            {loadingWorkflowDetails && (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <CircularProgress size={24} />
+                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                  ワークフロー詳細を読み込んでいます...
+                </Typography>
+              </Box>
+            )}
+
+            {selectedWorkflowId && !loadingWorkflowDetails && (
               <>
+                {/* ワークフロー出力タイプ */}
+                {outputTypes.length > 0 && (
+                  <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                      このワークフローの出力
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                      {outputTypes.map((type) => (
+                        <Box key={type}>
+                          {renderOutputTypeChip(type)}
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+                )}
+
                 <Divider sx={{ my: 3 }} />
 
-                {/* 入力設定 */}
+                {/* ワークフロー固有の入力フィールド */}
+                {selectedWorkflow?.form_config?.fields && selectedWorkflow.form_config.fields.length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                      ワークフロー入力
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                      このワークフローに必要な入力を設定してください
+                    </Typography>
+                    <Stack spacing={3}>
+                      {selectedWorkflow.form_config.fields.map((field) => (
+                        <DynamicFormField
+                          key={field.name}
+                          config={field}
+                          value={formValues[field.name]}
+                          onChange={(value) => handleFieldChange(field.name, value)}
+                        />
+                      ))}
+                    </Stack>
+                    <Divider sx={{ my: 3 }} />
+                  </Box>
+                )}
+
+                {/* 追加設定 */}
                 <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                  入力設定
+                  追加設定（オプション）
                 </Typography>
 
                 {/* プロンプト */}
@@ -183,7 +436,7 @@ export default function AddWorkflowStepDialog({
                       onChange={(e) => setUsePrompt(e.target.checked)}
                     />
                   }
-                  label="プロンプトを使用"
+                  label="カスタムプロンプトを追加"
                   sx={{ mb: 1 }}
                 />
 
@@ -196,7 +449,8 @@ export default function AddWorkflowStepDialog({
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     sx={{ mb: 2 }}
-                    placeholder="このステップで使用するプロンプトを入力..."
+                    placeholder="追加のプロンプトを入力..."
+                    helperText="ワークフロー入力に追加で渡すプロンプトを指定できます"
                   />
                 )}
 
@@ -252,25 +506,6 @@ export default function AddWorkflowStepDialog({
                     これが最初のステップです。前のステップの出力は使用できません。
                   </Alert>
                 )}
-
-                <Divider sx={{ my: 2 }} />
-
-                {/* カスタム入力 */}
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                  カスタム入力（JSON形式、オプション）:
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  value={customInputs}
-                  onChange={(e) => setCustomInputs(e.target.value)}
-                  placeholder='{"aspectRatio": "16:9", "duration": 5}'
-                  sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                />
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                  ワークフローに追加の入力パラメータを指定できます
-                </Typography>
               </>
             )}
           </Box>
@@ -280,11 +515,11 @@ export default function AddWorkflowStepDialog({
         <Button onClick={handleClose}>キャンセル</Button>
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-          disabled={!selectedWorkflowId || loadingWorkflows}
+          startIcon={isEditMode ? <SaveIcon /> : <AddIcon />}
+          onClick={handleSave}
+          disabled={!selectedWorkflowId || loadingWorkflows || loadingWorkflowDetails}
         >
-          追加
+          {isEditMode ? '保存' : '追加'}
         </Button>
       </DialogActions>
     </Dialog>

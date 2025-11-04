@@ -40,11 +40,12 @@ interface WorkflowStep {
     usePreviousVideo?: boolean;
     usePreviousAudio?: boolean;
     usePreviousText?: boolean;
-    customInputs?: any;
+    workflowInputs?: Record<string, any>;
   };
   execution_status: 'pending' | 'running' | 'completed' | 'failed';
   output_data: any;
   error_message: string | null;
+  metadata?: any;
   created_at: string;
   updated_at: string;
 }
@@ -54,10 +55,12 @@ interface WorkflowStepCardProps {
   onUpdate: (step: WorkflowStep) => void;
   onDelete: (stepId: number) => void;
   onEdit?: (step: WorkflowStep) => void;
+  onExecute?: (stepId: number) => void;
 }
 
-export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: WorkflowStepCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onExecute }: WorkflowStepCardProps) {
+  // エラーがある場合は自動的に展開
+  const [expanded, setExpanded] = useState(step.execution_status === 'failed' || !!step.error_message);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const getStatusIcon = () => {
@@ -112,6 +115,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: W
             step.execution_status === 'running' ? 'info.main' :
             step.execution_status === 'failed' ? 'error.main' :
             'grey.300',
+          bgcolor: step.execution_status === 'failed' ? 'error.50' : 'background.paper',
         }}
       >
         <Box sx={{ p: 2 }}>
@@ -159,16 +163,30 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: W
                 size="small"
                 variant="outlined"
               />
-              {onEdit && step.execution_status === 'pending' && (
-                <IconButton size="small" onClick={() => onEdit(step)}>
+              {/* 個別実行ボタン - 実行中以外で表示 */}
+              {onExecute && step.execution_status !== 'running' && (
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => onExecute(step.id)}
+                  title="このステップを実行"
+                >
+                  <PlayArrowIcon fontSize="small" />
+                </IconButton>
+              )}
+              {/* 編集ボタン - 実行中以外で表示 */}
+              {onEdit && step.execution_status !== 'running' && (
+                <IconButton size="small" onClick={() => onEdit(step)} title="編集">
                   <EditIcon fontSize="small" />
                 </IconButton>
               )}
-              {step.execution_status === 'pending' && (
+              {/* 削除ボタン - 実行中以外で表示 */}
+              {step.execution_status !== 'running' && (
                 <IconButton
                   size="small"
                   color="error"
                   onClick={() => onDelete(step.id)}
+                  title="削除"
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -228,15 +246,101 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: W
                 </Box>
               )}
 
-              {/* カスタム入力 */}
-              {step.input_config.customInputs && Object.keys(step.input_config.customInputs).length > 0 && (
-                <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
+              {/* ワークフロー入力 */}
+              {step.input_config.workflowInputs && Object.keys(step.input_config.workflowInputs).length > 0 && (
+                <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                    カスタム入力
+                    ワークフロー入力
                   </Typography>
-                  <Box component="pre" sx={{ fontSize: '0.75rem', m: 0, whiteSpace: 'pre-wrap' }}>
-                    {JSON.stringify(step.input_config.customInputs, null, 2)}
-                  </Box>
+                  <Stack spacing={1.5}>
+                    {Object.entries(step.input_config.workflowInputs).map(([key, value]) => (
+                      <Box key={key} sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">
+                          {key}
+                        </Typography>
+                        {/* 画像データの場合 */}
+                        {value && typeof value === 'object' && value.mimeType && value.data ? (
+                          <Box sx={{ mt: 1 }}>
+                            <img
+                              src={`data:${value.mimeType};base64,${value.data}`}
+                              alt={key}
+                              style={{ maxWidth: '200px', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }}
+                            />
+                          </Box>
+                        ) : /* 画像配列の場合 */
+                        Array.isArray(value) && value.length > 0 && value[0].mimeType && value[0].data ? (
+                          <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            {value.map((img: any, idx: number) => (
+                              <img
+                                key={idx}
+                                src={`data:${img.mimeType};base64,${img.data}`}
+                                alt={`${key}-${idx}`}
+                                style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px' }}
+                              />
+                            ))}
+                          </Box>
+                        ) : /* その他のデータ */
+                        (
+                          <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                            {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+
+              {/* 実行時のリクエストプロンプト */}
+              {step.metadata?.execution_requests && step.execution_status === 'completed' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                    実行時のAPIリクエスト
+                  </Typography>
+                  <Stack spacing={1.5}>
+                    {Object.entries(step.metadata.execution_requests).map(([nodeId, request]: [string, any]) => (
+                      <Box key={nodeId} sx={{ p: 1.5, bgcolor: 'primary.50', borderRadius: 1, border: '1px solid', borderColor: 'primary.200' }}>
+                        <Typography variant="caption" fontWeight={600} color="primary.main" display="block" gutterBottom>
+                          ノード: {nodeId}
+                        </Typography>
+                        {request.prompt && (
+                          <Box sx={{ mb: 1 }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              プロンプト:
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              {request.prompt}
+                            </Typography>
+                          </Box>
+                        )}
+                        {request.text && (
+                          <Box sx={{ mb: 1 }}>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              テキスト:
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              {request.text}
+                            </Typography>
+                          </Box>
+                        )}
+                        {request.aspectRatio && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            アスペクト比: {request.aspectRatio}
+                          </Typography>
+                        )}
+                        {request.model && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            モデル: {request.model}
+                          </Typography>
+                        )}
+                        {request.voiceId && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            音声ID: {request.voiceId}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
                 </Box>
               )}
 
@@ -246,43 +350,130 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: W
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     出力
                   </Typography>
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                    {step.output_data.imageData && (
-                      <Chip
-                        icon={<ImageIcon fontSize="small" />}
-                        label="画像"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                    )}
-                    {step.output_data.videoUrl && (
-                      <Chip
-                        icon={<VideoLibraryIcon fontSize="small" />}
-                        label="動画"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                    )}
-                    {step.output_data.audioUrl && (
-                      <Chip
-                        icon={<AudiotrackIcon fontSize="small" />}
-                        label="音声"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                    )}
-                    {step.output_data.text && (
-                      <Chip
-                        icon={<TextFieldsIcon fontSize="small" />}
-                        label="テキスト"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                    )}
+                  <Stack spacing={2}>
+                    {Object.entries(step.output_data).map(([nodeId, output]: [string, any]) => {
+                      if (!output) return null;
+
+                      return (
+                        <Box key={nodeId} sx={{ p: 1.5, bgcolor: 'success.50', borderRadius: 1, border: '1px solid', borderColor: 'success.200' }}>
+                          <Typography variant="caption" fontWeight={600} color="success.dark" display="block" gutterBottom>
+                            ノード: {nodeId}
+                          </Typography>
+
+                          {/* 画像出力 */}
+                          {output.imageData && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                画像:
+                              </Typography>
+                              <Box
+                                component="img"
+                                src={`data:${output.imageData.mimeType || 'image/png'};base64,${output.imageData.data}`}
+                                alt="出力画像"
+                                sx={{
+                                  maxWidth: '100%',
+                                  maxHeight: '400px',
+                                  objectFit: 'contain',
+                                  borderRadius: 1,
+                                  border: '1px solid',
+                                  borderColor: 'grey.300',
+                                }}
+                              />
+                            </Box>
+                          )}
+
+                          {/* 画像URL出力 */}
+                          {output.imageUrl && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                画像:
+                              </Typography>
+                              <Box
+                                component="img"
+                                src={output.imageUrl}
+                                alt="出力画像"
+                                sx={{
+                                  maxWidth: '100%',
+                                  maxHeight: '400px',
+                                  objectFit: 'contain',
+                                  borderRadius: 1,
+                                  border: '1px solid',
+                                  borderColor: 'grey.300',
+                                }}
+                              />
+                            </Box>
+                          )}
+
+                          {/* 動画出力 */}
+                          {output.videoUrl && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                動画:
+                              </Typography>
+                              <Box
+                                component="video"
+                                src={output.videoUrl}
+                                controls
+                                sx={{
+                                  maxWidth: '100%',
+                                  maxHeight: '400px',
+                                  borderRadius: 1,
+                                  border: '1px solid',
+                                  borderColor: 'grey.300',
+                                }}
+                              />
+                            </Box>
+                          )}
+
+                          {/* 音声出力 */}
+                          {output.audioData && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                音声:
+                              </Typography>
+                              <Box
+                                component="audio"
+                                src={`data:${output.audioData.mimeType || 'audio/mpeg'};base64,${output.audioData.data}`}
+                                controls
+                                sx={{
+                                  width: '100%',
+                                  maxWidth: '400px',
+                                }}
+                              />
+                            </Box>
+                          )}
+
+                          {/* テキスト出力 */}
+                          {output.response && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                テキスト:
+                              </Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {output.response}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {/* その他の情報 */}
+                          {output.storagePath && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                              保存パス: {output.storagePath}
+                            </Typography>
+                          )}
+                          {output.jobId && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                              ジョブID: {output.jobId}
+                            </Typography>
+                          )}
+                          {output.duration && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                              長さ: {output.duration}秒
+                            </Typography>
+                          )}
+                        </Box>
+                      );
+                    })}
                   </Stack>
                 </Box>
               )}
@@ -290,7 +481,32 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit }: W
               {/* エラーメッセージ */}
               {step.error_message && (
                 <Alert severity="error" sx={{ mt: 1 }}>
-                  {step.error_message}
+                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                    エラーが発生しました
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {step.error_message}
+                  </Typography>
+                  {/* 画像生成失敗の場合のヒント */}
+                  {(step.error_message.includes('Image generation failed') ||
+                    step.error_message.includes('NO_IMAGE') ||
+                    step.error_message.includes('blocked by safety filters') ||
+                    step.error_message.includes('not suitable for image generation')) && (
+                    <Box sx={{ mt: 2, p: 1.5, bgcolor: 'warning.50', borderRadius: 1, borderLeft: 3, borderColor: 'warning.main' }}>
+                      <Typography variant="caption" fontWeight={600} display="block" gutterBottom>
+                        💡 考えられる原因と対処法
+                      </Typography>
+                      <Typography variant="caption" display="block" component="div">
+                        • <strong>プロンプトが長すぎる</strong>: プロンプトを短く簡潔にしてください（推奨: 500文字以内）
+                        <br />
+                        • <strong>安全フィルターによるブロック</strong>: 不適切な表現が含まれていないか確認してください
+                        <br />
+                        • <strong>抽象的すぎる内容</strong>: より具体的な描写を追加してください
+                        <br />
+                        • <strong>複数の要素を詰め込みすぎ</strong>: シンプルな構成に絞ってください
+                      </Typography>
+                    </Box>
+                  )}
                 </Alert>
               )}
             </Box>

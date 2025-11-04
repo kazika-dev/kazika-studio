@@ -128,8 +128,10 @@ async function executeNode(
         const imageInputData = node.data.config?.imageData;
 
         // 画像データがある場合は、GCP Storageにアップロード
-        let imageStoragePath: string | undefined;
-        if (imageInputData && imageInputData.data && imageInputData.mimeType) {
+        // ただし、既にstoragePathが設定されている場合（前のステップから渡された場合）はそれを使用
+        let imageStoragePath: string | undefined = node.data.config?.storagePath;
+
+        if (!imageStoragePath && imageInputData && imageInputData.data && imageInputData.mimeType) {
           try {
             // クライアントサイドの場合はAPI経由でアップロード
             if (typeof window !== 'undefined') {
@@ -160,6 +162,8 @@ async function executeNode(
             console.error('Failed to upload image to storage:', error);
             // エラーでも続行（base64データは引き続き利用可能）
           }
+        } else if (imageStoragePath) {
+          console.log('Using existing storagePath from previous step:', imageStoragePath);
         }
 
         output = {
