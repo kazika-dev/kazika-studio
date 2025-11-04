@@ -5,6 +5,8 @@ import { getBoardById, getStudioById, getStepsByBoardId, createStep } from '@/li
 /**
  * GET /api/studios/boards/[id]/steps
  * ボードの全ステップを取得（順序順）
+ * クエリパラメータ:
+ *   - details: 'true' の場合、output_dataとmetadataを含む（デフォルト: false）
  */
 export async function GET(
   request: NextRequest,
@@ -48,7 +50,11 @@ export async function GET(
       );
     }
 
-    const steps = await getStepsByBoardId(boardId);
+    // クエリパラメータから詳細表示フラグを取得
+    const searchParams = request.nextUrl.searchParams;
+    const includeDetails = searchParams.get('details') === 'true';
+
+    const steps = await getStepsByBoardId(boardId, includeDetails);
 
     return NextResponse.json({
       success: true,

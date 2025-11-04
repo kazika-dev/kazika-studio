@@ -366,10 +366,26 @@ export async function reorderBoards(studioId: number, boardIds: number[]) {
 
 /**
  * ボードの全ステップを取得（順序順）
+ * @param boardId ボードID
+ * @param includeDetails trueの場合、output_dataとmetadataを含む（デフォルト: false）
  */
-export async function getStepsByBoardId(boardId: number) {
+export async function getStepsByBoardId(boardId: number, includeDetails: boolean = false) {
+  let selectFields;
+
+  if (includeDetails) {
+    // 詳細を含む全フィールド
+    selectFields = 's.*, w.name as workflow_name, w.description as workflow_description';
+  } else {
+    // 軽量版：output_dataとmetadataを除外
+    selectFields = `
+      s.id, s.board_id, s.workflow_id, s.step_order, s.input_config,
+      s.execution_status, s.error_message, s.created_at, s.updated_at,
+      w.name as workflow_name, w.description as workflow_description
+    `;
+  }
+
   const result = await query(
-    `SELECT s.*, w.name as workflow_name, w.description as workflow_description
+    `SELECT ${selectFields}
      FROM kazikastudio.studio_board_workflow_steps s
      LEFT JOIN kazikastudio.workflows w ON s.workflow_id = w.id
      WHERE s.board_id = $1

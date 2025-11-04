@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -59,9 +59,49 @@ interface WorkflowStepCardProps {
 }
 
 export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onExecute }: WorkflowStepCardProps) {
-  // エラーがある場合は自動的に展開
-  const [expanded, setExpanded] = useState(step.execution_status === 'failed' || !!step.error_message);
+  // 初期状態では全てのアコーディオンを閉じる
+  const [expanded, setExpanded] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [detailsLoaded, setDetailsLoaded] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailedStep, setDetailedStep] = useState<WorkflowStep>(step);
+
+  // stepプロパティが更新された時にdetailedStepも更新
+  useEffect(() => {
+    setDetailedStep(step);
+    // output_dataまたはmetadataがある場合は詳細が既に読み込まれている
+    if (step.output_data || step.metadata) {
+      setDetailsLoaded(true);
+    }
+  }, [step]);
+
+  // アコーディオンが展開された時に詳細を読み込む
+  useEffect(() => {
+    const loadDetails = async () => {
+      if (expanded && !detailsLoaded && !loadingDetails) {
+        setLoadingDetails(true);
+        try {
+          const response = await fetch(`/api/studios/steps/${step.id}`);
+          const data = await response.json();
+
+          if (data.success && data.step) {
+            setDetailedStep(data.step);
+            setDetailsLoaded(true);
+            // 親コンポーネントにも通知
+            if (onUpdate) {
+              onUpdate(data.step);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load step details:', error);
+        } finally {
+          setLoadingDetails(false);
+        }
+      }
+    };
+
+    loadDetails();
+  }, [expanded, detailsLoaded, loadingDetails, step.id, onUpdate]);
 
   const getStatusIcon = () => {
     switch (step.execution_status) {
@@ -102,7 +142,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
     }
   };
 
-  const hasOutput = step.output_data && Object.keys(step.output_data).length > 0;
+  const hasOutput = detailedStep.output_data && Object.keys(detailedStep.output_data).length > 0;
 
   return (
     <>
@@ -236,8 +276,18 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
           {/* 展開エリア */}
           <Collapse in={expanded} timeout="auto" unmountOnExit>
             <Box sx={{ mt: 2 }}>
+              {/* 読み込み中 */}
+              {loadingDetails && (
+                <Box sx={{ textAlign: 'center', py: 3 }}>
+                  <CircularProgress size={24} />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    詳細を読み込み中...
+                  </Typography>
+                </Box>
+              )}
+
               {/* プロンプト */}
-              {step.input_config.usePrompt && step.input_config.prompt && (
+              {!loadingDetails && step.input_config.usePrompt && step.input_config.prompt && (
                 <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     プロンプト
@@ -247,7 +297,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
               )}
 
               {/* ワークフロー入力 */}
-              {step.input_config.workflowInputs && Object.keys(step.input_config.workflowInputs).length > 0 && (
+              {!loadingDetails && step.input_config.workflowInputs && Object.keys(step.input_config.workflowInputs).length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     ワークフロー入力
@@ -292,13 +342,13 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
               )}
 
               {/* 実行時のリクエストプロンプト */}
-              {step.metadata?.execution_requests && step.execution_status === 'completed' && (
+              {!loadingDetails && detailedStep.metadata?.execution_requests && step.execution_status === 'completed' && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     実行時のAPIリクエスト
                   </Typography>
                   <Stack spacing={1.5}>
-                    {Object.entries(step.metadata.execution_requests).map(([nodeId, request]: [string, any]) => (
+                    {Object.entries(detailedStep.metadata.execution_requests).map(([nodeId, request]: [string, any]) => (
                       <Box key={nodeId} sx={{ p: 1.5, bgcolor: 'primary.50', borderRadius: 1, border: '1px solid', borderColor: 'primary.200' }}>
                         <Typography variant="caption" fontWeight={600} color="primary.main" display="block" gutterBottom>
                           ノード: {nodeId}
@@ -345,13 +395,13 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
               )}
 
               {/* 出力データ */}
-              {hasOutput && (
+              {!loadingDetails && hasOutput && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     出力
                   </Typography>
                   <Stack spacing={2}>
-                    {Object.entries(step.output_data).map(([nodeId, output]: [string, any]) => {
+                    {Object.entries(detailedStep.output_data).map(([nodeId, output]: [string, any]) => {
                       if (!output) return null;
 
                       return (

@@ -4,6 +4,10 @@ import { getStepById, getBoardById, getStudioById, updateStep, getStepsByBoardId
 import { executeWorkflow } from '@/lib/workflow/executor';
 import { Node } from 'reactflow';
 
+// ワークフロー実行は時間がかかる可能性があるため、タイムアウトを延長
+// 動画生成などは数分かかることがある
+export const maxDuration = 300; // 5分（300秒）
+
 /**
  * POST /api/studios/steps/[id]/execute
  * 個別ステップを実行
@@ -489,7 +493,12 @@ export async function POST(
  * 前のステップの出力を取得
  */
 async function getPreviousStepOutputs(currentStep: any) {
-  const allSteps = await getStepsByBoardId(currentStep.board_id);
+  // 前のステップの出力データを取得するため、詳細を含める
+  const allSteps = await getStepsByBoardId(currentStep.board_id, true);
+
+  console.log(`=== getPreviousStepOutputs for step ${currentStep.id} ===`);
+  console.log(`Total steps in board: ${allSteps.length}`);
+  console.log(`Current step order: ${currentStep.step_order}`);
 
   // 現在のステップより前のステップの出力を集約
   const previousOutputs: any = {};
@@ -497,13 +506,24 @@ async function getPreviousStepOutputs(currentStep: any) {
   for (const step of allSteps) {
     // 現在のステップより前で、完了済みのステップのみ
     if (step.step_order < currentStep.step_order && step.execution_status === 'completed') {
+      console.log(`Found previous completed step ${step.id} (order: ${step.step_order})`);
       // 出力データをマージ
       if (step.output_data) {
+        console.log(`Step ${step.id} has output_data with ${Object.keys(step.output_data).length} nodes`);
+        Object.keys(step.output_data).forEach(nodeId => {
+          const output = step.output_data[nodeId];
+          if (output.imageData || output.storagePath || output.imageUrl) {
+            console.log(`  - Node ${nodeId}: has image (imageData: ${!!output.imageData}, storagePath: ${output.storagePath}, imageUrl: ${output.imageUrl})`);
+          }
+        });
         Object.assign(previousOutputs, step.output_data);
+      } else {
+        console.log(`Step ${step.id} has no output_data`);
       }
     }
   }
 
+  console.log(`Total previous outputs nodes: ${Object.keys(previousOutputs).length}`);
   return previousOutputs;
 }
 

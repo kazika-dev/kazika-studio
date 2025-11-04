@@ -43,12 +43,14 @@ export default function WorkflowStepList({ boardId, onStepCountChange }: Workflo
   const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
 
   // ステップ一覧を読み込む
-  const loadSteps = async () => {
+  // デフォルトでは軽量版（詳細なし）を取得
+  const loadSteps = async (includeDetails: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/studios/boards/${boardId}/steps`);
+      const url = `/api/studios/boards/${boardId}/steps${includeDetails ? '?details=true' : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
@@ -185,14 +187,71 @@ export default function WorkflowStepList({ boardId, onStepCountChange }: Workflo
         headers: { 'Content-Type': 'application/json' },
       });
 
-      const data = await response.json();
+      // レスポンスのステータスを確認
+      if (!response.ok) {
+        console.error('Execute step API error:', {
+          status: response.status,
+          statusText: response.statusText,
+        });
 
-      if (data.success) {
-        // ステップを再読み込みして最新状態を取得
-        await loadSteps();
+        // レスポンスのテキストを取得してログ出力
+        const responseText = await response.text();
+        console.error('Response text:', responseText);
+
+        // JSONとしてパースできるか試す
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('Failed to parse error response as JSON');
+          errorData = { error: `サーバーエラー (${response.status})`, details: responseText };
+        }
+
+        // ステップを再読み込みしてエラー状態を取得
+        const stepResponse = await fetch(`/api/studios/steps/${stepId}`);
+        const stepData = await stepResponse.json();
+        if (stepData.success && stepData.step) {
+          handleStepUpdate(stepData.step);
+        }
+
+        const errorMessage = errorData.error || 'ステップの実行に失敗しました';
+        const errorDetails = errorData.details ? `\n詳細: ${errorData.details}` : '';
+        alert(`${errorMessage}${errorDetails}\n\nエラーの詳細はステップカードを展開して確認してください。`);
+        return;
+      }
+
+      // 正常なレスポンスの場合
+      const responseText = await response.text();
+      console.log('Execute step response text:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse success response as JSON:', parseError);
+        console.error('Response text:', responseText);
+
+        // パースエラーでもステップを再読み込み
+        const stepResponse = await fetch(`/api/studios/steps/${stepId}`);
+        const stepData = await stepResponse.json();
+        if (stepData.success && stepData.step) {
+          handleStepUpdate(stepData.step);
+        }
+
+        alert('レスポンスの解析に失敗しました。ステップの状態を確認してください。');
+        return;
+      }
+
+      if (data.success && data.step) {
+        // 実行APIから返された更新されたステップのみを更新
+        handleStepUpdate(data.step);
       } else {
-        // エラー時も再読み込みしてエラーメッセージを表示
-        await loadSteps();
+        // エラー時は該当ステップのみ再読み込み
+        const stepResponse = await fetch(`/api/studios/steps/${stepId}`);
+        const stepData = await stepResponse.json();
+        if (stepData.success && stepData.step) {
+          handleStepUpdate(stepData.step);
+        }
         // 詳細なエラー情報を表示
         const errorMessage = data.error || 'ステップの実行に失敗しました';
         const errorDetails = data.details ? `\n詳細: ${data.details}` : '';
@@ -200,7 +259,16 @@ export default function WorkflowStepList({ boardId, onStepCountChange }: Workflo
       }
     } catch (err: any) {
       console.error('Failed to execute step:', err);
-      await loadSteps();
+      // エラー時も該当ステップのみ再読み込み
+      try {
+        const stepResponse = await fetch(`/api/studios/steps/${stepId}`);
+        const stepData = await stepResponse.json();
+        if (stepData.success && stepData.step) {
+          handleStepUpdate(stepData.step);
+        }
+      } catch (reloadErr) {
+        console.error('Failed to reload step:', reloadErr);
+      }
       alert(`ステップの実行中にエラーが発生しました\n\nエラー: ${err.message || '不明なエラー'}`);
     }
   };
