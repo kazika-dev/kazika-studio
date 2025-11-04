@@ -70,6 +70,30 @@ export async function POST(request: NextRequest) {
     const response = result.response;
     const text = response.text();
 
+    // レスポンスが不正（HTMLなど）でないか確認
+    if (text.trim().startsWith('<!doctype') || text.trim().startsWith('<html')) {
+      console.error('Gemini API returned HTML instead of text:', text.substring(0, 500));
+
+      // HTMLレスポンスの場合、認証エラーの可能性が高い
+      if (text.includes('Authentication Required')) {
+        return NextResponse.json(
+          {
+            error: 'Gemini API authentication failed',
+            details: 'APIキーが無効または期限切れです。環境変数 GEMINI_API_KEY を確認してください。'
+          },
+          { status: 401 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: 'Gemini API returned invalid response',
+          details: 'APIからHTMLレスポンスが返されました。APIキーまたはAPIの設定を確認してください。'
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       response: text,
@@ -78,10 +102,35 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Gemini API error:', error);
+
+    // エラーメッセージをより詳しく解析
+    let errorMessage = 'Failed to generate response';
+    let errorDetails = error.message;
+
+    // 認証エラーのパターンを検出
+    if (error.message?.includes('API key') ||
+        error.message?.includes('authentication') ||
+        error.message?.includes('unauthorized') ||
+        error.message?.includes('401')) {
+      errorMessage = 'Gemini API authentication failed';
+      errorDetails = 'APIキーが無効または期限切れです。環境変数 GEMINI_API_KEY を確認してください。';
+    }
+    // クォータエラー
+    else if (error.message?.includes('quota') || error.message?.includes('429')) {
+      errorMessage = 'Gemini API quota exceeded';
+      errorDetails = 'APIの使用量制限に達しました。しばらく待ってから再試行してください。';
+    }
+    // ネットワークエラー
+    else if (error.message?.includes('network') || error.message?.includes('ENOTFOUND')) {
+      errorMessage = 'Network error';
+      errorDetails = 'Gemini APIへの接続に失敗しました。ネットワーク接続を確認してください。';
+    }
+
     return NextResponse.json(
       {
-        error: 'Failed to generate response',
-        details: error.message
+        error: errorMessage,
+        details: errorDetails,
+        originalError: error.message
       },
       { status: 500 }
     );

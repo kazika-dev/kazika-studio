@@ -241,12 +241,32 @@ async function executeNode(
           geminiData = responseText ? JSON.parse(responseText) : { error: 'Empty response from Gemini API' };
         } catch (parseError) {
           console.error('Failed to parse Gemini API response:', responseText);
+
+          // HTMLレスポンスの場合、より詳細なエラーメッセージを表示
+          if (responseText.includes('Authentication Required') || responseText.includes('<!doctype')) {
+            throw new Error(
+              `Gemini API認証エラー: APIキーが無効または期限切れです。\n\n` +
+              `環境変数 GEMINI_API_KEY を確認してください。\n` +
+              `APIキーは https://aistudio.google.com/apikey から取得できます。`
+            );
+          }
+
           throw new Error(`Gemini APIのレスポンスが不正です: ${responseText.substring(0, 200)}`);
         }
 
         if (!geminiResponse.ok) {
-          const error: any = new Error(geminiData.error || 'Gemini API call failed');
+          // エラーレスポンスからより詳細な情報を抽出
+          const errorMsg = geminiData.details || geminiData.error || 'Gemini API call failed';
+          const error: any = new Error(errorMsg);
           error.apiErrorDetails = geminiData; // API全体のエラーレスポンスを保存
+
+          // 認証エラーの場合は追加情報を提供
+          if (geminiResponse.status === 401 || errorMsg.includes('authentication')) {
+            error.message = `Gemini API認証エラー: ${errorMsg}\n\n` +
+              `環境変数 GEMINI_API_KEY を確認してください。\n` +
+              `APIキーは https://aistudio.google.com/apikey から取得できます。`;
+          }
+
           throw error;
         }
 
