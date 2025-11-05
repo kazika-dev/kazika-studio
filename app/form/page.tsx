@@ -125,29 +125,28 @@ function FormPageContent() {
   };
 
   const handleExecute = async () => {
-    // バリデーション
-    if (workflow?.form_config?.fields) {
-      const requiredFields = workflow.form_config.fields.filter(f => f.required);
-      for (const field of requiredFields) {
-        const value = formValues[field.name];
-        if (!value || (Array.isArray(value) && value.length === 0)) {
-          alert(`${field.label} は必須項目です`);
-          return;
-        }
-      }
-    }
-
     try {
       setExecuting(true);
       setError(null);
       setResult(null);
 
+      // 入力されたフィールドのみを抽出
+      const filledInputs: Record<string, any> = {};
+      Object.entries(formValues).forEach(([key, value]) => {
+        // 値が存在する場合のみ追加
+        if (value !== null && value !== undefined && value !== '' &&
+            (!Array.isArray(value) || value.length > 0)) {
+          filledInputs[key] = value;
+        }
+      });
+
       console.log('========================================');
       console.log('Sending workflow execution request');
       console.log('========================================');
       console.log('Workflow ID:', workflowId);
-      console.log('Form values:', formValues);
-      console.log('Form value keys:', Object.keys(formValues));
+      console.log('All form values:', formValues);
+      console.log('Filled inputs only:', filledInputs);
+      console.log('Filled input keys:', Object.keys(filledInputs));
       console.log('========================================');
 
       const response = await fetch('/api/workflows/execute', {
@@ -157,7 +156,7 @@ function FormPageContent() {
         },
         body: JSON.stringify({
           workflowId: parseInt(workflowId!),
-          inputs: formValues,
+          inputs: filledInputs, // 入力されたもののみを送信
         }),
       });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   TextField,
   Button,
@@ -9,12 +9,19 @@ import {
   Paper,
   IconButton,
   Alert,
+  Card,
+  CardContent,
+  CardMedia,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  CircularProgress,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet';
   name: string;
   label: string;
   placeholder?: string;
@@ -100,7 +107,6 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           placeholder={config.placeholder}
-          required={config.required}
           helperText={config.helperText}
           variant="outlined"
         />
@@ -114,7 +120,6 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
       <Box>
         <Typography variant="subtitle2" fontWeight={600} gutterBottom>
           {config.label}
-          {config.required && <span style={{ color: 'red' }}> *</span>}
         </Typography>
         {config.helperText && (
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -181,7 +186,6 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
       <Box>
         <Typography variant="subtitle2" fontWeight={600} gutterBottom>
           {config.label}
-          {config.required && <span style={{ color: 'red' }}> *</span>}
         </Typography>
         {config.helperText && (
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -242,11 +246,128 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
           </Box>
         )}
 
-        {config.required && images.length === 0 && (
-          <Alert severity="warning" sx={{ mt: 1 }}>
-            少なくとも1枚の画像が必要です
-          </Alert>
+      </Box>
+    );
+  }
+
+  // キャラクターシート選択
+  if (config.type === 'characterSheet') {
+    const [characterSheets, setCharacterSheets] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const loadCharacterSheets = async () => {
+        try {
+          setLoading(true);
+          const response = await fetch('/api/character-sheets');
+
+          if (!response.ok) {
+            console.error('Failed to load character sheets:', response.status, response.statusText);
+            if (response.status === 401) {
+              console.error('Unauthorized - user not logged in');
+            }
+            setLoading(false);
+            return;
+          }
+
+          const data = await response.json();
+
+          if (data.success) {
+            setCharacterSheets(data.characterSheets);
+          } else {
+            console.error('Failed to load character sheets:', data.error);
+          }
+        } catch (error) {
+          console.error('Failed to load character sheets:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadCharacterSheets();
+    }, []);
+
+    const getImageUrl = (imageUrl: string) => {
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        return imageUrl;
+      }
+      return `/api/storage/${imageUrl}`;
+    };
+
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          {config.label}
+        </Typography>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            {config.helperText}
+          </Typography>
         )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : characterSheets.length === 0 ? (
+          <Alert severity="warning">
+            キャラクターシートがありません。先にキャラクターシートを作成してください。
+          </Alert>
+        ) : (
+          <RadioGroup
+            value={value?.toString() || ''}
+            onChange={(e) => onChange(parseInt(e.target.value))}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {characterSheets.map((sheet) => (
+                <Card
+                  key={sheet.id}
+                  variant="outlined"
+                  sx={{
+                    cursor: 'pointer',
+                    border: value === sheet.id ? 2 : 1,
+                    borderColor: value === sheet.id ? 'primary.main' : 'divider',
+                    '&:hover': {
+                      boxShadow: 2,
+                    },
+                  }}
+                  onClick={() => onChange(sheet.id)}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', p: 1 }}>
+                    <FormControlLabel
+                      value={sheet.id.toString()}
+                      control={<Radio />}
+                      label=""
+                      sx={{ m: 0, mr: 1 }}
+                    />
+                    <CardMedia
+                      component="img"
+                      image={getImageUrl(sheet.image_url)}
+                      alt={sheet.name}
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        objectFit: 'cover',
+                        borderRadius: 1,
+                      }}
+                    />
+                    <CardContent sx={{ flex: 1, py: 1, '&:last-child': { pb: 1 } }}>
+                      <Typography variant="subtitle2" fontWeight={600}>
+                        {sheet.name}
+                      </Typography>
+                      {sheet.description && (
+                        <Typography variant="caption" color="text.secondary">
+                          {sheet.description}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Box>
+                </Card>
+              ))}
+            </Box>
+          </RadioGroup>
+        )}
+
       </Box>
     );
   }

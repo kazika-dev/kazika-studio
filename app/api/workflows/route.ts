@@ -1,55 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { Node } from 'reactflow';
-
-/**
- * ノード情報からform_configを自動生成
- */
-function generateFormConfig(nodes: Node[]): any {
-  const fields: any[] = [];
-
-  nodes.forEach((node: Node) => {
-    const nodeType = node.data.type;
-    const nodeId = node.id;
-    const nodeName = node.data.config?.name || nodeId;
-
-    // 入力ノード
-    if (nodeType === 'input') {
-      fields.push({
-        name: `input_${nodeId}`,
-        label: nodeName,
-        type: 'text',
-        required: false,
-        description: node.data.config?.description || 'データの入力を受け付けます',
-      });
-    }
-
-    // 画像入力ノード
-    if (nodeType === 'imageInput') {
-      fields.push({
-        name: `image_${nodeId}`,
-        label: nodeName,
-        type: 'image',
-        required: false,
-        description: node.data.config?.description || '画像を入力します',
-      });
-    }
-
-    // プロンプトを持つノード (Gemini, Nanobana, Higgsfield, Seedream4)
-    if (['gemini', 'nanobana', 'higgsfield', 'seedream4'].includes(nodeType)) {
-      fields.push({
-        name: `${nodeType}_prompt_${nodeId}`,
-        label: `${nodeName} プロンプト`,
-        type: 'textarea',
-        required: false,
-        description: node.data.config?.description || 'プロンプトを入力します',
-        placeholder: node.data.config?.prompt || '',
-      });
-    }
-  });
-
-  return fields.length > 0 ? { fields } : null;
-}
+import { generateFormConfig as generateFormConfigFromNodes } from '@/lib/workflow/formConfigGenerator';
 
 // ワークフロー一覧取得
 export async function GET() {
@@ -115,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // form_configを自動生成（手動設定がなければ）
-    const finalFormConfig = form_config || generateFormConfig(nodes);
+    const finalFormConfig = form_config || generateFormConfigFromNodes(nodes, null);
 
     console.log('Creating workflow with auto-generated form_config:', finalFormConfig);
 
@@ -183,7 +135,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // form_configを自動生成（手動設定がなければ）
-    const finalFormConfig = form_config || generateFormConfig(nodes);
+    const finalFormConfig = form_config || generateFormConfigFromNodes(nodes, null);
 
     console.log('Updating workflow with auto-generated form_config:', finalFormConfig);
 

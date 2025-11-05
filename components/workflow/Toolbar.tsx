@@ -11,9 +11,10 @@ import CollectionsIcon from '@mui/icons-material/Collections';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import ImageSearchIcon from '@mui/icons-material/ImageSearch';
+import PersonIcon from '@mui/icons-material/Person';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -102,6 +103,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           画像入力
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<PersonIcon />}
+          onClick={() => onAddNode('characterSheet')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#ff6b9d',
+            '&:hover': {
+              bgcolor: '#ff4081',
+            },
+          }}
+        >
+          キャラクターシート
         </Button>
 
         <Button

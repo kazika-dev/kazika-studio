@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, User, Workflow, Home, Image, Video } from 'lucide-react';
+import { LogOut, User, Workflow, Home, Image, Video, Users } from 'lucide-react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import Link from 'next/link';
 
@@ -91,6 +91,17 @@ export default function Header() {
               >
                 <Video size={16} />
                 スタジオ
+              </Link>
+              <Link
+                href="/character-sheets"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/character-sheets')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Users size={16} />
+                キャラクターシート
               </Link>
             </nav>
           </div>

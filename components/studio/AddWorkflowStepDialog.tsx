@@ -259,17 +259,15 @@ export default function AddWorkflowStepDialog({
       return;
     }
 
-    // バリデーション: 必須フィールドのチェック
-    if (selectedWorkflow?.form_config?.fields) {
-      const requiredFields = selectedWorkflow.form_config.fields.filter(f => f.required);
-      for (const field of requiredFields) {
-        const value = formValues[field.name];
-        if (!value || (Array.isArray(value) && value.length === 0)) {
-          alert(`${field.label} は必須項目です`);
-          return;
-        }
+    // 入力されたフィールドのみを抽出
+    const filledFormValues: Record<string, any> = {};
+    Object.entries(formValues).forEach(([key, value]) => {
+      // 値が存在する場合のみ追加
+      if (value !== null && value !== undefined && value !== '' &&
+          (!Array.isArray(value) || value.length > 0)) {
+        filledFormValues[key] = value;
       }
-    }
+    });
 
     const inputConfig = {
       usePrompt,
@@ -278,8 +276,8 @@ export default function AddWorkflowStepDialog({
       usePreviousVideo: hasPreviousSteps ? usePreviousVideo : false,
       usePreviousAudio: hasPreviousSteps ? usePreviousAudio : false,
       usePreviousText: hasPreviousSteps ? usePreviousText : false,
-      // 動的フォームの値を追加
-      workflowInputs: Object.keys(formValues).length > 0 ? formValues : undefined,
+      // 入力されたフィールドのみを追加
+      workflowInputs: Object.keys(filledFormValues).length > 0 ? filledFormValues : undefined,
     };
 
     const stepData = {

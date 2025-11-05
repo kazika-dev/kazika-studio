@@ -571,6 +571,7 @@ export async function resetBoardSteps(boardId: number) {
  * ワークフロー出力を作成
  */
 export async function createWorkflowOutput(data: {
+  user_id: string;
   workflow_id: number;
   step_id?: number;
   output_type: 'image' | 'video' | 'audio' | 'text' | 'other';
@@ -581,10 +582,11 @@ export async function createWorkflowOutput(data: {
 }) {
   const result = await query(
     `INSERT INTO kazikastudio.workflow_outputs
-     (workflow_id, step_id, output_type, node_id, output_url, output_data, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     (user_id, workflow_id, step_id, output_type, node_id, output_url, output_data, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
+      data.user_id,
       data.workflow_id,
       data.step_id || null,
       data.output_type,

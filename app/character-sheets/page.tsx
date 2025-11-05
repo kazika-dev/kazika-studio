@@ -39,8 +39,10 @@ export default function CharacterSheetsPage() {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedSheet, setSelectedSheet] = useState<CharacterSheet | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     loadCharacterSheets();
   }, []);
 
@@ -95,6 +97,20 @@ export default function CharacterSheetsPage() {
   const handleEdit = (sheet: CharacterSheet) => {
     router.push(`/character-sheets/${sheet.id}/edit`);
   };
+
+  const getImageUrl = (imageUrl: string) => {
+    // 既に絶対URLの場合はそのまま返す
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+    // 相対パスの場合はストレージプロキシAPIを経由
+    return `/api/storage/${imageUrl}`;
+  };
+
+  // クライアントサイドでマウントされるまで何も表示しない（Hydrationエラー回避）
+  if (!mounted) {
+    return null;
+  }
 
   if (loading) {
     return (
@@ -160,7 +176,7 @@ export default function CharacterSheetsPage() {
             <Card key={sheet.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardMedia
                 component="img"
-                image={sheet.image_url}
+                image={getImageUrl(sheet.image_url)}
                 alt={sheet.name}
                 sx={{ aspectRatio: '3/4', objectFit: 'cover' }}
               />

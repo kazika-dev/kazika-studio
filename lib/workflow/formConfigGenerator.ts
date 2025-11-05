@@ -21,7 +21,7 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           name: fieldName,
           label: nodeName || '入力テキスト',
           placeholder: 'テキストを入力してください',
-          required: true,
+          required: false,
           rows: 4,
           helperText: `${nodeName}への入力`,
         });
@@ -39,7 +39,7 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           type: multiple ? 'images' : 'image',
           name: fieldName,
           label: nodeName || '画像アップロード',
-          required: true,
+          required: false,
           maxImages: multiple ? (node.data.config?.maxImages || 8) : undefined,
           helperText: `${nodeName}に使用する画像`,
         });
@@ -110,6 +110,21 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           required: false,
           rows: 4,
           helperText: `${nodeName}で使用するプロンプト`,
+        });
+        addedFieldNames.add(fieldName);
+      }
+    }
+
+    // キャラクターシートノード
+    if (nodeType === 'characterSheet') {
+      const fieldName = `characterSheet_${node.id}`;
+      if (!addedFieldNames.has(fieldName)) {
+        fields.push({
+          type: 'characterSheet',
+          name: fieldName,
+          label: nodeName || 'キャラクターシート選択',
+          required: false,
+          helperText: `${nodeName}で使用するキャラクターシート`,
         });
         addedFieldNames.add(fieldName);
       }

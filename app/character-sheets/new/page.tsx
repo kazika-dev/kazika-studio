@@ -16,7 +16,6 @@ import {
 import { ArrowBack as ArrowBackIcon, Upload as UploadIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
-import Image from 'next/image';
 
 export default function NewCharacterSheetPage() {
   const router = useRouter();
@@ -40,12 +39,29 @@ export default function NewCharacterSheetPage() {
   };
 
   const uploadImage = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
+    // FileをBase64に変換
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // data:image/png;base64,... から base64部分のみを抽出
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
     const response = await fetch('/api/upload-image', {
       method: 'POST',
-      body: formData,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        base64Data,
+        mimeType: file.type,
+        fileName: file.name,
+      }),
     });
 
     const data = await response.json();
@@ -164,12 +180,11 @@ export default function NewCharacterSheetPage() {
               >
                 {imagePreview ? (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Box sx={{ position: 'relative', aspectRatio: '3/4', maxWidth: '400px', mx: 'auto' }}>
-                      <Image
+                    <Box sx={{ maxWidth: '400px', mx: 'auto' }}>
+                      <img
                         src={imagePreview}
                         alt="プレビュー"
-                        fill
-                        style={{ objectFit: 'contain' }}
+                        style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
                       />
                     </Box>
                     <Button

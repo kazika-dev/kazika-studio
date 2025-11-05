@@ -9,6 +9,7 @@ export interface ExecutionResult {
   output: any;
   error?: string;
   errorDetails?: any; // APIから返された詳細なエラー情報
+  skipped?: boolean; // ノードがスキップされた場合にtrue（例: 選択されていないキャラクターシート）
 }
 
 export interface WorkflowExecutionResult {
@@ -121,6 +122,106 @@ async function executeNode(
           value: node.data.config?.value || '',
           nodeId: node.id,
         };
+        break;
+
+      case 'characterSheet':
+        // キャラクターシートノードは選択されたキャラクターシートの画像を出力
+        const characterSheet = node.data.config?.characterSheet;
+
+        if (!characterSheet || !characterSheet.image_url) {
+          // キャラクターシートが選択されていない場合はスキップ（エラーにしない）
+          console.log('キャラクターシート未選択のためスキップ:', node.id);
+          return {
+            success: true,
+            skipped: true,
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // キャラクターシート画像をダウンロードしてbase64に変換
+        try {
+          let base64Data: string;
+          let mimeType: string;
+
+          // サーバーサイドの場合は直接GCP Storageから取得
+          if (typeof window === 'undefined') {
+            console.log('Loading character sheet image from GCP Storage (server-side):', characterSheet.image_url);
+            const { getFileFromStorage } = await import('@/lib/gcp-storage');
+            const { data, contentType } = await getFileFromStorage(characterSheet.image_url);
+            base64Data = Buffer.from(data).toString('base64');
+            mimeType = contentType;
+          } else {
+            // クライアントサイドの場合はストレージプロキシAPI経由
+            const imageUrl = characterSheet.image_url.startsWith('http')
+              ? characterSheet.image_url
+              : `${getApiUrl('')}/api/storage/${characterSheet.image_url}`;
+
+            console.log('Fetching character sheet image (client-side):', imageUrl);
+
+            const imageResponse = await fetch(imageUrl);
+            if (!imageResponse.ok) {
+              throw new Error(`Failed to fetch character sheet image: ${imageResponse.statusText}`);
+            }
+
+            const imageBlob = await imageResponse.blob();
+            const imageBuffer = await imageBlob.arrayBuffer();
+            base64Data = Buffer.from(imageBuffer).toString('base64');
+            mimeType = imageBlob.type || 'image/jpeg';
+          }
+
+          // 画像データとしてフォーマット
+          const characterSheetImageData = {
+            mimeType,
+            data: base64Data,
+          };
+
+          // 必要に応じてGCP Storageにアップロード
+          let characterSheetStoragePath: string | undefined;
+
+          if (typeof window !== 'undefined') {
+            // クライアントサイドの場合はAPI経由でアップロード
+            const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                base64Data: base64Data,
+                mimeType: mimeType,
+                fileName: `character-sheet-${characterSheet.id}.jpg`,
+              }),
+            });
+
+            if (uploadResponse.ok) {
+              const uploadData = await uploadResponse.json();
+              characterSheetStoragePath = uploadData.storagePath;
+              console.log('Character sheet image uploaded to storage:', characterSheetStoragePath);
+            }
+          } else {
+            // サーバーサイドの場合は直接uploadImageToStorage関数を呼び出す
+            const { uploadImageToStorage } = await import('@/lib/gcp-storage');
+            characterSheetStoragePath = await uploadImageToStorage(
+              base64Data,
+              mimeType,
+              `character-sheet-${characterSheet.id}.jpg`
+            );
+            console.log('Character sheet image uploaded to storage (server-side):', characterSheetStoragePath);
+          }
+
+          output = {
+            imageData: characterSheetImageData,
+            storagePath: characterSheetStoragePath,
+            characterSheet: characterSheet,
+            nodeId: node.id,
+          };
+        } catch (error: any) {
+          console.error('Failed to load character sheet image:', error);
+          return {
+            success: false,
+            error: `キャラクターシート画像の読み込みに失敗しました: ${error.message}`,
+            output: null,
+            nodeId: node.id,
+          };
+        }
         break;
 
       case 'imageInput':
@@ -495,10 +596,11 @@ async function executeNode(
           throw new Error(`Higgsfieldノード "${node.data.config?.name || node.id}" のプロンプトが空です。プロンプトを入力するか、前のノードから値を受け取ってください。`);
         }
 
-        // 前のノードから画像のstoragePathを検索
+        // 前のノードから画像のstoragePathを検索（ノードIDベースのキーのみ）
         let inputImagePath: string | null = null;
-        Object.values(inputData).forEach((input: any) => {
-          if (input && typeof input === 'object' && input.storagePath) {
+        Object.entries(inputData).forEach(([key, input]: [string, any]) => {
+          // ノードIDベースのキーのみを処理（node-で始まるキー）
+          if (key.startsWith('node-') && input && typeof input === 'object' && input.storagePath) {
             inputImagePath = input.storagePath;
           }
         });
@@ -596,10 +698,11 @@ async function executeNode(
           }
         }
 
-        // 前のノードから画像のstoragePathをすべて収集（最大8枚）
+        // 前のノードから画像のstoragePathをすべて収集（最大8枚）（ノードIDベースのキーのみ）
         const seedream4ImagePaths: string[] = [];
-        Object.values(inputData).forEach((input: any) => {
-          if (input && typeof input === 'object' && input.storagePath) {
+        Object.entries(inputData).forEach(([key, input]: [string, any]) => {
+          // ノードIDベースのキーのみを処理（node-で始まるキー）
+          if (key.startsWith('node-') && input && typeof input === 'object' && input.storagePath) {
             seedream4ImagePaths.push(input.storagePath);
           }
         });
@@ -774,7 +877,14 @@ function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data:
   const images: Array<{ mimeType: string; data: string }> = [];
   const seenImageData = new Set<string>();
 
-  Object.values(inputData).forEach((input: any) => {
+  // ノードIDベースのキーのみを処理（ノード名での重複を避けるため）
+  // ノードIDは "node-" で始まる形式
+  Object.entries(inputData).forEach(([key, input]: [string, any]) => {
+    // ノードIDベースのキーのみを処理（node-で始まるキー）
+    if (!key.startsWith('node-')) {
+      return;
+    }
+
     if (input && typeof input === 'object') {
       let imageData: { mimeType: string; data: string } | null = null;
 

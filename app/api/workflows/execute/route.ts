@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeWorkflow } from '@/lib/workflow/executor';
-import { getWorkflowById } from '@/lib/db';
+import { getWorkflowById, getCharacterSheetById } from '@/lib/db';
 import { Node } from 'reactflow';
 import { createClient } from '@/lib/supabase/server';
 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     console.log('========================================');
 
     if (inputs) {
-      nodes.forEach((node: Node) => {
+      for (const node of nodes) {
         const nodeType = node.data.type;
         const nodeId = node.id;
 
@@ -221,7 +221,41 @@ export async function POST(request: NextRequest) {
             console.log(`✗ No matching prompt field or placeholder found for ${nodeType} node ${nodeId}`);
           }
         }
-      });
+
+        // キャラクターシートノード: characterSheet_{nodeId} フィールドからIDを取得
+        if (nodeType === 'characterSheet') {
+          const fieldName = `characterSheet_${nodeId}`;
+          console.log(`Processing characterSheet node ${nodeId}:`, {
+            fieldName,
+            hasField: inputs[fieldName] !== undefined,
+            currentCharacterSheet: node.data.config?.characterSheet,
+          });
+
+          if (inputs[fieldName] !== undefined) {
+            const characterSheetId = inputs[fieldName];
+            console.log(`✓ Setting characterSheet node ${nodeId} with ID:`, characterSheetId);
+
+            // キャラクターシート情報をDBから取得
+            try {
+              const characterSheet = await getCharacterSheetById(characterSheetId);
+
+              if (characterSheet) {
+                node.data.config = {
+                  ...node.data.config,
+                  characterSheet: characterSheet,
+                };
+                console.log(`✓ Successfully loaded character sheet:`, characterSheet.name);
+              } else {
+                console.error(`✗ Character sheet ${characterSheetId} not found`);
+              }
+            } catch (error) {
+              console.error(`✗ Error loading character sheet ${characterSheetId}:`, error);
+            }
+          } else {
+            console.log(`✗ No matching characterSheet field found for characterSheet node ${nodeId}`);
+          }
+        }
+      }
 
       // 適用後の状態をログ出力
       console.log('========================================');

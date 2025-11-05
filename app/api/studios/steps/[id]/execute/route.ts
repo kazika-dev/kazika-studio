@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getStepById, getBoardById, getStudioById, updateStep, getStepsByBoardId, getWorkflowById, createWorkflowOutput } from '@/lib/db';
+import { getStepById, getBoardById, getStudioById, updateStep, getStepsByBoardId, getWorkflowById, createWorkflowOutput, getCharacterSheetById } from '@/lib/db';
 import { executeWorkflow } from '@/lib/workflow/executor';
 import { Node } from 'reactflow';
 
@@ -99,7 +99,7 @@ export async function POST(
 
       // 入力を構築してノードに適用
       const inputs = buildInputs(step, previousOutputs, board);
-      applyInputsToNodes(nodes, inputs, workflow);
+      await applyInputsToNodes(nodes, inputs, workflow);
 
       // ワークフローを実行
       const result = await executeWorkflow(nodes, edges);
@@ -160,6 +160,7 @@ export async function POST(
             // 画像出力
             if (output.imageData) {
               await createWorkflowOutput({
+                user_id: user.id,
                 workflow_id: step.workflow_id,
                 step_id: step.id,
                 output_type: 'image',
@@ -176,6 +177,7 @@ export async function POST(
             // 画像URL出力
             if (output.imageUrl) {
               await createWorkflowOutput({
+                user_id: user.id,
                 workflow_id: step.workflow_id,
                 step_id: step.id,
                 output_type: 'image',
@@ -192,6 +194,7 @@ export async function POST(
             // 動画出力
             if (output.videoUrl) {
               await createWorkflowOutput({
+                user_id: user.id,
                 workflow_id: step.workflow_id,
                 step_id: step.id,
                 output_type: 'video',
@@ -209,6 +212,7 @@ export async function POST(
             // 音声出力
             if (output.audioData) {
               await createWorkflowOutput({
+                user_id: user.id,
                 workflow_id: step.workflow_id,
                 step_id: step.id,
                 output_type: 'audio',
@@ -224,6 +228,7 @@ export async function POST(
             // テキスト出力
             if (output.response) {
               await createWorkflowOutput({
+                user_id: user.id,
                 workflow_id: step.workflow_id,
                 step_id: step.id,
                 output_type: 'text',
@@ -530,7 +535,7 @@ async function getPreviousStepOutputs(currentStep: any) {
 /**
  * ノードに入力を適用
  */
-function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
+async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
   console.log('=== applyInputsToNodes called ===');
   console.log('Inputs:', JSON.stringify(inputs, null, 2));
   console.log('Number of nodes:', nodes.length);
@@ -614,7 +619,7 @@ function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
   });
 
   // その他のノードに入力を適用
-  nodes.forEach((node: Node) => {
+  for (const node of nodes) {
     const nodeType = node.data.type;
     console.log(`Processing node ${node.id} (type: ${nodeType})`);
     console.log('Node config before:', JSON.stringify(node.data.config, null, 2));
@@ -652,7 +657,7 @@ function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
     if (inputs.workflowInputs) {
       console.log(`Applying workflowInputs to node ${node.id}:`, inputs.workflowInputs);
 
-      Object.entries(inputs.workflowInputs).forEach(([fieldName, fieldValue]) => {
+      for (const [fieldName, fieldValue] of Object.entries(inputs.workflowInputs)) {
         console.log(`  Processing field ${fieldName} (type: ${fieldTypeMap[fieldName]})`);
 
         if (fieldValue !== undefined && fieldValue !== null) {
@@ -661,7 +666,35 @@ function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
           // 画像フィールドでimageInputノードに既に割り当て済みの場合はスキップ
           if ((fieldType === 'image' || fieldType === 'images') && nodeType === 'imageInput') {
             console.log(`  Skipping image field ${fieldName} for imageInput node (already assigned)`);
-            return;
+            continue;
+          }
+
+          // キャラクターシートフィールド
+          if (fieldType === 'characterSheet' && nodeType === 'characterSheet') {
+            // フィールド名にノードIDが含まれているかをチェック
+            // フィールド名の形式: characterSheet_{nodeId}
+            if (fieldName.includes(node.id)) {
+              console.log(`  Processing characterSheet field ${fieldName} with ID:`, fieldValue);
+              try {
+                const characterSheetId = typeof fieldValue === 'number' ? fieldValue : parseInt(String(fieldValue));
+                const characterSheet = await getCharacterSheetById(characterSheetId);
+
+                if (characterSheet) {
+                  console.log(`  ✓ Successfully loaded character sheet:`, characterSheet.name);
+                  node.data.config = {
+                    ...node.data.config,
+                    characterSheet: characterSheet,
+                  };
+                } else {
+                  console.error(`  ✗ Character sheet ${characterSheetId} not found`);
+                }
+              } catch (error) {
+                console.error(`  ✗ Error loading character sheet:`, error);
+              }
+            } else {
+              console.log(`  Skipping characterSheet field ${fieldName} for node ${node.id} (not matching)`);
+            }
+            continue;
           }
 
           // promptまたはtextareaフィールドは既存のプロンプトに追加
@@ -691,8 +724,8 @@ function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
               images: fieldValue,
             };
           }
-          // その他のフィールドは直接設定
-          else if (fieldType !== 'image' && fieldType !== 'images') {
+          // その他のフィールド（characterSheet以外）は直接設定
+          else if (fieldType !== 'image' && fieldType !== 'images' && fieldType !== 'characterSheet') {
             console.log(`  Setting ${fieldName} directly`);
             node.data.config = {
               ...node.data.config,
@@ -700,11 +733,11 @@ function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
             };
           }
         }
-      });
+      }
     }
 
     console.log('Node config after:', JSON.stringify(node.data.config, null, 2));
-  });
+  }
 }
 
 /**
@@ -765,10 +798,28 @@ function buildInputs(step: any, previousOutputs: any, board: any) {
     }
   }
 
-  // ワークフロー入力を追加
+  // ワークフロー入力を追加（値が存在するフィールドのみ）
   if (config.workflowInputs) {
-    console.log('Adding workflowInputs:', JSON.stringify(config.workflowInputs, null, 2));
-    inputs.workflowInputs = config.workflowInputs;
+    console.log('Processing workflowInputs:', JSON.stringify(config.workflowInputs, null, 2));
+
+    // /app/form/page.tsx と同様に、値が存在するフィールドのみを抽出
+    const filledInputs: Record<string, any> = {};
+    Object.entries(config.workflowInputs).forEach(([key, value]) => {
+      // 値が存在する場合のみ追加
+      if (value !== null && value !== undefined && value !== '' &&
+          (!Array.isArray(value) || value.length > 0)) {
+        filledInputs[key] = value;
+      } else {
+        console.log(`Skipping empty field: ${key} (value: ${value})`);
+      }
+    });
+
+    if (Object.keys(filledInputs).length > 0) {
+      console.log('Adding filled workflowInputs:', JSON.stringify(filledInputs, null, 2));
+      inputs.workflowInputs = filledInputs;
+    } else {
+      console.log('No filled workflowInputs found');
+    }
   } else {
     console.log('No workflowInputs in config');
   }

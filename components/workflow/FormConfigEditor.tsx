@@ -71,7 +71,6 @@ export default function FormConfigEditor({ nodes }: FormConfigEditorProps) {
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" fontWeight={600}>
                             {field.label}
-                            {field.required && <span style={{ color: 'red' }}> *</span>}
                           </Typography>
                           <Typography variant="caption" color="text.secondary" display="block">
                             タイプ: {field.type}
