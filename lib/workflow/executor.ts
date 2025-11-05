@@ -224,6 +224,96 @@ async function executeNode(
         }
         break;
 
+      case 'rapid':
+        // Rapid画像編集ノード
+        const rapidPrompt = replaceVariables(node.data.config?.prompt || '', inputData);
+
+        if (!rapidPrompt) {
+          return {
+            success: false,
+            error: 'プロンプトが設定されていません',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // 入力画像を取得
+        const rapidInputImages = extractImagesFromInput(inputData);
+
+        if (rapidInputImages.length === 0) {
+          return {
+            success: false,
+            error: '入力画像が必要です。画像入力ノードまたは画像生成ノードを接続してください。',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // 最初の画像を編集対象として使用
+        const rapidInputImage = rapidInputImages[0];
+
+        try {
+          console.log('Calling Rapid API:', {
+            prompt: rapidPrompt.substring(0, 100),
+            hasInputImage: !!rapidInputImage,
+          });
+
+          const rapidResponse = await fetch(getApiUrl('/api/rapid'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: rapidPrompt,
+              inputImage: rapidInputImage,
+            }),
+          });
+
+          const rapidResult = await rapidResponse.json();
+
+          if (!rapidResponse.ok) {
+            const errorMessage = rapidResult.error || 'Rapid API request failed';
+            const errorDetails = rapidResult.details ? `\n詳細: ${rapidResult.details}` : '';
+            const errorHint = rapidResult.hint ? `\n${rapidResult.hint}` : '';
+            const errorUrl = rapidResult.comfyuiUrl ? `\nComfyUI URL: ${rapidResult.comfyuiUrl}` : '';
+
+            console.error('Rapid API error details:', {
+              error: errorMessage,
+              details: rapidResult.details,
+              status: rapidResult.status,
+              statusText: rapidResult.statusText,
+              comfyuiUrl: rapidResult.comfyuiUrl,
+              hint: rapidResult.hint,
+            });
+
+            throw new Error(`${errorMessage}${errorDetails}${errorHint}${errorUrl}`);
+          }
+
+          output = {
+            imageData: rapidResult.imageData,
+            storagePath: rapidResult.storagePath,
+            nodeId: node.id,
+          };
+
+          requestBody = {
+            prompt: rapidPrompt,
+            inputImage: {
+              storagePath: rapidInputImage.storagePath,
+              mimeType: rapidInputImage.mimeType,
+              data: rapidInputImage.data,
+            },
+          };
+        } catch (error: any) {
+          console.error('Rapid API error:', error);
+          return {
+            success: false,
+            error: `Rapid画像編集に失敗しました: ${error.message}`,
+            output: null,
+            nodeId: node.id,
+          };
+        }
+        break;
+
       case 'imageInput':
         // 画像入力ノードは画像データをそのまま出力
         const imageInputData = node.data.config?.imageData;
@@ -873,8 +963,8 @@ function collectInputData(
  * 入力データから画像データを抽出
  * 重複を防ぐため、同じ画像データは1回のみ追加する
  */
-function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data: string }> {
-  const images: Array<{ mimeType: string; data: string }> = [];
+function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data: string; storagePath?: string }> {
+  const images: Array<{ mimeType: string; data: string; storagePath?: string }> = [];
   const seenImageData = new Set<string>();
 
   // ノードIDベースのキーのみを処理（ノード名での重複を避けるため）
@@ -886,13 +976,14 @@ function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data:
     }
 
     if (input && typeof input === 'object') {
-      let imageData: { mimeType: string; data: string } | null = null;
+      let imageData: { mimeType: string; data: string; storagePath?: string } | null = null;
 
       // imageInputノードからの画像データ
       if (input.imageData && input.imageData.mimeType && input.imageData.data) {
         imageData = {
           mimeType: input.imageData.mimeType,
           data: input.imageData.data,
+          storagePath: input.storagePath, // storagePathも含める
         };
       }
       // nanobananaノードからの生成画像
@@ -901,6 +992,7 @@ function extractImagesFromInput(inputData: any): Array<{ mimeType: string; data:
           imageData = {
             mimeType: input.imageData.mimeType,
             data: input.imageData.data,
+            storagePath: input.storagePath, // storagePathも含める
           };
         }
       }

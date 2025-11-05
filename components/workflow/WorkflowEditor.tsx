@@ -27,6 +27,7 @@ import ElevenLabsNode from './ElevenLabsNode';
 import HiggsfieldNode from './HiggsfieldNode';
 import Seedream4Node from './Seedream4Node';
 import CharacterSheetNode from './CharacterSheetNode';
+import RapidNode from './RapidNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
@@ -35,6 +36,7 @@ import ElevenLabsNodeSettings from './ElevenLabsNodeSettings';
 import HiggsfieldNodeSettings from './HiggsfieldNodeSettings';
 import Seedream4NodeSettings from './Seedream4NodeSettings';
 import CharacterSheetNodeSettings from './CharacterSheetNodeSettings';
+import RapidNodeSettings from './RapidNodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 import FormConfigEditor from './FormConfigEditor';
@@ -81,6 +83,7 @@ const nodeTypes = {
   higgsfield: HiggsfieldNode,
   seedream4: Seedream4Node,
   characterSheet: CharacterSheetNode,
+  rapid: RapidNode,
 };
 
 const initialNodes: Node[] = [
@@ -253,16 +256,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -307,6 +310,11 @@ export default function WorkflowEditor() {
             name: `キャラクターシート${nodes.length + 1}`,
             description: 'キャラクターシートの画像を次のノードに送ります',
             characterSheet: null,
+          } : type === 'rapid' ? {
+            name: `Rapid ノード${nodes.length + 1}`,
+            description: 'ComfyUI Rapidで画像を編集します（要：画像入力）',
+            prompt: '',
+            status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
             description: '',
@@ -475,6 +483,8 @@ export default function WorkflowEditor() {
                     return '#9c27b0';
                   case 'characterSheet':
                     return '#ff6b9d';
+                  case 'rapid':
+                    return '#9c27b0';
                   default:
                     return '#999';
                 }
@@ -564,6 +574,15 @@ export default function WorkflowEditor() {
           ) : selectedNode.type === 'characterSheet' ? (
             <CharacterSheetNodeSettings
               node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.type === 'rapid' ? (
+            <RapidNodeSettings
+              node={selectedNode}
+              nodes={nodes}
+              edges={edges}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
               onDelete={deleteNode}

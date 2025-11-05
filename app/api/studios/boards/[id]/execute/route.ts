@@ -152,6 +152,7 @@ export async function POST(
               // 画像出力
               if (output.imageData) {
                 await createWorkflowOutput({
+                  user_id: user.id,
                   workflow_id: step.workflow_id,
                   step_id: step.id,
                   output_type: 'image',
@@ -167,6 +168,7 @@ export async function POST(
               // 画像URL出力
               if (output.imageUrl) {
                 await createWorkflowOutput({
+                  user_id: user.id,
                   workflow_id: step.workflow_id,
                   step_id: step.id,
                   output_type: 'image',
@@ -182,6 +184,7 @@ export async function POST(
               // 動画出力
               if (output.videoUrl) {
                 await createWorkflowOutput({
+                  user_id: user.id,
                   workflow_id: step.workflow_id,
                   step_id: step.id,
                   output_type: 'video',
@@ -198,6 +201,7 @@ export async function POST(
               // 音声出力
               if (output.audioData) {
                 await createWorkflowOutput({
+                  user_id: user.id,
                   workflow_id: step.workflow_id,
                   step_id: step.id,
                   output_type: 'audio',
@@ -212,6 +216,7 @@ export async function POST(
               // テキスト出力
               if (output.response) {
                 await createWorkflowOutput({
+                  user_id: user.id,
                   workflow_id: step.workflow_id,
                   step_id: step.id,
                   output_type: 'text',

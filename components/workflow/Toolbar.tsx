@@ -12,9 +12,10 @@ import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import ImageSearchIcon from '@mui/icons-material/ImageSearch';
 import PersonIcon from '@mui/icons-material/Person';
+import EditIcon from '@mui/icons-material/Edit';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -211,6 +212,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           Seedream4 画像生成
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<EditIcon />}
+          onClick={() => onAddNode('rapid')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#9c27b0',
+            '&:hover': {
+              bgcolor: '#7b1fa2',
+            },
+          }}
+        >
+          Rapid 画像編集
         </Button>
       </Stack>
     </Paper>
