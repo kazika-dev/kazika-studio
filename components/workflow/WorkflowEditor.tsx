@@ -28,6 +28,7 @@ import HiggsfieldNode from './HiggsfieldNode';
 import Seedream4Node from './Seedream4Node';
 import CharacterSheetNode from './CharacterSheetNode';
 import RapidNode from './RapidNode';
+import ComfyUINode from './ComfyUINode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
@@ -37,6 +38,7 @@ import HiggsfieldNodeSettings from './HiggsfieldNodeSettings';
 import Seedream4NodeSettings from './Seedream4NodeSettings';
 import CharacterSheetNodeSettings from './CharacterSheetNodeSettings';
 import RapidNodeSettings from './RapidNodeSettings';
+import ComfyUINodeSettings from './ComfyUINodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 import FormConfigEditor from './FormConfigEditor';
@@ -84,6 +86,7 @@ const nodeTypes = {
   seedream4: Seedream4Node,
   characterSheet: CharacterSheetNode,
   rapid: RapidNode,
+  comfyui: ComfyUINode,
 };
 
 const initialNodes: Node[] = [
@@ -256,16 +259,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : type === 'comfyui' ? 'comfyui' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'comfyui' ? 'ComfyUI ワークフロー' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -313,6 +316,13 @@ export default function WorkflowEditor() {
           } : type === 'rapid' ? {
             name: `Rapid ノード${nodes.length + 1}`,
             description: 'ComfyUI Rapidで画像を編集します（要：画像入力）',
+            prompt: '',
+            status: 'idle',
+          } : type === 'comfyui' ? {
+            name: `ComfyUI ノード${nodes.length + 1}`,
+            description: 'ComfyUIワークフローを実行します',
+            workflowName: '',
+            workflowJson: null,
             prompt: '',
             status: 'idle',
           } : {
@@ -585,6 +595,14 @@ export default function WorkflowEditor() {
               edges={edges}
               onClose={() => setSelectedNode(null)}
               onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.type === 'comfyui' ? (
+            <ComfyUINodeSettings
+              nodeId={selectedNode.id}
+              config={selectedNode.data.config}
+              onUpdate={updateNodeConfig}
+              onClose={() => setSelectedNode(null)}
               onDelete={deleteNode}
             />
           ) : (

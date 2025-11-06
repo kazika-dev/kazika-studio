@@ -3,7 +3,7 @@ import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 export async function POST(request: NextRequest) {
   try {
-    const { base64Data, mimeType, fileName } = await request.json();
+    const { base64Data, mimeType, fileName, folder } = await request.json();
 
     if (!base64Data || !mimeType) {
       return NextResponse.json(
@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
     const storagePath = await uploadImageToStorage(
       base64Data,
       mimeType,
-      fileName
+      fileName,
+      folder
     );
 
     return NextResponse.json({

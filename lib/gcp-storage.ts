@@ -36,12 +36,14 @@ export function getStorageClient(): Storage {
  * @param base64Data Base64エンコードされたファイルデータ
  * @param mimeType ファイルのMIMEタイプ（例: 'image/png', 'video/mp4', 'audio/mpeg'）
  * @param fileName ファイル名（省略時は自動生成）
- * @returns 公開URL
+ * @param customFolder カスタムフォルダ名（省略時はMIMEタイプから自動判定）
+ * @returns ファイルパス
  */
 export async function uploadImageToStorage(
   base64Data: string,
   mimeType: string,
-  fileName?: string
+  fileName?: string,
+  customFolder?: string
 ): Promise<string> {
   const storage = getStorageClient();
   const bucketName = process.env.GCP_STORAGE_BUCKET;
@@ -58,14 +60,21 @@ export async function uploadImageToStorage(
   const extension = mimeType.split('/')[1] || 'bin';
   const finalFileName = fileName || `output-${timestamp}-${randomStr}.${extension}`;
 
-  // MIMEタイプに応じてフォルダを分ける
-  let folder = 'files';
-  if (mimeType.startsWith('image/')) {
-    folder = 'images';
-  } else if (mimeType.startsWith('video/')) {
-    folder = 'videos';
-  } else if (mimeType.startsWith('audio/')) {
-    folder = 'audio';
+  // フォルダを決定
+  let folder: string;
+  if (customFolder) {
+    // カスタムフォルダが指定されている場合はそれを使用
+    folder = customFolder;
+  } else {
+    // MIMEタイプに応じてフォルダを分ける
+    folder = 'files';
+    if (mimeType.startsWith('image/')) {
+      folder = 'images';
+    } else if (mimeType.startsWith('video/')) {
+      folder = 'videos';
+    } else if (mimeType.startsWith('audio/')) {
+      folder = 'audio';
+    }
   }
 
   const file = bucket.file(`${folder}/${finalFileName}`);

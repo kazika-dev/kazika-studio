@@ -875,6 +875,84 @@ async function executeNode(
         }
         break;
 
+      case 'comfyui':
+        // ComfyUIワークフロー処理ノード（キューに追加）
+        const comfyuiWorkflowName = node.data.config?.workflowName;
+        const comfyuiWorkflowJson = node.data.config?.workflowJson;
+        const comfyuiPrompt = replaceVariables(node.data.config?.prompt || '', inputData);
+
+        if (!comfyuiWorkflowName) {
+          return {
+            success: false,
+            error: 'ComfyUIワークフロー名が設定されていません',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        if (!comfyuiWorkflowJson) {
+          return {
+            success: false,
+            error: 'ComfyUIワークフロー定義が設定されていません',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // 入力画像を収集
+        const comfyuiInputImages = extractImagesFromInput(inputData);
+
+        try {
+          console.log('Creating ComfyUI queue item:', {
+            workflowName: comfyuiWorkflowName,
+            prompt: comfyuiPrompt.substring(0, 100),
+            imageCount: comfyuiInputImages.length,
+          });
+
+          const comfyuiResponse = await fetch(getApiUrl('/api/comfyui/queue'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              workflowName: comfyuiWorkflowName,
+              workflowJson: comfyuiWorkflowJson,
+              prompt: comfyuiPrompt,
+              inputImages: comfyuiInputImages,
+            }),
+          });
+
+          const comfyuiResult = await comfyuiResponse.json();
+
+          if (!comfyuiResponse.ok) {
+            throw new Error(comfyuiResult.error || 'Failed to create ComfyUI queue item');
+          }
+
+          output = {
+            queueItemId: comfyuiResult.queueItemId,
+            status: comfyuiResult.status,
+            workflowName: comfyuiWorkflowName,
+            nodeId: node.id,
+          };
+
+          requestBody = {
+            workflowName: comfyuiWorkflowName,
+            prompt: comfyuiPrompt,
+            imageCount: comfyuiInputImages.length,
+          };
+
+          console.log('ComfyUI queue item created:', comfyuiResult.queueItemId);
+        } catch (error: any) {
+          console.error('ComfyUI queue error:', error);
+          return {
+            success: false,
+            error: `ComfyUIキューへの追加に失敗しました: ${error.message}`,
+            output: null,
+            nodeId: node.id,
+          };
+        }
+        break;
+
       default:
         throw new Error(`Unknown node type: ${nodeType}`);
     }

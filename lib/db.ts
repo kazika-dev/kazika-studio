@@ -634,7 +634,7 @@ export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
  */
 export async function getCharacterSheetsByUserId(userId: string) {
   const result = await query(
-    'SELECT * FROM public.character_sheets WHERE user_id = $1 ORDER BY created_at DESC',
+    'SELECT * FROM kazikastudio.character_sheets WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
   return result.rows;
@@ -645,7 +645,7 @@ export async function getCharacterSheetsByUserId(userId: string) {
  */
 export async function getCharacterSheetById(id: number) {
   const result = await query(
-    'SELECT * FROM public.character_sheets WHERE id = $1',
+    'SELECT * FROM kazikastudio.character_sheets WHERE id = $1',
     [id]
   );
 
@@ -667,7 +667,7 @@ export async function createCharacterSheet(data: {
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO public.character_sheets (user_id, name, image_url, description, metadata)
+    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, metadata)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
     [
@@ -716,7 +716,7 @@ export async function updateCharacterSheet(id: number, data: {
   }
 
   values.push(id);
-  const sql = `UPDATE public.character_sheets SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+  const sql = `UPDATE kazikastudio.character_sheets SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
 
   const result = await query(sql, values);
 
@@ -732,8 +732,181 @@ export async function updateCharacterSheet(id: number, data: {
  */
 export async function deleteCharacterSheet(id: number) {
   const result = await query(
-    'DELETE FROM public.character_sheets WHERE id = $1 RETURNING *',
+    'DELETE FROM kazikastudio.character_sheets WHERE id = $1 RETURNING *',
     [id]
   );
   return result.rows.length > 0;
+}
+
+// =====================================================
+// ComfyUI Queue関連の関数
+// =====================================================
+
+/**
+ * ComfyUIキューアイテムを作成
+ */
+export async function createComfyUIQueueItem(data: {
+  user_id: string;
+  comfyui_workflow_name: string;
+  workflow_json: any;
+  prompt?: string;
+  img_gcp_storage_paths?: string[];
+  priority?: number;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.comfyui_queue
+     (user_id, comfyui_workflow_name, workflow_json, prompt, img_gcp_storage_paths, priority, metadata)
+     VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.comfyui_workflow_name,
+      JSON.stringify(data.workflow_json),
+      data.prompt || null,
+      JSON.stringify(data.img_gcp_storage_paths || []),
+      data.priority || 0,
+      JSON.stringify(data.metadata || {}),
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ComfyUIキューアイテムをIDで取得
+ */
+export async function getComfyUIQueueItemById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.comfyui_queue WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ユーザーのComfyUIキューアイテムを取得
+ */
+export async function getComfyUIQueueItemsByUserId(userId: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.comfyui_queue WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * 次の処理待ちComfyUIキューアイテムを取得（優先度順）
+ */
+export async function getNextPendingComfyUIQueueItem() {
+  const result = await query(
+    `SELECT * FROM kazikastudio.comfyui_queue
+     WHERE status = 'pending'
+     ORDER BY priority DESC, created_at ASC
+     LIMIT 1`
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ComfyUIキューアイテムを更新
+ */
+export async function updateComfyUIQueueItem(id: number, data: {
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  comfyui_prompt_id?: string;
+  started_at?: Date;
+  completed_at?: Date;
+  output_gcp_storage_paths?: string[];
+  output_data?: any;
+  error_message?: string | null;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.status !== undefined) {
+    updates.push(`status = $${paramIndex++}`);
+    values.push(data.status);
+  }
+  if (data.comfyui_prompt_id !== undefined) {
+    updates.push(`comfyui_prompt_id = $${paramIndex++}`);
+    values.push(data.comfyui_prompt_id);
+  }
+  if (data.started_at !== undefined) {
+    updates.push(`started_at = $${paramIndex++}`);
+    values.push(data.started_at);
+  }
+  if (data.completed_at !== undefined) {
+    updates.push(`completed_at = $${paramIndex++}`);
+    values.push(data.completed_at);
+  }
+  if (data.output_gcp_storage_paths !== undefined) {
+    updates.push(`output_gcp_storage_paths = $${paramIndex++}::jsonb`);
+    values.push(JSON.stringify(data.output_gcp_storage_paths));
+  }
+  if (data.output_data !== undefined) {
+    updates.push(`output_data = $${paramIndex++}::jsonb`);
+    values.push(JSON.stringify(data.output_data));
+  }
+  if (data.error_message !== undefined) {
+    updates.push(`error_message = $${paramIndex++}`);
+    values.push(data.error_message);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}::jsonb`);
+    values.push(JSON.stringify(data.metadata));
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.comfyui_queue SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ComfyUIキューアイテムを削除
+ */
+export async function deleteComfyUIQueueItem(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.comfyui_queue WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * ComfyUI prompt_idでキューアイテムを取得
+ */
+export async function getComfyUIQueueItemByPromptId(promptId: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.comfyui_queue WHERE comfyui_prompt_id = $1',
+    [promptId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
 }

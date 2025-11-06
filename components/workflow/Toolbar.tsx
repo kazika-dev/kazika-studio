@@ -13,9 +13,10 @@ import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import ImageSearchIcon from '@mui/icons-material/ImageSearch';
 import PersonIcon from '@mui/icons-material/Person';
 import EditIcon from '@mui/icons-material/Edit';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -230,6 +231,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           Rapid 画像編集
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<AccountTreeIcon />}
+          onClick={() => onAddNode('comfyui')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#4caf50',
+            '&:hover': {
+              bgcolor: '#45a049',
+            },
+          }}
+        >
+          ComfyUI ワークフロー
         </Button>
       </Stack>
     </Paper>

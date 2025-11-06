@@ -61,6 +61,7 @@ export default function NewCharacterSheetPage() {
         base64Data,
         mimeType: file.type,
         fileName: file.name,
+        folder: 'charactersheets', // キャラクターシート専用フォルダ
       }),
     });
 
