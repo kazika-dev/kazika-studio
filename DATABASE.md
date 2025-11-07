@@ -32,6 +32,48 @@
 
 ---
 
+## GCP Storage フォルダ構造
+
+画像やファイルは用途に応じて以下のフォルダに保存されます：
+
+```
+GCP Storage Bucket
+├── charactersheets/   ← キャラクターシート画像（character-sheetsページからアップロード）
+│   ├── output-1234567890-abc123.png
+│   └── output-1234567891-def456.jpg
+├── reference/         ← ワークフロー参照画像（imageInputノード、characterSheetノード）
+│   ├── character-sheet-1.jpg
+│   ├── output-xxx.png
+│   └── reference-image.jpg
+├── images/            ← AI生成画像・その他の画像（Rapid、Nanobanaなど）
+│   └── rapid-xxx.png
+├── videos/            ← 動画ファイル
+├── audio/             ← 音声ファイル
+└── files/             ← その他のファイル
+```
+
+### フォルダの使い分け
+
+| フォルダ | 用途 | 保存形式 |
+|---------|------|---------|
+| `charactersheets/` | キャラクターシートページからアップロードした画像 | パスのみDBに保存 |
+| `reference/` | **ワークフローで参照される画像**（入力画像） | **パスのみDBに保存** |
+| `images/` | AI生成された画像、その他の画像 | パスとbase64データをDBに保存 |
+| `videos/` | 動画ファイル | パスのみDBに保存 |
+| `audio/` | 音声ファイル | パスのみDBに保存 |
+
+**重要**:
+- ワークフローで参照される画像は`/reference`フォルダに保存されます
+  - imageInputノード: ワークフローエディタで直接アップロードした画像
+  - characterSheetノード: キャラクターシートから参照される画像
+  - studiosのワークフローステップ入力: DynamicFormFieldでアップロードした画像
+  - `/form`ページのワークフロー入力: DynamicFormFieldでアップロードした画像
+- データベースにはパス（例：`reference/img.png`）として保存されます
+- 使用時にGCP Storageから自動的にダウンロードされます
+- Base64データとしてDBに保存されることはありません
+
+---
+
 ## データベース接続設定
 
 ### 環境変数の設定

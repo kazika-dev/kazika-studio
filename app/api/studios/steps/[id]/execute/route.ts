@@ -590,13 +590,34 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
       const { fieldName, fieldValue, fieldType, storagePath } = imageFields[index];
       console.log(`Assigning image field ${fieldName} to imageInput node ${node.id}`);
 
-      if (fieldType === 'images' && Array.isArray(fieldValue) && fieldValue.length > 0) {
+      // fieldValueがstoragePathの文字列の場合（DynamicFormFieldで保存された画像）
+      if (typeof fieldValue === 'string') {
+        // storagePathを設定（executorでGCP Storageから取得）
         node.data.config = {
           ...node.data.config,
-          imageData: fieldValue[0],
-          images: fieldValue,
+          storagePath: fieldValue,
         };
-      } else {
+        console.log(`  Set storagePath: ${fieldValue}`);
+      } else if (fieldType === 'images' && Array.isArray(fieldValue) && fieldValue.length > 0) {
+        // 配列の場合、各要素がstoragePathの文字列かimageDataオブジェクトか判定
+        const isStoragePaths = fieldValue.every(item => typeof item === 'string');
+        if (isStoragePaths) {
+          // storagePathの配列の場合、最初のpathを設定
+          node.data.config = {
+            ...node.data.config,
+            storagePath: fieldValue[0],
+          };
+          console.log(`  Set storagePath from array: ${fieldValue[0]}`);
+        } else {
+          // imageDataオブジェクトの配列の場合（レガシー）
+          node.data.config = {
+            ...node.data.config,
+            imageData: fieldValue[0],
+            images: fieldValue,
+          };
+        }
+      } else if (fieldValue && typeof fieldValue === 'object' && fieldValue.mimeType && fieldValue.data) {
+        // imageDataオブジェクトの場合（レガシー）
         node.data.config = {
           ...node.data.config,
           imageData: fieldValue,
@@ -604,7 +625,7 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
       }
 
       // storagePathがある場合は設定（前のステップの画像）
-      if (storagePath) {
+      if (storagePath && !node.data.config.storagePath) {
         node.data.config = {
           ...node.data.config,
           storagePath: storagePath,

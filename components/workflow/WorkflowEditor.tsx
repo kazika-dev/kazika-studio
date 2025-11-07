@@ -29,6 +29,7 @@ import Seedream4Node from './Seedream4Node';
 import CharacterSheetNode from './CharacterSheetNode';
 import RapidNode from './RapidNode';
 import ComfyUINode from './ComfyUINode';
+import PopcornNode from './PopcornNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
@@ -39,6 +40,7 @@ import Seedream4NodeSettings from './Seedream4NodeSettings';
 import CharacterSheetNodeSettings from './CharacterSheetNodeSettings';
 import RapidNodeSettings from './RapidNodeSettings';
 import ComfyUINodeSettings from './ComfyUINodeSettings';
+import PopcornNodeSettings from './PopcornNodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 import FormConfigEditor from './FormConfigEditor';
@@ -87,6 +89,7 @@ const nodeTypes = {
   characterSheet: CharacterSheetNode,
   rapid: RapidNode,
   comfyui: ComfyUINode,
+  popcorn: PopcornNode,
 };
 
 const initialNodes: Node[] = [
@@ -259,16 +262,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : type === 'comfyui' ? 'comfyui' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : type === 'comfyui' ? 'comfyui' : type === 'popcorn' ? 'popcorn' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'comfyui' ? 'ComfyUI ワークフロー' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'comfyui' ? 'ComfyUI ワークフロー' : type === 'popcorn' ? 'Popcorn 画像生成' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -324,6 +327,16 @@ export default function WorkflowEditor() {
             workflowName: '',
             workflowJson: null,
             prompt: '',
+            status: 'idle',
+          } : type === 'popcorn' ? {
+            name: `Popcorn ノード${nodes.length + 1}`,
+            description: 'Popcornで画像を生成します',
+            prompt: '',
+            aspectRatio: '3:4',
+            count: 1,
+            quality: '720p',
+            presetId: '',
+            enhancePrompt: false,
             status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
@@ -567,6 +580,15 @@ export default function WorkflowEditor() {
             />
           ) : selectedNode.data.type === 'seedream4' ? (
             <Seedream4NodeSettings
+              node={selectedNode}
+              nodes={nodes}
+              edges={edges}
+              onClose={() => setSelectedNode(null)}
+              onUpdate={updateNodeConfig}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.data.type === 'popcorn' ? (
+            <PopcornNodeSettings
               node={selectedNode}
               nodes={nodes}
               edges={edges}

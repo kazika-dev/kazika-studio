@@ -65,6 +65,7 @@ export async function uploadImageToStorage(
   if (customFolder) {
     // カスタムフォルダが指定されている場合はそれを使用
     folder = customFolder;
+    console.log('[gcp-storage] Using custom folder:', folder);
   } else {
     // MIMEタイプに応じてフォルダを分ける
     folder = 'files';
@@ -75,9 +76,13 @@ export async function uploadImageToStorage(
     } else if (mimeType.startsWith('audio/')) {
       folder = 'audio';
     }
+    console.log('[gcp-storage] Auto-detected folder from MIME type:', folder);
   }
 
-  const file = bucket.file(`${folder}/${finalFileName}`);
+  const filePath = `${folder}/${finalFileName}`;
+  console.log('[gcp-storage] Uploading to path:', filePath);
+
+  const file = bucket.file(filePath);
 
   // Base64をBufferに変換
   const buffer = Buffer.from(base64Data, 'base64');
@@ -90,9 +95,9 @@ export async function uploadImageToStorage(
     },
   });
 
-  // ファイルパスを返す（公開URLではなく内部パス）
-  const filePath = `${folder}/${finalFileName}`;
+  console.log('[gcp-storage] Upload completed successfully');
 
+  // ファイルパスを返す（公開URLではなく内部パス）
   return filePath;
 }
 

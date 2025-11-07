@@ -83,6 +83,8 @@ export default function EditCharacterSheetPage() {
   };
 
   const uploadImage = async (file: File): Promise<string> => {
+    console.log('[edit] Uploading image to charactersheets folder:', file.name);
+
     // FileをBase64に変換
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -115,6 +117,7 @@ export default function EditCharacterSheetPage() {
       throw new Error(data.error || '画像のアップロードに失敗しました');
     }
 
+    console.log('[edit] Image uploaded successfully:', data.storagePath);
     return data.storagePath;
   };
 
@@ -133,9 +136,12 @@ export default function EditCharacterSheetPage() {
 
       // 画像が変更された場合はアップロード
       if (imageFile) {
+        console.log('[edit] New image detected, uploading...', imageFile.name);
         setUploading(true);
         imageUrl = await uploadImage(imageFile);
         setUploading(false);
+      } else {
+        console.log('[edit] No new image, using existing URL:', imageUrl);
       }
 
       // キャラクターシートを更新

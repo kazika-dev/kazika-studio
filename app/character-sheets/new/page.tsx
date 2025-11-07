@@ -39,6 +39,8 @@ export default function NewCharacterSheetPage() {
   };
 
   const uploadImage = async (file: File): Promise<string> => {
+    console.log('[new] Uploading image to charactersheets folder:', file.name);
+
     // FileをBase64に変換
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -71,6 +73,7 @@ export default function NewCharacterSheetPage() {
       throw new Error(data.error || '画像のアップロードに失敗しました');
     }
 
+    console.log('[new] Image uploaded successfully:', data.storagePath);
     return data.storagePath;
   };
 

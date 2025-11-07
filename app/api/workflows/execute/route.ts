@@ -158,15 +158,43 @@ export async function POST(request: NextRequest) {
 
           if (inputs[fieldName] !== undefined) {
             console.log(`✓ Setting imageInput node ${nodeId} from field ${fieldName}`);
-            // 単一画像の場合はそのまま、配列の場合は最初の画像を使用
-            const imageData = Array.isArray(inputs[fieldName])
-              ? inputs[fieldName][0]
-              : inputs[fieldName];
 
-            node.data.config = {
-              ...node.data.config,
-              imageData: imageData,
-            };
+            const fieldValue = inputs[fieldName];
+
+            // fieldValueがstoragePathの文字列の場合（DynamicFormFieldで保存された画像）
+            if (typeof fieldValue === 'string') {
+              // storagePathを設定（executorでGCP Storageから取得）
+              node.data.config = {
+                ...node.data.config,
+                storagePath: fieldValue,
+              };
+              console.log(`  Set storagePath: ${fieldValue}`);
+            }
+            // 配列の場合（複数画像）
+            else if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+              const isStoragePaths = fieldValue.every(item => typeof item === 'string');
+              if (isStoragePaths) {
+                // storagePathの配列の場合、最初のpathを設定
+                node.data.config = {
+                  ...node.data.config,
+                  storagePath: fieldValue[0],
+                };
+                console.log(`  Set storagePath from array: ${fieldValue[0]}`);
+              } else {
+                // imageDataオブジェクトの配列の場合（レガシー）
+                node.data.config = {
+                  ...node.data.config,
+                  imageData: fieldValue[0],
+                };
+              }
+            }
+            // imageDataオブジェクトの場合（レガシー）
+            else if (fieldValue && typeof fieldValue === 'object' && fieldValue.mimeType && fieldValue.data) {
+              node.data.config = {
+                ...node.data.config,
+                imageData: fieldValue,
+              };
+            }
           }
           // 後方互換性: inputs.images も確認
           else if (inputs.images) {
@@ -175,10 +203,21 @@ export async function POST(request: NextRequest) {
 
             if (nodeIndex >= 0 && inputs.images[nodeIndex]) {
               console.log(`✓ Setting imageInput node ${nodeId} from inputs.images[${nodeIndex}]`);
-              node.data.config = {
-                ...node.data.config,
-                imageData: inputs.images[nodeIndex],
-              };
+
+              const imageValue = inputs.images[nodeIndex];
+
+              // storagePathの文字列かimageDataオブジェクトか判定
+              if (typeof imageValue === 'string') {
+                node.data.config = {
+                  ...node.data.config,
+                  storagePath: imageValue,
+                };
+              } else {
+                node.data.config = {
+                  ...node.data.config,
+                  imageData: imageValue,
+                };
+              }
             } else {
               console.log(`✗ Image not found at index ${nodeIndex} for imageInput node ${nodeId}`);
             }
@@ -326,6 +365,36 @@ export async function POST(request: NextRequest) {
         error: nodeResult.error,
         requestBody: nodeResult.requestBody, // APIに送信したリクエストボディ
       };
+
+      // 実行結果をノードの設定に反映（画像生成ノードなど）
+      if (node && nodeResult.success && nodeResult.output) {
+        const output = nodeResult.output;
+
+        // Popcornノード: imageUrlsを設定に反映
+        if (node.data.type === 'popcorn' && output.imageUrls) {
+          node.data.config = {
+            ...node.data.config,
+            imageUrls: output.imageUrls,
+            status: 'success',
+          };
+          console.log(`Updated Popcorn node ${nodeId} config with ${output.imageUrls.length} images`);
+        }
+        // 他の画像生成ノードも同様に処理
+        else if (node.data.type === 'nanobana' && output.imageData) {
+          node.data.config = {
+            ...node.data.config,
+            imageData: output.imageData,
+            status: 'success',
+          };
+        }
+        else if (node.data.type === 'seedream4' && output.imageUrl) {
+          node.data.config = {
+            ...node.data.config,
+            imageUrl: output.imageUrl,
+            status: 'success',
+          };
+        }
+      }
     });
 
     // 実行結果をoutputsテーブルに保存（最終ノードのみ）
@@ -478,6 +547,7 @@ export async function POST(request: NextRequest) {
       workflowId,
       workflowName: workflow.name,
       outputs,
+      nodes, // 更新されたノード設定を返す
       executionTime: Date.now(),
     });
 

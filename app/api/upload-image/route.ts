@@ -5,6 +5,13 @@ export async function POST(request: NextRequest) {
   try {
     const { base64Data, mimeType, fileName, folder } = await request.json();
 
+    console.log('[upload-image] Upload request received:', {
+      mimeType,
+      fileName,
+      folder,
+      base64DataLength: base64Data?.length
+    });
+
     if (!base64Data || !mimeType) {
       return NextResponse.json(
         { error: 'base64Data and mimeType are required' },
@@ -19,6 +26,8 @@ export async function POST(request: NextRequest) {
       fileName,
       folder
     );
+
+    console.log('[upload-image] Upload successful:', { storagePath });
 
     return NextResponse.json({
       success: true,

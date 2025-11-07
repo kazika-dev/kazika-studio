@@ -39,52 +39,82 @@ interface DynamicFormFieldProps {
 
 export default function DynamicFormField({ config, value, onChange }: DynamicFormFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
     const maxImages = config.maxImages || 1;
     const currentCount = config.type === 'images' ? (value?.length || 0) : (value ? 1 : 0);
 
-    const newImages: Array<{ mimeType: string; data: string }> = [];
+    if (currentCount >= maxImages) {
+      alert(`最大${maxImages}枚まで選択できます`);
+      return;
+    }
 
-    Array.from(files).forEach((file, index) => {
-      if (currentCount + newImages.length >= maxImages) {
-        return;
-      }
+    setUploading(true);
 
-      if (!file.type.startsWith('image/')) {
-        alert('画像ファイルのみアップロードできます');
-        return;
-      }
+    try {
+      const uploadPromises = Array.from(files).slice(0, maxImages - currentCount).map(async (file) => {
+        if (!file.type.startsWith('image/')) {
+          throw new Error(`${file.name}は画像ファイルではありません`);
+        }
 
-      if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} のサイズが5MBを超えています`);
-        return;
-      }
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error(`${file.name}のサイズが5MBを超えています`);
+        }
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string;
-        const base64Data = base64.split(',')[1];
-
-        newImages.push({
-          mimeType: file.type,
-          data: base64Data,
+        // FileをBase64に変換
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const base64 = e.target?.result as string;
+            resolve(base64.split(',')[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
         });
 
-        // 全ての画像の読み込みが完了したら state を更新
-        if (newImages.length === Math.min(files.length, maxImages - currentCount)) {
-          if (config.type === 'images') {
-            onChange([...(value || []), ...newImages]);
-          } else {
-            onChange(newImages[0]);
-          }
+        // GCP Storageにアップロード（/referenceフォルダに保存）
+        const uploadResponse = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            base64Data,
+            mimeType: file.type,
+            fileName: file.name,
+            folder: 'reference', // ワークフロー参照画像は/referenceフォルダに保存
+          }),
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        if (!uploadData.success) {
+          throw new Error(uploadData.error || '画像のアップロードに失敗しました');
         }
-      };
-      reader.readAsDataURL(file);
-    });
+
+        console.log('[DynamicFormField] Image uploaded to GCP Storage:', uploadData.storagePath);
+
+        // storagePathを返す（base64データは保存しない）
+        return uploadData.storagePath;
+      });
+
+      const uploadedPaths = await Promise.all(uploadPromises);
+
+      if (config.type === 'images') {
+        onChange([...(value || []), ...uploadedPaths]);
+      } else {
+        onChange(uploadedPaths[0]);
+      }
+    } catch (error: any) {
+      console.error('Failed to upload image:', error);
+      alert(`画像のアップロードに失敗しました: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleRemoveImage = (index: number) => {
@@ -139,15 +169,16 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
           <Button
             variant="outlined"
             fullWidth
-            startIcon={<UploadIcon />}
+            startIcon={uploading ? <CircularProgress size={20} /> : <UploadIcon />}
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
             sx={{
               py: 1.5,
               borderStyle: 'dashed',
               borderWidth: 2,
             }}
           >
-            画像を選択
+            {uploading ? 'アップロード中...' : '画像を選択'}
           </Button>
         )}
 
@@ -156,6 +187,7 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
             <IconButton
               size="small"
               onClick={() => handleRemoveImage(0)}
+              disabled={uploading}
               sx={{
                 position: 'absolute',
                 top: 8,
@@ -167,7 +199,7 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
               <CloseIcon fontSize="small" />
             </IconButton>
             <img
-              src={`data:${value.mimeType};base64,${value.data}`}
+              src={`/api/storage/${value}`}
               alt="Upload"
               style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '4px' }}
             />
@@ -205,26 +237,27 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
         <Button
           variant="outlined"
           fullWidth
-          startIcon={<UploadIcon />}
+          startIcon={uploading ? <CircularProgress size={20} /> : <UploadIcon />}
           onClick={() => fileInputRef.current?.click()}
-          disabled={images.length >= maxImages}
+          disabled={images.length >= maxImages || uploading}
           sx={{
             py: 1.5,
             borderStyle: 'dashed',
             borderWidth: 2,
           }}
         >
-          画像を追加 ({images.length}/{maxImages})
+          {uploading ? 'アップロード中...' : `画像を追加 (${images.length}/${maxImages})`}
         </Button>
 
         {images.length > 0 && (
           <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            {images.map((img: any, index: number) => (
+            {images.map((imagePath: string, index: number) => (
               <Box key={index} sx={{ width: 'calc(50% - 8px)', position: 'relative' }}>
                 <Paper variant="outlined" sx={{ p: 1 }}>
                   <IconButton
                     size="small"
                     onClick={() => handleRemoveImage(index)}
+                    disabled={uploading}
                     sx={{
                       position: 'absolute',
                       top: 8,
@@ -236,7 +269,7 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
                     <CloseIcon fontSize="small" />
                   </IconButton>
                   <img
-                    src={`data:${img.mimeType};base64,${img.data}`}
+                    src={`/api/storage/${imagePath}`}
                     alt={`Upload ${index + 1}`}
                     style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px' }}
                   />

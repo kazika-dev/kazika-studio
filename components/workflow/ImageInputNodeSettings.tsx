@@ -35,6 +35,8 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
   const [imageData, setImageData] = useState<{ mimeType: string; data: string } | null>(
     node.data.config?.imageData || null
   );
+  const [storagePath, setStoragePath] = useState<string | null>(node.data.config?.storagePath || null);
+  const [uploading, setUploading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,9 +44,10 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
     setName(node.data.config?.name || '');
     setDescription(node.data.config?.description || '');
     setImageData(node.data.config?.imageData || null);
+    setStoragePath(node.data.config?.storagePath || null);
   }, [node]);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -60,25 +63,65 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = e.target?.result as string;
-      // data:image/png;base64, の部分を削除
-      const base64Data = base64.split(',')[1];
+    setUploading(true);
 
+    try {
+      // FileをBase64に変換
+      const reader = new FileReader();
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onload = (e) => {
+          const base64 = e.target?.result as string;
+          // data:image/png;base64, の部分を削除
+          resolve(base64.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // GCP Storageにアップロード（/referenceフォルダに保存）
+      const uploadResponse = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          base64Data,
+          mimeType: file.type,
+          fileName: file.name,
+          folder: 'reference', // ワークフロー参照画像は/referenceフォルダに保存
+        }),
+      });
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadData.success) {
+        throw new Error(uploadData.error || '画像のアップロードに失敗しました');
+      }
+
+      console.log('[ImageInputNode] Image uploaded to GCP Storage:', uploadData.storagePath);
+
+      // storagePathを保存（base64データは保存しない）
+      setStoragePath(uploadData.storagePath);
+
+      // プレビュー用に一時的にimageDataも保持
       setImageData({
         mimeType: file.type,
         data: base64Data,
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (error: any) {
+      console.error('Failed to upload image:', error);
+      alert(`画像のアップロードに失敗しました: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSave = () => {
+    // storagePathのみ保存（base64のimageDataは保存しない）
     onUpdate(node.id, {
       name,
       description,
-      imageData,
+      storagePath,
     });
 
     setSaveSuccess(true);
@@ -87,6 +130,7 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
 
   const handleRemoveImage = () => {
     setImageData(null);
+    setStoragePath(null);
   };
 
   return (
@@ -206,13 +250,14 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
             onChange={handleImageUpload}
           />
 
-          {!imageData && (
+          {!imageData && !storagePath && (
             <Button
               variant="outlined"
               fullWidth
               size="large"
               startIcon={<UploadIcon />}
               onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
               sx={{
                 py: 3,
                 textTransform: 'none',
@@ -220,11 +265,11 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
                 borderWidth: 2,
               }}
             >
-              画像をアップロード
+              {uploading ? 'アップロード中...' : '画像をアップロード'}
             </Button>
           )}
 
-          {imageData && (
+          {(imageData || storagePath) && (
             <Box>
               <Paper
                 variant="outlined"
@@ -238,7 +283,13 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
                 }}
               >
                 <img
-                  src={`data:${imageData.mimeType};base64,${imageData.data}`}
+                  src={
+                    imageData
+                      ? `data:${imageData.mimeType};base64,${imageData.data}`
+                      : storagePath
+                      ? `/api/storage/${storagePath}`
+                      : ''
+                  }
                   alt="Upload"
                   style={{
                     maxWidth: '100%',
@@ -253,6 +304,7 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
                     size="small"
                     startIcon={<UploadIcon />}
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
                   >
                     画像を変更
                   </Button>
@@ -261,6 +313,7 @@ export default function ImageInputNodeSettings({ node, onClose, onUpdate, onDele
                     size="small"
                     color="error"
                     onClick={handleRemoveImage}
+                    disabled={uploading}
                   >
                     削除
                   </Button>

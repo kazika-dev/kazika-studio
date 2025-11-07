@@ -188,6 +188,7 @@ async function executeNode(
                 base64Data: base64Data,
                 mimeType: mimeType,
                 fileName: `character-sheet-${characterSheet.id}.jpg`,
+                folder: 'reference', // ワークフロー参照画像は/referenceフォルダに保存
               }),
             });
 
@@ -202,7 +203,8 @@ async function executeNode(
             characterSheetStoragePath = await uploadImageToStorage(
               base64Data,
               mimeType,
-              `character-sheet-${characterSheet.id}.jpg`
+              `character-sheet-${characterSheet.id}.jpg`,
+              'reference' // ワークフロー参照画像は/referenceフォルダに保存
             );
             console.log('Character sheet image uploaded to storage (server-side):', characterSheetStoragePath);
           }
@@ -315,51 +317,55 @@ async function executeNode(
         break;
 
       case 'imageInput':
-        // 画像入力ノードは画像データをそのまま出力
-        const imageInputData = node.data.config?.imageData;
-
-        // 画像データがある場合は、GCP Storageにアップロード
-        // ただし、既にstoragePathが設定されている場合（前のステップから渡された場合）はそれを使用
+        // 画像入力ノードは画像データをGCP Storageから取得
         let imageStoragePath: string | undefined = node.data.config?.storagePath;
+        let imageInputData: { mimeType: string; data: string } | null = null;
 
-        if (!imageStoragePath && imageInputData && imageInputData.data && imageInputData.mimeType) {
+        if (imageStoragePath) {
+          // storagePathがある場合は、GCP Storageから画像を取得してbase64に変換
           try {
-            // クライアントサイドの場合はAPI経由でアップロード
-            if (typeof window !== 'undefined') {
-              const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  base64Data: imageInputData.data,
-                  mimeType: imageInputData.mimeType,
-                }),
-              });
-
-              if (uploadResponse.ok) {
-                const uploadData = await uploadResponse.json();
-                imageStoragePath = uploadData.storagePath;
-                console.log('Image uploaded to storage (client-side):', imageStoragePath);
-              }
+            if (typeof window === 'undefined') {
+              // サーバーサイドの場合は直接GCP Storageから取得
+              console.log('Loading image from GCP Storage (server-side):', imageStoragePath);
+              const { getFileFromStorage } = await import('@/lib/gcp-storage');
+              const { data, contentType } = await getFileFromStorage(imageStoragePath);
+              const base64Data = Buffer.from(data).toString('base64');
+              imageInputData = {
+                mimeType: contentType,
+                data: base64Data,
+              };
             } else {
-              // サーバーサイドの場合は直接uploadImageToStorage関数を呼び出す
-              const { uploadImageToStorage } = await import('@/lib/gcp-storage');
-              imageStoragePath = await uploadImageToStorage(
-                imageInputData.data,
-                imageInputData.mimeType
-              );
-              console.log('Image uploaded to storage (server-side):', imageStoragePath);
+              // クライアントサイドの場合はストレージプロキシAPI経由
+              const imageUrl = `${getApiUrl('')}/api/storage/${imageStoragePath}`;
+              console.log('Fetching image from storage (client-side):', imageUrl);
+
+              const imageResponse = await fetch(imageUrl);
+              if (!imageResponse.ok) {
+                throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
+              }
+
+              const imageBlob = await imageResponse.blob();
+              const imageBuffer = await imageBlob.arrayBuffer();
+              const base64Data = Buffer.from(imageBuffer).toString('base64');
+              imageInputData = {
+                mimeType: imageBlob.type || 'image/jpeg',
+                data: base64Data,
+              };
             }
           } catch (error) {
-            console.error('Failed to upload image to storage:', error);
-            // エラーでも続行（base64データは引き続き利用可能）
+            console.error('Failed to load image from storage:', error);
+            return {
+              success: false,
+              error: `画像の読み込みに失敗しました: ${(error as Error).message}`,
+              output: null,
+              nodeId: node.id,
+            };
           }
-        } else if (imageStoragePath) {
-          console.log('Using existing storagePath from previous step:', imageStoragePath);
         }
 
         output = {
-          imageData: imageInputData || null,
-          storagePath: imageStoragePath, // GCP Storage パス
+          imageData: imageInputData,
+          storagePath: imageStoragePath,
           nodeId: node.id,
         };
         break;
@@ -948,6 +954,125 @@ async function executeNode(
             success: false,
             error: `ComfyUIキューへの追加に失敗しました: ${error.message}`,
             output: null,
+            nodeId: node.id,
+          };
+        }
+        break;
+
+      case 'popcorn':
+        // Popcorn Image Generation APIを呼び出し（Higgsfield text2image/keyframes）
+        let popcornPrompt = replaceVariables(
+          node.data.config?.prompt || '',
+          inputData
+        );
+
+        // 前のノードからのテキスト出力を自動的に追加
+        const popcornInputTexts: string[] = [];
+        Object.values(inputData).forEach((input: any) => {
+          if (input && typeof input === 'object') {
+            // geminiノードからのresponseフィールドを追加
+            if (input.response && typeof input.response === 'string') {
+              popcornInputTexts.push(input.response);
+            }
+            // その他のvalueフィールドを追加
+            else if (input.value !== undefined && input.value !== null) {
+              popcornInputTexts.push(String(input.value));
+            }
+          }
+        });
+
+        // prompt欄の内容と前のノードの出力を組み合わせ
+        if (popcornInputTexts.length > 0) {
+          const combinedText = popcornInputTexts.join(' ');
+          if (popcornPrompt.trim()) {
+            popcornPrompt = (popcornPrompt + ' ' + combinedText).trim();
+          } else {
+            popcornPrompt = combinedText;
+          }
+        }
+
+        // 前のノードから画像のstoragePathをすべて収集（最大8枚、オプショナル）
+        const popcornImagePaths: string[] = [];
+        Object.entries(inputData).forEach(([key, input]: [string, any]) => {
+          // ノードIDベースのキーのみを処理（node-で始まるキー）
+          if (key.startsWith('node-') && input && typeof input === 'object' && input.storagePath) {
+            popcornImagePaths.push(input.storagePath);
+          }
+        });
+
+        // 最大8枚まで
+        const limitedPopcornImagePaths = popcornImagePaths.slice(0, 8);
+
+        console.log('Popcorn execution:', {
+          nodeId: node.id,
+          nodeName: node.data.config?.name,
+          originalPrompt: node.data.config?.prompt,
+          promptLength: (node.data.config?.prompt || '').length,
+          inputData: sanitizeForLog(inputData),
+          inputDataKeys: Object.keys(inputData),
+          popcornInputTexts,
+          finalPrompt: popcornPrompt,
+          finalPromptLength: popcornPrompt.length,
+          imageCount: limitedPopcornImagePaths.length,
+        });
+
+        if (!popcornPrompt.trim()) {
+          throw new Error(`Popcornノード "${node.data.config?.name || node.id}" のプロンプトが空です。プロンプトを入力するか、前のノードから値を受け取ってください。`);
+        }
+
+        // リクエストボディを保存
+        requestBody = {
+          prompt: popcornPrompt,
+          aspectRatio: node.data.config?.aspectRatio || '3:4',
+          count: node.data.config?.count || 1,
+          quality: node.data.config?.quality || '720p',
+          seed: node.data.config?.seed,
+          presetId: node.data.config?.presetId,
+          enhancePrompt: node.data.config?.enhancePrompt || false,
+          inputImagePaths: limitedPopcornImagePaths.length > 0 ? limitedPopcornImagePaths : undefined,
+        };
+
+        const popcornResponse = await fetch(getApiUrl('/api/popcorn'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        const popcornResponseText = await popcornResponse.text();
+        let popcornData;
+
+        try {
+          popcornData = popcornResponseText ? JSON.parse(popcornResponseText) : { error: 'Empty response from Popcorn API' };
+        } catch (parseError) {
+          console.error('Failed to parse Popcorn API response:', popcornResponseText);
+          throw new Error(`Popcorn APIのレスポンスが不正です: ${popcornResponseText.substring(0, 200)}`);
+        }
+
+        // 202 Accepted（処理中）の場合も成功として扱う
+        if (!popcornResponse.ok && popcornResponse.status !== 202) {
+          const error: any = new Error(popcornData.error || 'Popcorn API call failed');
+          error.apiErrorDetails = popcornData; // API全体のエラーレスポンスを保存
+          throw error;
+        }
+
+        // 処理が完了した場合
+        if (popcornData.success && popcornData.imageUrls && popcornData.imageUrls.length > 0) {
+          output = {
+            imageUrls: popcornData.imageUrls,
+            jobSetId: popcornData.jobSetId,
+            count: popcornData.count,
+            nodeId: node.id,
+          };
+        }
+        // 処理中の場合
+        else {
+          output = {
+            status: 'processing',
+            message: popcornData.message || '画像生成中です',
+            jobSetId: popcornData.jobSetId,
+            jobIds: popcornData.jobIds,
+            dashboardUrl: popcornData.dashboardUrl,
+            note: popcornData.note,
             nodeId: node.id,
           };
         }

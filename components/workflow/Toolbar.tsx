@@ -16,7 +16,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -213,6 +213,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           Seedream4 画像生成
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<ImageIcon />}
+          onClick={() => onAddNode('popcorn')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#ff6b6b',
+            '&:hover': {
+              bgcolor: '#ee5a5a',
+            },
+          }}
+        >
+          Popcorn 画像生成
         </Button>
 
         <Button
