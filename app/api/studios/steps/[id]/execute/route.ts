@@ -275,7 +275,7 @@ export async function POST(
               const prompt = nodeResult.requestBody?.prompt || node?.data?.config?.prompt || null;
 
               // ノードタイプに応じて保存
-              if (nodeType === 'nanobana' || nodeType === 'higgsfield' || nodeType === 'seedream4') {
+              if (nodeType === 'nanobana' || nodeType === 'higgsfield' || nodeType === 'seedream4' || nodeType === 'qwenImage') {
                 // 画像生成ノード
                 const contentUrl = output.storagePath || output.imageUrl;
                 if (contentUrl) {
@@ -646,7 +646,7 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
     console.log('Node config before:', JSON.stringify(node.data.config, null, 2));
 
     // プロンプトを持つノード
-    if (['gemini', 'nanobana', 'higgsfield', 'seedream4', 'elevenlabs'].includes(nodeType)) {
+    if (['gemini', 'nanobana', 'higgsfield', 'seedream4', 'elevenlabs', 'qwenImage'].includes(nodeType)) {
       if (inputs.prompt) {
         console.log(`Applying prompt to node ${node.id}`);
         // プロンプトを設定または既存のプロンプトに追加
@@ -720,13 +720,39 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any) {
 
           // promptまたはtextareaフィールドは既存のプロンプトに追加
           if (fieldType === 'prompt' || fieldType === 'textarea' || fieldName === 'prompt') {
-            const existingPrompt = node.data.config?.prompt || '';
-            const newPrompt = existingPrompt ? `${existingPrompt}\n${fieldValue}` : fieldValue;
-            console.log(`  Appending prompt: "${existingPrompt}" + "${fieldValue}" = "${newPrompt}"`);
-            node.data.config = {
-              ...node.data.config,
-              prompt: newPrompt,
+            // フィールド名にノードIDが含まれている場合は、そのノードにのみ適用
+            // 例: gemini_prompt_{nodeId}, nanobana_prompt_{nodeId}, qwenImage_prompt_{nodeId}
+            let shouldApply = true;
+
+            // ノードタイプ別のフィールド名パターンをチェック
+            const nodeTypePatterns: Record<string, string> = {
+              'gemini': 'gemini_prompt_',
+              'nanobana': 'nanobana_prompt_',
+              'higgsfield': 'higgsfield_prompt_',
+              'seedream4': 'seedream4_prompt_',
+              'qwenImage': 'qwenImage_prompt_',
             };
+
+            // フィールド名が特定のノードタイプ用のパターンにマッチするか確認
+            for (const [type, pattern] of Object.entries(nodeTypePatterns)) {
+              if (fieldName.startsWith(pattern)) {
+                // このフィールドは特定のノードタイプ専用
+                // ノードIDがフィールド名に含まれているかチェック
+                shouldApply = fieldName.includes(node.id) && nodeType === type;
+                console.log(`  Field ${fieldName} is for ${type} nodes, shouldApply for ${node.id}: ${shouldApply}`);
+                break;
+              }
+            }
+
+            if (shouldApply) {
+              const existingPrompt = node.data.config?.prompt || '';
+              const newPrompt = existingPrompt ? `${existingPrompt}\n${fieldValue}` : fieldValue;
+              console.log(`  Appending prompt: "${existingPrompt}" + "${fieldValue}" = "${newPrompt}"`);
+              node.data.config = {
+                ...node.data.config,
+                prompt: newPrompt,
+              };
+            }
           }
           // 画像フィールド（imageInputノード以外）
           else if (fieldType === 'image' && nodeType !== 'imageInput') {

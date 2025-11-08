@@ -6,4 +6,9 @@ qwen_image
 このノードがワークフローで最後になった場合
 kazikastudio.comfyui_queues　テーブルを更新してください。
 comfyui_workflow_name カラム　qwen_image を入れる
-prompt　カラムは必須
+
+
+
+/workspaces/kazika-studio/app/api/qwen-image DBに保存したIdを取得して定期的にstatusカラムをチェックしてcompletedになっていたら
+
+output_gcp_storage_pathsから画像パスを取得してGCPstrageからAPIで画像データを取得してqwen_imageの結果フィールドに表示する。

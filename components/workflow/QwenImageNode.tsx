@@ -2,12 +2,13 @@
 
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip, Chip } from '@mui/material';
+import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip, Chip, LinearProgress } from '@mui/material';
 import ImageIcon from '@mui/icons-material/Image';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 interface QwenImageNodeData {
   label: string;
@@ -25,6 +26,8 @@ interface QwenImageNodeData {
 
 function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
   const [isExecuting, setIsExecuting] = useState(false);
+  const [pollingCount, setPollingCount] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   const handleExecute = async () => {
     if (!data.config.prompt || !data.config.prompt.trim()) {
@@ -105,9 +108,15 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
   const pollQueueStatus = async (queueItemId: number) => {
     const maxAttempts = 60; // 5分間（5秒 x 60）
     let attempts = 0;
+    const startTime = Date.now();
 
     const poll = async () => {
       try {
+        attempts++;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setPollingCount(attempts);
+        setElapsedTime(elapsed);
+
         const response = await fetch(`/api/qwen-image/${queueItemId}`);
         const result = await response.json();
 
@@ -127,6 +136,8 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
           });
           window.dispatchEvent(successEvent);
           setIsExecuting(false);
+          setPollingCount(0);
+          setElapsedTime(0);
         } else if (result.status === 'failed') {
           // 失敗
           const errorEvent = new CustomEvent('update-node', {
@@ -143,6 +154,8 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
           });
           window.dispatchEvent(errorEvent);
           setIsExecuting(false);
+          setPollingCount(0);
+          setElapsedTime(0);
         } else if (result.status === 'processing') {
           // 処理中の更新
           const processingEvent = new CustomEvent('update-node', {
@@ -159,7 +172,6 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
           window.dispatchEvent(processingEvent);
 
           // 再度ポーリング
-          attempts++;
           if (attempts < maxAttempts) {
             setTimeout(poll, 5000);
           } else {
@@ -167,7 +179,6 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
           }
         } else {
           // pending or queued - 再度ポーリング
-          attempts++;
           if (attempts < maxAttempts) {
             setTimeout(poll, 5000);
           } else {
@@ -189,6 +200,8 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
         });
         window.dispatchEvent(errorEvent);
         setIsExecuting(false);
+        setPollingCount(0);
+        setElapsedTime(0);
       }
     };
 
@@ -334,6 +347,44 @@ function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
       </Box>
 
       {getStatusChip()}
+
+      {/* ポーリング中の進捗表示 */}
+      {(data.config.status === 'queued' || data.config.status === 'processing') && isExecuting && (
+        <Box sx={{ mt: 1 }}>
+          <LinearProgress
+            sx={{
+              height: 6,
+              borderRadius: 3,
+              bgcolor: 'rgba(156, 39, 176, 0.1)',
+              '& .MuiLinearProgress-bar': {
+                bgcolor: '#9c27b0',
+              }
+            }}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+              <AccessTimeIcon sx={{ fontSize: 10, mr: 0.5, verticalAlign: 'middle' }} />
+              {elapsedTime}秒経過
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+              チェック: {pollingCount}/60
+            </Typography>
+          </Box>
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              mt: 0.5,
+              color: '#9c27b0',
+              fontSize: '0.7rem',
+              textAlign: 'center',
+              fontWeight: 500,
+            }}
+          >
+            {data.config.status === 'queued' ? '画像生成を待機中...' : '画像を生成中...'}
+          </Typography>
+        </Box>
+      )}
 
       {data.config.prompt && (
         <Typography

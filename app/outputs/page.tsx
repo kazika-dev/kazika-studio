@@ -8,6 +8,7 @@ import { OutputType } from '@/types/workflow-output';
 export default function OutputsPage() {
   const [filterType, setFilterType] = useState<OutputType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -28,10 +29,16 @@ export default function OutputsPage() {
           onFilterTypeChange={setFilterType}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
+          showFavoritesOnly={showFavoritesOnly}
+          onShowFavoritesOnlyChange={setShowFavoritesOnly}
         />
 
         {/* Output List */}
-        <OutputList filterType={filterType} searchQuery={searchQuery} />
+        <OutputList
+          filterType={filterType}
+          searchQuery={searchQuery}
+          showFavoritesOnly={showFavoritesOnly}
+        />
       </div>
     </div>
   );

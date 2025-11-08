@@ -129,6 +129,23 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         addedFieldNames.add(fieldName);
       }
     }
+
+    // QwenImageノード
+    if (nodeType === 'qwenImage') {
+      const fieldName = `qwenImage_prompt_${node.id}`;
+      if (!addedFieldNames.has(fieldName)) {
+        fields.push({
+          type: 'textarea',
+          name: fieldName,
+          label: `${nodeName} プロンプト`,
+          placeholder: node.data.config?.prompt || 'Qwen画像生成の指示を入力',
+          required: false,
+          rows: 4,
+          helperText: `${nodeName}で使用するプロンプト`,
+        });
+        addedFieldNames.add(fieldName);
+      }
+    }
   });
 
   return fields;
