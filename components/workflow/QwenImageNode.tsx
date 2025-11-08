@@ -2,31 +2,32 @@
 
 import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip, Chip } from '@mui/material';
+import ImageIcon from '@mui/icons-material/Image';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 
-interface GeminiNodeData {
+interface QwenImageNodeData {
   label: string;
-  type: 'gemini';
+  type: 'qwen_image';
   config: {
     name: string;
     description: string;
     prompt: string;
-    model: string;
-    response?: string;
-    status?: 'idle' | 'loading' | 'success' | 'error';
+    queueItemId?: number; // ID in comfyui_queues table
+    imageUrl?: string; // GCP Storage signed URL
+    status?: 'idle' | 'queued' | 'processing' | 'success' | 'error';
     error?: string;
   };
 }
 
-function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
+function QwenImageNode({ data, selected, id }: NodeProps<QwenImageNodeData>) {
   const [isExecuting, setIsExecuting] = useState(false);
 
   const handleExecute = async () => {
-    if (!data.config.prompt) {
+    if (!data.config.prompt || !data.config.prompt.trim()) {
       alert('プロンプトを設定してください');
       return;
     }
@@ -40,7 +41,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         updates: {
           config: {
             ...data.config,
-            status: 'loading',
+            status: 'queued',
           },
         },
       },
@@ -48,37 +49,40 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
     window.dispatchEvent(updateEvent);
 
     try {
-      const response = await fetch('/api/gemini', {
+      const response = await fetch('/api/qwen-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           prompt: data.config.prompt,
-          model: data.config.model || 'gemini-2.5-flash',
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate response');
+        throw new Error(result.error || 'Failed to generate image with Qwen');
       }
 
-      // 成功時の状態更新
+      // キューに追加成功
       const successEvent = new CustomEvent('update-node', {
         detail: {
           id,
           updates: {
             config: {
               ...data.config,
-              status: 'success',
-              response: result.response,
+              status: 'queued',
+              queueItemId: result.queueItemId,
             },
           },
         },
       });
       window.dispatchEvent(successEvent);
+
+      // ポーリングで結果を待つ
+      pollQueueStatus(result.queueItemId);
+
     } catch (error: any) {
       // エラー時の状態更新
       const errorEvent = new CustomEvent('update-node', {
@@ -94,14 +98,108 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         },
       });
       window.dispatchEvent(errorEvent);
-    } finally {
       setIsExecuting(false);
     }
   };
 
+  const pollQueueStatus = async (queueItemId: number) => {
+    const maxAttempts = 60; // 5分間（5秒 x 60）
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/qwen-image/${queueItemId}`);
+        const result = await response.json();
+
+        if (result.status === 'completed') {
+          // 完了
+          const successEvent = new CustomEvent('update-node', {
+            detail: {
+              id,
+              updates: {
+                config: {
+                  ...data.config,
+                  status: 'success',
+                  imageUrl: result.imageUrl || null,
+                },
+              },
+            },
+          });
+          window.dispatchEvent(successEvent);
+          setIsExecuting(false);
+        } else if (result.status === 'failed') {
+          // 失敗
+          const errorEvent = new CustomEvent('update-node', {
+            detail: {
+              id,
+              updates: {
+                config: {
+                  ...data.config,
+                  status: 'error',
+                  error: result.error_message || 'Qwen Image processing failed',
+                },
+              },
+            },
+          });
+          window.dispatchEvent(errorEvent);
+          setIsExecuting(false);
+        } else if (result.status === 'processing') {
+          // 処理中の更新
+          const processingEvent = new CustomEvent('update-node', {
+            detail: {
+              id,
+              updates: {
+                config: {
+                  ...data.config,
+                  status: 'processing',
+                },
+              },
+            },
+          });
+          window.dispatchEvent(processingEvent);
+
+          // 再度ポーリング
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000);
+          } else {
+            throw new Error('Timeout waiting for Qwen Image processing');
+          }
+        } else {
+          // pending or queued - 再度ポーリング
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000);
+          } else {
+            throw new Error('Timeout waiting for Qwen Image processing');
+          }
+        }
+      } catch (error: any) {
+        const errorEvent = new CustomEvent('update-node', {
+          detail: {
+            id,
+            updates: {
+              config: {
+                ...data.config,
+                status: 'error',
+                error: error.message,
+              },
+            },
+          },
+        });
+        window.dispatchEvent(errorEvent);
+        setIsExecuting(false);
+      }
+    };
+
+    poll();
+  };
+
   const getStatusIcon = () => {
     switch (data.config.status) {
-      case 'loading':
+      case 'queued':
+        return <HourglassEmptyIcon fontSize="small" color="info" />;
+      case 'processing':
         return <CircularProgress size={16} />;
       case 'success':
         return <CheckCircleIcon fontSize="small" color="success" />;
@@ -112,6 +210,32 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
     }
   };
 
+  const getStatusChip = () => {
+    const statusLabels = {
+      idle: 'アイドル',
+      queued: 'キュー待ち',
+      processing: '処理中',
+      success: '完了',
+      error: 'エラー',
+    };
+
+    const statusColors: any = {
+      idle: 'default',
+      queued: 'info',
+      processing: 'warning',
+      success: 'success',
+      error: 'error',
+    };
+
+    return data.config.status ? (
+      <Chip
+        label={statusLabels[data.config.status] || data.config.status}
+        color={statusColors[data.config.status] || 'default'}
+        size="small"
+      />
+    ) : null;
+  };
+
   return (
     <Paper
       elevation={selected ? 8 : 2}
@@ -120,7 +244,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         minWidth: 280,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
-        borderColor: selected ? '#ea80fc' : 'divider',
+        borderColor: selected ? '#9c27b0' : 'divider',
         borderRadius: 2,
         transition: 'all 0.3s ease',
         bgcolor: 'background.paper',
@@ -136,7 +260,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ea80fc',
+          backgroundColor: '#9c27b0',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -147,13 +271,13 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
           sx={{
             p: 1,
             borderRadius: 1.5,
-            bgcolor: 'rgba(234, 128, 252, 0.1)',
+            bgcolor: 'rgba(156, 39, 176, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <AutoAwesomeIcon sx={{ fontSize: 20, color: '#ea80fc' }} />
+          <ImageIcon sx={{ fontSize: 20, color: '#9c27b0' }} />
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -187,16 +311,16 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
 
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           {getStatusIcon()}
-          <Tooltip title="実行">
+          <Tooltip title="画像を生成">
             <IconButton
               size="small"
               onClick={handleExecute}
               disabled={isExecuting}
               sx={{
-                bgcolor: '#ea80fc',
+                bgcolor: '#9c27b0',
                 color: 'white',
                 '&:hover': {
-                  bgcolor: '#d500f9',
+                  bgcolor: '#7b1fa2',
                 },
                 '&:disabled': {
                   bgcolor: 'action.disabledBackground',
@@ -208,6 +332,8 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
           </Tooltip>
         </Box>
       </Box>
+
+      {getStatusChip()}
 
       {data.config.prompt && (
         <Typography
@@ -230,55 +356,28 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         </Typography>
       )}
 
-      {data.config.response && (
+      {data.config.imageUrl && (
         <Box
           sx={{
             mt: 1,
-            p: 1.5,
-            bgcolor: 'rgba(234, 128, 252, 0.05)',
             borderRadius: 1,
-            border: '1px solid rgba(234, 128, 252, 0.2)',
+            overflow: 'hidden',
+            maxHeight: 150,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            bgcolor: 'action.hover',
           }}
         >
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              color: 'text.primary',
-              fontSize: '0.75rem',
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              maxHeight: 200,
-              overflow: 'auto',
+          <img
+            src={data.config.imageUrl}
+            alt="Output"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '150px',
+              objectFit: 'contain',
             }}
-          >
-            {data.config.response}
-          </Typography>
-        </Box>
-      )}
-
-      {data.config.error && (
-        <Box
-          sx={{
-            mt: 1,
-            p: 1,
-            bgcolor: 'error.light',
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'error.main',
-          }}
-        >
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              color: 'error.dark',
-              fontSize: '0.7rem',
-            }}
-          >
-            エラー: {data.config.error}
-          </Typography>
+          />
         </Box>
       )}
 
@@ -288,7 +387,7 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         style={{
           width: 12,
           height: 12,
-          backgroundColor: '#ea80fc',
+          backgroundColor: '#9c27b0',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
@@ -297,4 +396,4 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
   );
 }
 
-export default memo(GeminiNode);
+export default memo(QwenImageNode);
