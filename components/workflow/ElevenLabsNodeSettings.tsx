@@ -22,6 +22,12 @@ import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 
+interface CharacterSheet {
+  id: number;
+  name: string;
+  elevenlabs_voice_id?: string;
+}
+
 interface ElevenLabsNodeSettingsProps {
   node: Node;
   onClose: () => void;
@@ -34,7 +40,8 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
   const [description, setDescription] = useState(node.data.config?.description || '');
   const [text, setText] = useState(node.data.config?.text || '');
   const [voiceId, setVoiceId] = useState(node.data.config?.voiceId || 'JBFqnCBsd6RMkjVDRZzb');
-  const [modelId, setModelId] = useState(node.data.config?.modelId || 'eleven_multilingual_v2');
+  const [modelId, setModelId] = useState(node.data.config?.modelId || 'eleven_turbo_v2_5');
+  const [characters, setCharacters] = useState<CharacterSheet[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
@@ -42,8 +49,28 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
     setDescription(node.data.config?.description || '');
     setText(node.data.config?.text || '');
     setVoiceId(node.data.config?.voiceId || 'JBFqnCBsd6RMkjVDRZzb');
-    setModelId(node.data.config?.modelId || 'eleven_multilingual_v2');
+    setModelId(node.data.config?.modelId || 'eleven_turbo_v2_5');
   }, [node]);
+
+  useEffect(() => {
+    loadCharacters();
+  }, []);
+
+  const loadCharacters = async () => {
+    try {
+      const response = await fetch('/api/character-sheets');
+      const data = await response.json();
+      if (data.success) {
+        console.log('[ElevenLabsNodeSettings] Loaded characters:', data.characterSheets);
+        console.log('[ElevenLabsNodeSettings] Characters with voice IDs:',
+          data.characterSheets.filter((c: CharacterSheet) => c.elevenlabs_voice_id)
+        );
+        setCharacters(data.characterSheets);
+      }
+    } catch (error) {
+      console.error('Failed to load characters:', error);
+    }
+  };
 
   const handleSave = () => {
     console.log('Saving ElevenLabs node config:', {
@@ -185,9 +212,17 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
             fullWidth
             select
             value={voiceId}
-            onChange={(e) => setVoiceId(e.target.value)}
+            onChange={(e) => {
+              console.log('[ElevenLabsNodeSettings] Voice ID changed:', e.target.value);
+              setVoiceId(e.target.value);
+            }}
             variant="outlined"
+            helperText="プリセット音声またはカスタム音声（キャラクター登録済み）を選択"
           >
+            {/* プリセット音声 */}
+            <MenuItem disabled sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+              プリセット音声
+            </MenuItem>
             <MenuItem value="JBFqnCBsd6RMkjVDRZzb">George (英語)</MenuItem>
             <MenuItem value="21m00Tcm4TlvDq8ikWAM">Rachel (英語)</MenuItem>
             <MenuItem value="AZnzlk1XvdvUeBnXmlld">Domi (英語)</MenuItem>
@@ -198,6 +233,31 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
             <MenuItem value="VR6AewLTigWG4xSOukaG">Arnold (英語)</MenuItem>
             <MenuItem value="pNInz6obpgDQGcFmaJgB">Adam (英語)</MenuItem>
             <MenuItem value="yoZ06aMxZJJ28mfd3POQ">Sam (英語)</MenuItem>
+
+            {/* キャラクターのカスタム音声 */}
+            {characters.filter(c => c.elevenlabs_voice_id && c.elevenlabs_voice_id.trim()).length > 0 && [
+              <Divider key="divider" sx={{ my: 1 }} />,
+              <MenuItem key="header" disabled sx={{ fontWeight: 600, fontSize: '0.875rem', color: 'primary.main' }}>
+                カスタム音声（キャラクター）
+              </MenuItem>,
+              ...characters
+                .filter(c => c.elevenlabs_voice_id && c.elevenlabs_voice_id.trim())
+                .map((char) => {
+                  console.log('[ElevenLabsNodeSettings] Rendering custom voice:', {
+                    charId: char.id,
+                    name: char.name,
+                    voiceId: char.elevenlabs_voice_id
+                  });
+                  return (
+                    <MenuItem
+                      key={`char-${char.id}`}
+                      value={char.elevenlabs_voice_id}
+                    >
+                      {char.name} ({char.elevenlabs_voice_id})
+                    </MenuItem>
+                  );
+                })
+            ]}
           </TextField>
 
           <TextField
@@ -207,11 +267,14 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
             variant="outlined"
+            helperText="Turbo v2.5推奨（バランス型）、v3は最高品質だが要アクセス権"
           >
-            <MenuItem value="eleven_multilingual_v2">Multilingual v2 (推奨)</MenuItem>
-            <MenuItem value="eleven_monolingual_v1">Monolingual v1</MenuItem>
+            <MenuItem value="eleven_turbo_v2_5">Turbo v2.5 (推奨・バランス型) ⭐</MenuItem>
+            <MenuItem value="eleven_flash_v2_5">Flash v2.5 (超高速・低コスト)</MenuItem>
+            <MenuItem value="eleven_multilingual_v2">Multilingual v2 (安定)</MenuItem>
             <MenuItem value="eleven_turbo_v2">Turbo v2 (高速)</MenuItem>
-            <MenuItem value="eleven_turbo_v2_5">Turbo v2.5 (最新・高速)</MenuItem>
+            <MenuItem value="eleven_monolingual_v1">Monolingual v1 (英語のみ)</MenuItem>
+            <MenuItem value="eleven_v3">Eleven v3 (最高品質・Alpha・要アクセス権)</MenuItem>
           </TextField>
 
           <Box>

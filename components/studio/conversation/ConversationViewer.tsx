@@ -1,0 +1,508 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Avatar,
+  Typography,
+  IconButton,
+  TextField,
+  Chip,
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
+} from '@mui/material';
+import SaveIcon from '@mui/icons-material/Save';
+import CancelIcon from '@mui/icons-material/Cancel';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import type { ConversationMessageWithCharacter } from '@/types/conversation';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface Character {
+  id: number;
+  name: string;
+  image_url?: string;
+}
+
+interface ConversationViewerProps {
+  messages: ConversationMessageWithCharacter[];
+  characters?: Character[];
+  onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number }) => Promise<void>;
+  onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
+  onDeleteMessage?: (messageId: number) => Promise<void>;
+  readonly?: boolean;
+}
+
+interface SortableMessageProps {
+  message: ConversationMessageWithCharacter;
+  isEditing: boolean;
+  editText: string;
+  editCharacterId: number | null;
+  characters?: Character[];
+  saving: boolean;
+  readonly?: boolean;
+  onEditClick: (message: ConversationMessageWithCharacter) => void;
+  onSave: (messageId: number) => void;
+  onCancel: () => void;
+  onDelete: (messageId: number) => void;
+  onTextChange: (text: string) => void;
+  onCharacterChange: (characterId: number) => void;
+}
+
+function SortableMessage({
+  message,
+  isEditing,
+  editText,
+  editCharacterId,
+  characters,
+  saving,
+  readonly,
+  onEditClick,
+  onSave,
+  onCancel,
+  onDelete,
+  onTextChange,
+  onCharacterChange
+}: SortableMessageProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: message.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1
+  };
+
+  const emotionColors: Record<string, string> = {
+    happy: '#4caf50',
+    sad: '#2196f3',
+    angry: '#f44336',
+    neutral: '#9e9e9e',
+    surprised: '#ff9800',
+    excited: '#ff5722',
+    confused: '#9c27b0'
+  };
+
+  const emotionLabels: Record<string, string> = {
+    happy: '喜び',
+    sad: '悲しみ',
+    angry: '怒り',
+    neutral: '平常',
+    surprised: '驚き',
+    excited: '興奮',
+    confused: '困惑'
+  };
+
+  return (
+    <Paper
+      ref={setNodeRef}
+      style={style}
+      elevation={isDragging ? 4 : 1}
+      sx={{
+        padding: 2,
+        marginBottom: 2,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 2,
+        transition: 'all 0.2s',
+        '&:hover': {
+          boxShadow: 3,
+          '& .drag-handle': {
+            opacity: 1
+          }
+        }
+      }}
+    >
+      {/* Drag Handle */}
+      {!readonly && (
+        <Box
+          className="drag-handle"
+          {...attributes}
+          {...listeners}
+          sx={{
+            cursor: 'grab',
+            opacity: 0.3,
+            transition: 'opacity 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            '&:active': {
+              cursor: 'grabbing'
+            }
+          }}
+        >
+          <DragIndicatorIcon />
+        </Box>
+      )}
+
+      {/* Character Avatar */}
+      <Avatar
+        src={message.character?.image_url || undefined}
+        alt={message.speaker_name}
+        sx={{
+          width: 56,
+          height: 56,
+          border: '2px solid',
+          borderColor: 'primary.main'
+        }}
+      >
+        {message.speaker_name.charAt(0)}
+      </Avatar>
+
+      {/* Message Content */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        {/* Header */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            marginBottom: 1,
+            flexWrap: 'wrap'
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight="bold">
+            {message.speaker_name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            #{message.sequence_order + 1}
+          </Typography>
+          {message.metadata?.emotion && (
+            <Chip
+              label={emotionLabels[message.metadata.emotion] || message.metadata.emotion}
+              size="small"
+              sx={{
+                backgroundColor: emotionColors[message.metadata.emotion] || '#9e9e9e',
+                color: 'white',
+                fontSize: '0.7rem',
+                height: 20
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Character Selection (when editing) */}
+        {isEditing && characters && characters.length > 0 && (
+          <FormControl fullWidth sx={{ mb: 2 }} size="small">
+            <InputLabel>キャラクター</InputLabel>
+            <Select
+              value={editCharacterId || ''}
+              onChange={(e) => onCharacterChange(e.target.value as number)}
+              label="キャラクター"
+              disabled={saving}
+            >
+              {characters.map((char) => (
+                <MenuItem key={char.id} value={char.id}>
+                  {char.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {/* Message Text */}
+        {isEditing ? (
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            value={editText}
+            onChange={(e) => onTextChange(e.target.value)}
+            disabled={saving}
+            autoFocus
+            sx={{ mb: 1 }}
+          />
+        ) : (
+          <Typography
+            variant="body1"
+            onClick={() => !readonly && onEditClick(message)}
+            sx={{
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              cursor: !readonly ? 'pointer' : 'default',
+              padding: 1,
+              borderRadius: 1,
+              transition: 'background-color 0.2s',
+              '&:hover': !readonly ? {
+                backgroundColor: 'action.hover'
+              } : {}
+            }}
+          >
+            {message.message_text}
+          </Typography>
+        )}
+      </Box>
+
+      {/* Actions */}
+      {!readonly && isEditing && (
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 0.5,
+            flexDirection: 'column'
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="保存">
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => onSave(message.id)}
+                disabled={saving || !editText.trim()}
+              >
+                <SaveIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="キャンセル">
+              <IconButton
+                size="small"
+                onClick={onCancel}
+                disabled={saving}
+              >
+                <CancelIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Tooltip title="削除">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => {
+                if (confirm('このメッセージを削除しますか？')) {
+                  onDelete(message.id);
+                }
+              }}
+              disabled={saving}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
+    </Paper>
+  );
+}
+
+export default function ConversationViewer({
+  messages,
+  characters,
+  onUpdateMessage,
+  onReorderMessages,
+  onDeleteMessage,
+  readonly = false
+}: ConversationViewerProps) {
+  const [localMessages, setLocalMessages] = useState(messages);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editCharacterId, setEditCharacterId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  );
+
+  // Update local messages when props change
+  useEffect(() => {
+    setLocalMessages(messages);
+  }, [messages]);
+
+  const handleEditClick = (message: ConversationMessageWithCharacter) => {
+    setEditingMessageId(message.id);
+    setEditText(message.message_text);
+    setEditCharacterId(message.character_id);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditText('');
+    setEditCharacterId(null);
+  };
+
+  const handleSaveEdit = async (messageId: number) => {
+    if (!onUpdateMessage || !editText.trim()) {
+      return;
+    }
+
+    const originalMessage = localMessages.find(m => m.id === messageId);
+    const updates: { messageText?: string; characterId?: number } = {};
+
+    if (editText.trim() !== originalMessage?.message_text) {
+      updates.messageText = editText.trim();
+    }
+
+    if (editCharacterId !== null && editCharacterId !== originalMessage?.character_id) {
+      updates.characterId = editCharacterId;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      handleCancelEdit();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onUpdateMessage(messageId, updates);
+
+      // Update local state
+      setLocalMessages(prev =>
+        prev.map(msg => {
+          if (msg.id === messageId) {
+            const updatedMsg = { ...msg };
+            if (updates.messageText) {
+              updatedMsg.message_text = updates.messageText;
+            }
+            if (updates.characterId) {
+              updatedMsg.character_id = updates.characterId;
+              const character = characters?.find(c => c.id === updates.characterId);
+              if (character) {
+                updatedMsg.speaker_name = character.name;
+                updatedMsg.character = {
+                  id: character.id,
+                  name: character.name,
+                  image_url: character.image_url || null
+                };
+              }
+            }
+            return updatedMsg;
+          }
+          return msg;
+        })
+      );
+
+      handleCancelEdit();
+    } catch (error) {
+      console.error('Failed to update message:', error);
+      alert('メッセージの更新に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: number) => {
+    if (!onDeleteMessage) return;
+
+    try {
+      await onDeleteMessage(messageId);
+
+      // Update local state - remove the message
+      setLocalMessages(prev => prev.filter(msg => msg.id !== messageId));
+
+      // Close editing mode if this message was being edited
+      if (editingMessageId === messageId) {
+        handleCancelEdit();
+      }
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      alert('メッセージの削除に失敗しました');
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = localMessages.findIndex((msg) => msg.id === active.id);
+    const newIndex = localMessages.findIndex((msg) => msg.id === over.id);
+
+    const reorderedMessages = arrayMove(localMessages, oldIndex, newIndex).map(
+      (msg, index) => ({
+        ...msg,
+        sequence_order: index
+      })
+    );
+
+    setLocalMessages(reorderedMessages);
+
+    if (onReorderMessages) {
+      try {
+        await onReorderMessages(reorderedMessages);
+      } catch (error) {
+        console.error('Failed to reorder messages:', error);
+        // Revert on error
+        setLocalMessages(messages);
+        alert('並び替えに失敗しました');
+      }
+    }
+  };
+
+  if (localMessages.length === 0) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 400,
+          color: 'text.secondary'
+        }}
+      >
+        <Typography>メッセージがありません</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ maxWidth: 900, margin: '0 auto', padding: 2 }}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={localMessages.map(m => m.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {localMessages.map((message) => (
+            <SortableMessage
+              key={message.id}
+              message={message}
+              isEditing={editingMessageId === message.id}
+              editText={editText}
+              editCharacterId={editCharacterId}
+              characters={characters}
+              saving={saving}
+              readonly={readonly}
+              onEditClick={handleEditClick}
+              onSave={handleSaveEdit}
+              onCancel={handleCancelEdit}
+              onDelete={handleDeleteMessage}
+              onTextChange={setEditText}
+              onCharacterChange={setEditCharacterId}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </Box>
+  );
+}

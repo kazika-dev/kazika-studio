@@ -1,85 +1,114 @@
-const { Pool } = require('pg');
+/**
+ * Run database migrations with tracking
+ * This script tracks which migrations have been run to prevent data loss
+ * Usage: node scripts/run-migrations.js
+ */
+
 const fs = require('fs');
 const path = require('path');
-
-// .env.localファイルを読み込んで環境変数に設定
-const envPath = path.join(__dirname, '..', '.env.local');
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  const lines = envContent.split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const match = trimmed.match(/^([^=]+)=(.*)$/);
-      if (match) {
-        const key = match[1].trim();
-        const value = match[2].trim();
-        process.env[key] = value;
-      }
-    }
-  }
-}
+const { Client } = require('pg');
+require('dotenv').config({ path: '.env.local' });
 
 async function runMigrations() {
-  // DATABASE_URLまたは個別の環境変数から接続
-  const connectionString = process.env.DATABASE_URL ||
-    `postgresql://${process.env.SUPABASE_DB_USER}:${process.env.SUPABASE_DB_PASSWORD}@${process.env.SUPABASE_DB_HOST}:${process.env.SUPABASE_DB_PORT}/${process.env.SUPABASE_DB_NAME}`;
-
-  if (!connectionString || connectionString === 'postgresql://undefined:undefined@undefined:undefined/undefined') {
-    console.error('Database connection environment variables are not set');
-    console.error('Required: SUPABASE_DB_HOST, SUPABASE_DB_NAME, SUPABASE_DB_USER, SUPABASE_DB_PASSWORD, SUPABASE_DB_PORT');
-    process.exit(1);
-  }
-
-  console.log('Connecting to database...');
-  const pool = new Pool({
-    connectionString,
+  // Database connection configuration
+  const client = new Client({
+    host: process.env.SUPABASE_DB_HOST,
+    port: parseInt(process.env.SUPABASE_DB_PORT || '5432'),
+    database: process.env.SUPABASE_DB_NAME,
+    user: process.env.SUPABASE_DB_USER,
+    password: process.env.SUPABASE_DB_PASSWORD,
     ssl: {
-      rejectUnauthorized: false,
-    },
+      rejectUnauthorized: false
+    }
   });
 
   try {
-    // Test connection
-    await pool.query('SELECT NOW()');
-    console.log('Connected successfully\n');
+    console.log('Connecting to database...');
+    await client.connect();
+    console.log('✓ Connected to database');
 
-    // マイグレーションファイル
-    const migrations = [
-      '20251103000001_create_studios_tables.sql',
-      '20251103000002_create_board_workflow_steps.sql',
-    ];
+    // Create migrations tracking table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS kazikastudio.schema_migrations (
+        id SERIAL PRIMARY KEY,
+        migration_name TEXT NOT NULL UNIQUE,
+        executed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+      );
+    `);
+    console.log('✓ Migration tracking table ready');
 
-    for (const migrationFile of migrations) {
-      const filePath = path.join(__dirname, '..', 'supabase', 'migrations', migrationFile);
+    // Get already executed migrations
+    const { rows: executedMigrations } = await client.query(
+      'SELECT migration_name FROM kazikastudio.schema_migrations'
+    );
+    const executedSet = new Set(executedMigrations.map(r => r.migration_name));
 
-      console.log(`Running migration: ${migrationFile}`);
+    // Get migration files
+    const migrationsDir = path.join(__dirname, '../supabase/migrations');
+    const files = fs.readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql') && !f.includes('README'))
+      .sort(); // Sort to ensure order
 
-      if (!fs.existsSync(filePath)) {
-        console.error(`Migration file not found: ${filePath}`);
+    console.log(`\nFound ${files.length} migration files`);
+    console.log(`Already executed: ${executedSet.size} migrations`);
+
+    // Run each migration
+    for (const file of files) {
+      if (executedSet.has(file)) {
+        console.log(`\n⚠ Skipped (already executed): ${file}`);
         continue;
       }
 
+      console.log(`\n→ Running migration: ${file}`);
+
+      const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
 
       try {
-        await pool.query(sql);
-        console.log(`✓ Successfully applied: ${migrationFile}\n`);
+        // Begin transaction
+        await client.query('BEGIN');
+
+        // Execute migration
+        await client.query(sql);
+
+        // Record migration as executed
+        await client.query(
+          'INSERT INTO kazikastudio.schema_migrations (migration_name) VALUES ($1)',
+          [file]
+        );
+
+        // Commit transaction
+        await client.query('COMMIT');
+
+        console.log(`✓ Successfully executed: ${file}`);
       } catch (error) {
-        console.error(`✗ Error applying ${migrationFile}:`, error.message);
-        console.error('Detail:', error.detail);
-        console.error('Hint:', error.hint);
-        console.error('\n');
-        // Continue with next migration
+        // Rollback on error
+        await client.query('ROLLBACK');
+
+        // Check if error is about object already existing
+        if (error.message.includes('already exists')) {
+          console.log(`⚠ Skipped (already exists): ${file}`);
+          // Still record it as executed to avoid future attempts
+          await client.query(
+            'INSERT INTO kazikastudio.schema_migrations (migration_name) VALUES ($1) ON CONFLICT DO NOTHING',
+            [file]
+          );
+        } else {
+          console.error(`✗ Failed to execute: ${file}`);
+          throw error;
+        }
       }
     }
 
-    console.log('Migration process completed');
+    console.log('\n✓ All migrations completed successfully!\n');
+
   } catch (error) {
-    console.error('Error:', error);
+    console.error('\n✗ Migration failed:', error.message);
+    console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    await client.end();
+    console.log('✓ Database connection closed');
   }
 }
 

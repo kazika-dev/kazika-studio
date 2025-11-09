@@ -664,17 +664,19 @@ export async function createCharacterSheet(data: {
   name: string;
   image_url: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, metadata)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, elevenlabs_voice_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
       data.user_id,
       data.name,
       data.image_url,
       data.description || '',
+      data.elevenlabs_voice_id || null,
       data.metadata || {},
     ]
   );
@@ -688,6 +690,7 @@ export async function updateCharacterSheet(id: number, data: {
   name?: string;
   image_url?: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const updates: string[] = [];
@@ -705,6 +708,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.description !== undefined) {
     updates.push(`description = $${paramIndex++}`);
     values.push(data.description);
+  }
+  if (data.elevenlabs_voice_id !== undefined) {
+    updates.push(`elevenlabs_voice_id = $${paramIndex++}`);
+    values.push(data.elevenlabs_voice_id);
   }
   if (data.metadata !== undefined) {
     updates.push(`metadata = $${paramIndex++}`);

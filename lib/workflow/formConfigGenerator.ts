@@ -146,6 +146,49 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         addedFieldNames.add(fieldName);
       }
     }
+
+    // ElevenLabsノード
+    if (nodeType === 'elevenlabs') {
+      // テキスト入力フィールド
+      const textFieldName = `elevenlabs_text_${node.id}`;
+      if (!addedFieldNames.has(textFieldName)) {
+        fields.push({
+          type: 'textarea',
+          name: textFieldName,
+          label: `${nodeName} テキスト`,
+          placeholder: node.data.config?.text || '音声に変換するテキストを入力',
+          required: false,
+          rows: 4,
+          helperText: `${nodeName}で音声に変換するテキスト`,
+        });
+        addedFieldNames.add(textFieldName);
+      }
+
+      // 音声ID選択フィールド
+      const voiceIdFieldName = `elevenlabs_voiceId_${node.id}`;
+      if (!addedFieldNames.has(voiceIdFieldName)) {
+        fields.push({
+          type: 'select',
+          name: voiceIdFieldName,
+          label: `${nodeName} 音声ID`,
+          required: false,
+          helperText: 'ElevenLabsの音声を選択（プリセット音声）',
+          options: [
+            { label: 'George (英語)', value: 'JBFqnCBsd6RMkjVDRZzb' },
+            { label: 'Rachel (英語)', value: '21m00Tcm4TlvDq8ikWAM' },
+            { label: 'Domi (英語)', value: 'AZnzlk1XvdvUeBnXmlld' },
+            { label: 'Bella (英語)', value: 'EXAVITQu4vr4xnSDxMaL' },
+            { label: 'Antoni (英語)', value: 'ErXwobaYiN019PkySvjV' },
+            { label: 'Elli (英語)', value: 'MF3mGyEYCl7XYWbV9V6O' },
+            { label: 'Josh (英語)', value: 'TxGEqnHWrfWFTfGW9XjX' },
+            { label: 'Arnold (英語)', value: 'VR6AewLTigWG4xSOukaG' },
+            { label: 'Adam (英語)', value: 'pNInz6obpgDQGcFmaJgB' },
+            { label: 'Sam (英語)', value: 'yoZ06aMxZJJ28mfd3POQ' },
+          ],
+        });
+        addedFieldNames.add(voiceIdFieldName);
+      }
+    }
   });
 
   return fields;

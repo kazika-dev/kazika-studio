@@ -91,6 +91,9 @@ export default function AddWorkflowStepDialog({
   // 動的フォームの値
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
+  // ノード設定の上書き
+  const [nodeOverrides, setNodeOverrides] = useState<Record<string, any>>({});
+
   // 入力設定（従来の設定も維持）
   const [usePrompt, setUsePrompt] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -156,6 +159,14 @@ export default function AddWorkflowStepDialog({
           console.log('No workflowInputs to restore');
           setFormValues({});
         }
+        // ノード設定の上書きを復元
+        if (editStep.input_config?.nodeOverrides) {
+          console.log('Restoring nodeOverrides:', editStep.input_config.nodeOverrides);
+          setNodeOverrides(editStep.input_config.nodeOverrides);
+        } else {
+          console.log('No nodeOverrides to restore');
+          setNodeOverrides({});
+        }
         // その他の入力設定も復元
         setUsePrompt(editStep.input_config?.usePrompt || false);
         setPrompt(editStep.input_config?.prompt || '');
@@ -168,6 +179,7 @@ export default function AddWorkflowStepDialog({
         console.log('New step mode - resetting values');
         setSelectedWorkflowId(null);
         setFormValues({});
+        setNodeOverrides({});
         setUsePrompt(false);
         setPrompt('');
         setUsePreviousImage(false);
@@ -278,6 +290,12 @@ export default function AddWorkflowStepDialog({
       usePreviousText: hasPreviousSteps ? usePreviousText : false,
       // 入力されたフィールドのみを追加
       workflowInputs: Object.keys(filledFormValues).length > 0 ? filledFormValues : undefined,
+      // ノード設定の上書き（存在する場合）
+      nodeOverrides: Object.keys(nodeOverrides).length > 0 ? nodeOverrides : undefined,
+      // メタデータを保持（編集時）
+      character_id: editStep?.input_config?.character_id,
+      character_name: editStep?.input_config?.character_name,
+      has_custom_voice: editStep?.input_config?.has_custom_voice,
     };
 
     const stepData = {
@@ -302,6 +320,7 @@ export default function AddWorkflowStepDialog({
       setSelectedWorkflowId(null);
       setSelectedWorkflow(null);
       setFormValues({});
+      setNodeOverrides({});
       setUsePrompt(false);
       setPrompt('');
       setUsePreviousImage(false);
@@ -318,6 +337,7 @@ export default function AddWorkflowStepDialog({
       setSelectedWorkflowId(null);
       setSelectedWorkflow(null);
       setFormValues({});
+      setNodeOverrides({});
       setUsePrompt(false);
       setPrompt('');
       setUsePreviousImage(false);
@@ -418,6 +438,50 @@ export default function AddWorkflowStepDialog({
                       ))}
                     </Stack>
                     <Divider sx={{ my: 3 }} />
+                  </Box>
+                )}
+
+                {/* ノード設定の上書き */}
+                {Object.keys(nodeOverrides).length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                      ノード設定
+                      {editStep?.input_config?.character_name && (
+                        <Chip
+                          label={editStep.input_config.character_name}
+                          size="small"
+                          sx={{ ml: 1 }}
+                        />
+                      )}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                      会話から生成されたノード設定を確認できます
+                    </Typography>
+                    <Stack spacing={2}>
+                      {Object.entries(nodeOverrides).map(([nodeId, config]: [string, any]) => (
+                        <Paper key={nodeId} variant="outlined" sx={{ p: 2 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                            ノードID: {nodeId}
+                          </Typography>
+                          {config.text && (
+                            <Box sx={{ mb: 1 }}>
+                              <Typography variant="caption" fontWeight={600}>テキスト:</Typography>
+                              <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                                {config.text}
+                              </Typography>
+                            </Box>
+                          )}
+                          {config.voiceId && (
+                            <Box>
+                              <Typography variant="caption" fontWeight={600}>音声ID:</Typography>
+                              <Typography variant="body2" sx={{ mt: 0.5, fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                                {config.voiceId}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Paper>
+                      ))}
+                    </Stack>
                   </Box>
                 )}
 
