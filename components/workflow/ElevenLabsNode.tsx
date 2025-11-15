@@ -144,6 +144,68 @@ function ElevenLabsNode({ data, selected, id }: NodeProps<ElevenLabsNodeData>) {
         }}
       />
 
+      {/* 音声ID入力ハンドル */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="voiceId"
+        style={{
+          top: '30%',
+          width: 10,
+          height: 10,
+          backgroundColor: '#ff9800',
+          border: '2px solid white',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+      />
+
+      {/* モデル入力ハンドル */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="modelId"
+        style={{
+          top: '50%',
+          width: 10,
+          height: 10,
+          backgroundColor: '#9c27b0',
+          border: '2px solid white',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+      />
+
+      {/* テキスト入力ハンドル */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="text"
+        style={{
+          top: '70%',
+          width: 10,
+          height: 10,
+          backgroundColor: '#4caf50',
+          border: '2px solid white',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+      />
+
+      {/* 入力ハンドルラベル */}
+      <Box sx={{ position: 'absolute', left: 12, top: 'calc(30% - 8px)' }}>
+        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#ff9800', fontWeight: 500 }}>
+          音声ID
+        </Typography>
+      </Box>
+      <Box sx={{ position: 'absolute', left: 12, top: 'calc(50% - 8px)' }}>
+        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#9c27b0', fontWeight: 500 }}>
+          モデル
+        </Typography>
+      </Box>
+      <Box sx={{ position: 'absolute', left: 12, top: 'calc(70% - 8px)' }}>
+        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#4caf50', fontWeight: 500 }}>
+          テキスト
+        </Typography>
+      </Box>
+
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', mb: 1 }}>
         <Box
           sx={{

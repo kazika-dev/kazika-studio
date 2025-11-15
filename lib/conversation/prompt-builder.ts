@@ -144,3 +144,90 @@ export function validateMessageSpeakers(
     invalidSpeakers
   };
 }
+
+/**
+ * Build a scene image generation prompt based on conversation context
+ */
+export function buildScenePrompt(
+  situation: string,
+  characters: Array<{ name: string; description: string }>,
+  messages: GeneratedMessage[]
+): string {
+  const characterDescriptions = characters
+    .map(char => `${char.name}: ${char.description}`)
+    .join(', ');
+
+  const conversationSummary = messages
+    .map(msg => `${msg.speaker}: ${msg.message}`)
+    .join('\n');
+
+  return `
+あなたはシーン画像生成のためのプロンプトを作成するAIです。
+以下の会話内容に基づいて、シーンを視覚化するための詳細な画像生成プロンプトを作成してください。
+
+## シチュエーション
+${situation}
+
+## 登場キャラクター
+${characterDescriptions}
+
+## 会話内容
+${conversationSummary}
+
+## 出力形式
+以下のJSON形式でシーン画像生成プロンプトを作成してください。
+
+\`\`\`json
+{
+  "sceneDescription": "シーンの詳細な説明（日本語）",
+  "imagePrompt": "英語での画像生成プロンプト（Stable Diffusion/DALL-E用）"
+}
+\`\`\`
+
+## 重要な注意事項
+- sceneDescriptionには、シーンの雰囲気、キャラクターの配置、背景などを日本語で詳細に記述してください
+- imagePromptには、画像生成AIが理解しやすい英語のプロンプトを作成してください
+- imagePromptには、キャラクターの外見的特徴、シーンの構図、照明、雰囲気などを含めてください
+- imagePromptは具体的で視覚的に明確な表現を使用してください
+
+視覚的に魅力的なシーン画像プロンプトを生成してください。
+`.trim();
+}
+
+/**
+ * Parse scene prompt AI response
+ */
+export async function parseScenePromptResponse(
+  aiResponse: string
+): Promise<{ sceneDescription: string; imagePrompt: string }> {
+  const jsonMatch = aiResponse.match(/```json\s*\n([\s\S]*?)\n```/);
+
+  let jsonText: string;
+  if (jsonMatch) {
+    jsonText = jsonMatch[1];
+  } else {
+    const directJsonMatch = aiResponse.match(/\{[\s\S]*"sceneDescription"[\s\S]*\}/);
+    if (directJsonMatch) {
+      jsonText = directJsonMatch[0];
+    } else {
+      throw new Error('AI response does not contain valid scene prompt JSON');
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    if (!parsed.sceneDescription || typeof parsed.sceneDescription !== 'string') {
+      throw new Error('Invalid response: missing or invalid sceneDescription');
+    }
+    if (!parsed.imagePrompt || typeof parsed.imagePrompt !== 'string') {
+      throw new Error('Invalid response: missing or invalid imagePrompt');
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error('Failed to parse scene prompt response:', error);
+    console.error('AI Response:', aiResponse);
+    throw new Error(`Failed to parse scene prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

@@ -16,6 +16,12 @@ import {
   Alert,
   Paper,
   Snackbar,
+  Card,
+  CardContent,
+  CardMedia,
+  Checkbox,
+  FormControlLabel,
+  CircularProgress,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
@@ -23,6 +29,17 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ImageIcon from '@mui/icons-material/Image';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+
+interface CharacterSheet {
+  id: number;
+  user_id: string;
+  name: string;
+  image_url: string;
+  description: string;
+  metadata: any;
+  created_at: string;
+  updated_at: string;
+}
 
 interface NanobanaNodeSettingsProps {
   node: Node;
@@ -41,8 +58,39 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
   const [referenceImages, setReferenceImages] = useState<Array<{ mimeType: string; data: string }>>(
     node.data.config?.referenceImages || []
   );
+  const [selectedCharacterSheetIds, setSelectedCharacterSheetIds] = useState<number[]>(
+    node.data.config?.selectedCharacterSheetIds || []
+  );
+  const [characterSheetsList, setCharacterSheetsList] = useState<CharacterSheet[]>([]);
+  const [loadingCharacterSheets, setLoadingCharacterSheets] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 各入力ハンドルへの接続状態を確認
+  const connectedInputs = useMemo(() => {
+    const connections = {
+      prompt: false,
+      characters: [] as number[],
+      images: [] as number[],
+    };
+
+    const incomingEdges = edges.filter(edge => edge.target === node.id);
+
+    incomingEdges.forEach(edge => {
+      const handleId = edge.targetHandle;
+      if (handleId === 'prompt') {
+        connections.prompt = true;
+      } else if (handleId?.startsWith('character-')) {
+        const index = parseInt(handleId.split('-')[1]);
+        connections.characters.push(index);
+      } else if (handleId?.startsWith('image-')) {
+        const index = parseInt(handleId.split('-')[1]);
+        connections.images.push(index);
+      }
+    });
+
+    return connections;
+  }, [edges, node.id]);
 
   // 上流ノードから引き継ぐ画像を検出
   const incomingImages = useMemo(() => {
@@ -66,12 +114,57 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
   }, [nodes, edges, node.id]);
 
   useEffect(() => {
+    loadCharacterSheets();
+  }, []);
+
+  useEffect(() => {
     setName(node.data.config?.name || '');
     setDescription(node.data.config?.description || '');
     setPrompt(node.data.config?.prompt || '');
     setAspectRatio(node.data.config?.aspectRatio || '1:1');
     setReferenceImages(node.data.config?.referenceImages || []);
+    setSelectedCharacterSheetIds(node.data.config?.selectedCharacterSheetIds || []);
   }, [node]);
+
+  const loadCharacterSheets = async () => {
+    try {
+      setLoadingCharacterSheets(true);
+      const response = await fetch('/api/character-sheets');
+      const data = await response.json();
+
+      if (data.success) {
+        setCharacterSheetsList(data.characterSheets);
+      } else {
+        console.error('Failed to load character sheets:', data.error);
+      }
+    } catch (error) {
+      console.error('Failed to load character sheets:', error);
+    } finally {
+      setLoadingCharacterSheets(false);
+    }
+  };
+
+  const getImageUrl = (imageUrl: string) => {
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+    return `/api/storage/${imageUrl}`;
+  };
+
+  const handleCharacterSheetToggle = (id: number) => {
+    setSelectedCharacterSheetIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(csId => csId !== id);
+      } else {
+        // 最大4つまで
+        if (prev.length >= 4) {
+          alert('キャラクターシートは最大4つまで選択できます');
+          return prev;
+        }
+        return [...prev, id];
+      }
+    });
+  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -126,12 +219,18 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
       referenceImagesCount: referenceImages.length,
     });
 
+    const selectedCharacterSheets = characterSheetsList.filter(cs =>
+      selectedCharacterSheetIds.includes(cs.id)
+    );
+
     onUpdate(node.id, {
       name,
       description,
       prompt,
       aspectRatio,
       referenceImages,
+      selectedCharacterSheetIds,
+      selectedCharacterSheets,
       status: node.data.config?.status || 'idle',
       imageData: node.data.config?.imageData,
       error: node.data.config?.error,
@@ -241,6 +340,56 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
 
           <Divider />
 
+          {/* 入力接続ステータス */}
+          <Box>
+            <Typography variant="subtitle2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
+              入力接続ステータス
+            </Typography>
+            <Stack spacing={1}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    bgcolor: connectedInputs.prompt ? '#4CAF50' : '#ccc',
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  プロンプト: {connectedInputs.prompt ? '接続済み' : '未接続'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    bgcolor: connectedInputs.characters.length > 0 ? '#2196F3' : '#ccc',
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  キャラクターシート: {connectedInputs.characters.length} 個接続
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    bgcolor: connectedInputs.images.length > 0 ? '#FF9800' : '#ccc',
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  画像: {connectedInputs.images.length} 個接続
+                </Typography>
+              </Box>
+            </Stack>
+          </Box>
+
+          <Divider />
+
           {/* Nanobana Configuration */}
           <Typography variant="subtitle2" fontWeight={600} color="text.primary">
             Nanobana 設定
@@ -268,142 +417,228 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
             <MenuItem value="2:3">2:3 (縦長・写真)</MenuItem>
           </TextField>
 
-          <Box>
-            <TextField
-              label="画像生成プロンプト"
-              fullWidth
-              multiline
-              rows={6}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              variant="outlined"
-              placeholder="生成したい画像の説明を入力してください..."
-              helperText="プロンプトは英語で記述することを推奨します"
-            />
-            <Alert severity="info" sx={{ mt: 1, fontSize: '0.8rem' }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
-                前のノードの結果を参照できます：
-              </Typography>
-              <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                • {`{{prev.response}}`} - 直前のノードの出力<br />
-                • {`{{ノード名.response}}`} - 特定のノードの出力
-              </Typography>
-            </Alert>
-          </Box>
-
-          <Divider />
-
-          {/* Incoming Images Info */}
-          {incomingImages.length > 0 && (
+          {/* プロンプト入力 - 接続されていない場合のみ表示 */}
+          {!connectedInputs.prompt && (
             <Box>
-              <Typography variant="subtitle2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
-                上流ノードからの画像
-              </Typography>
-              <Alert
-                severity={incomingImages.some(img => img.hasImage) ? "success" : "info"}
-                sx={{ fontSize: '0.875rem' }}
-              >
+              <TextField
+                label="画像生成プロンプト（必須）"
+                fullWidth
+                multiline
+                rows={6}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                variant="outlined"
+                placeholder="生成したい画像の説明を入力してください..."
+                helperText="プロンプトは英語で記述することを推奨します"
+                required
+              />
+              <Alert severity="info" sx={{ mt: 1, fontSize: '0.8rem' }}>
                 <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
-                  接続されているノード:
+                  前のノードの結果を参照できます：
                 </Typography>
-                {incomingImages.map((img, index) => (
-                  <Typography
-                    key={index}
-                    variant="caption"
-                    sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.75rem' }}
-                  >
-                    • {img.nodeName} {img.hasImage ? '✓ 画像あり' : '(画像なし)'}
-                  </Typography>
-                ))}
-                <Typography variant="caption" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
-                  これらのノードから画像が参照画像として自動的に使用されます（最大3枚）
+                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                  • {`{{prev.response}}`} - 直前のノードの出力<br />
+                  • {`{{ノード名.response}}`} - 特定のノードの出力
                 </Typography>
               </Alert>
             </Box>
           )}
 
-          {/* Reference Images Upload */}
+          {/* プロンプト接続済みの場合 */}
+          {connectedInputs.prompt && (
+            <Alert severity="success" sx={{ fontSize: '0.875rem' }}>
+              プロンプトは接続されたノードから取得されます
+            </Alert>
+          )}
+
+          <Divider />
+
+          {/* キャラクターシート入力 */}
           <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-            参照画像（オプション）
+            キャラクターシート（最大4つ）
           </Typography>
 
-          <Alert severity="info" sx={{ fontSize: '0.875rem' }}>
-            参照画像を追加すると、その画像のスタイルや要素を元に画像を生成します。画像サイズは各5MB以下にしてください。
-          </Alert>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            style={{ display: 'none' }}
-            onChange={handleImageUpload}
-          />
-
-          <Button
-            variant="outlined"
-            fullWidth
-            size="large"
-            startIcon={<UploadIcon />}
-            onClick={() => fileInputRef.current?.click()}
-            sx={{
-              py: 1.5,
-              textTransform: 'none',
-              borderStyle: 'dashed',
-              borderWidth: 2,
-            }}
-          >
-            参照画像を追加
-          </Button>
-
-          {referenceImages.length > 0 && (
+          {connectedInputs.characters.length === 0 ? (
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                {referenceImages.length} 枚の参照画像
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {referenceImages.map((img, index) => (
-                  <Box key={index} sx={{ width: 'calc(50% - 8px)' }}>
-                    <Paper
+              <Alert severity="info" sx={{ fontSize: '0.875rem', mb: 2 }}>
+                キャラクターシートマスタから選択してください。選択したキャラクター情報は画像生成に利用されます。
+              </Alert>
+
+              {loadingCharacterSheets ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : characterSheetsList.length === 0 ? (
+                <Alert severity="warning">
+                  キャラクターシートがありません。先にキャラクターシートを作成してください。
+                </Alert>
+              ) : (
+                <Stack spacing={2}>
+                  {characterSheetsList.map((sheet) => (
+                    <Card
+                      key={sheet.id}
                       variant="outlined"
                       sx={{
-                        position: 'relative',
-                        p: 1,
-                        bgcolor: 'action.hover',
+                        cursor: 'pointer',
+                        border: selectedCharacterSheetIds.includes(sheet.id) ? 2 : 1,
+                        borderColor: selectedCharacterSheetIds.includes(sheet.id) ? '#2196F3' : 'divider',
+                        '&:hover': {
+                          boxShadow: 2,
+                        },
                       }}
+                      onClick={() => handleCharacterSheetToggle(sheet.id)}
                     >
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRemoveImage(index)}
-                        sx={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4,
-                          bgcolor: 'background.paper',
-                          '&:hover': {
-                            bgcolor: 'error.light',
-                            color: 'white',
-                          },
-                        }}
-                      >
-                        <CloseOutlinedIcon fontSize="small" />
-                      </IconButton>
-                      <img
-                        src={`data:${img.mimeType};base64,${img.data}`}
-                        alt={`Reference ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          height: '120px',
-                          objectFit: 'cover',
-                          borderRadius: '4px',
-                        }}
-                      />
-                    </Paper>
-                  </Box>
-                ))}
-              </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', p: 1 }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={selectedCharacterSheetIds.includes(sheet.id)}
+                              onChange={() => handleCharacterSheetToggle(sheet.id)}
+                              sx={{
+                                color: '#2196F3',
+                                '&.Mui-checked': {
+                                  color: '#2196F3',
+                                },
+                              }}
+                            />
+                          }
+                          label=""
+                          sx={{ m: 0, mr: 1 }}
+                        />
+                        <CardMedia
+                          component="img"
+                          image={getImageUrl(sheet.image_url)}
+                          alt={sheet.name}
+                          sx={{
+                            width: 80,
+                            height: 80,
+                            objectFit: 'cover',
+                            borderRadius: 1,
+                          }}
+                        />
+                        <CardContent sx={{ flex: 1, py: 1, '&:last-child': { pb: 1 } }}>
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            {sheet.name}
+                          </Typography>
+                          {sheet.description && (
+                            <Typography variant="caption" color="text.secondary">
+                              {sheet.description}
+                            </Typography>
+                          )}
+                        </CardContent>
+                      </Box>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+
+              {selectedCharacterSheetIds.length > 0 && (
+                <Alert severity="success" sx={{ mt: 2, fontSize: '0.875rem' }}>
+                  {selectedCharacterSheetIds.length} 個のキャラクターシートを選択中
+                </Alert>
+              )}
             </Box>
+          ) : (
+            <Alert severity="success" sx={{ fontSize: '0.875rem' }}>
+              {connectedInputs.characters.length} 個のキャラクターシートが接続されています
+            </Alert>
           )}
+
+          {/* 画像入力 */}
+          <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+            参照画像（最大4つ）
+          </Typography>
+
+          {connectedInputs.images.length === 0 ? (
+            <Box>
+              <Alert severity="info" sx={{ fontSize: '0.875rem', mb: 2 }}>
+                参照画像を追加すると、その画像のスタイルや要素を元に画像を生成します。画像サイズは各5MB以下にしてください。
+              </Alert>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleImageUpload}
+              />
+
+              <Button
+                variant="outlined"
+                fullWidth
+                size="large"
+                startIcon={<UploadIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={referenceImages.length >= 4}
+                sx={{
+                  py: 1.5,
+                  textTransform: 'none',
+                  borderStyle: 'dashed',
+                  borderWidth: 2,
+                  borderColor: '#FF9800',
+                  color: '#FF9800',
+                }}
+              >
+                参照画像を追加 ({referenceImages.length}/4)
+              </Button>
+
+              {referenceImages.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                    {referenceImages.length} 枚の参照画像
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    {referenceImages.map((img, index) => (
+                      <Box key={index} sx={{ width: 'calc(50% - 8px)' }}>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            position: 'relative',
+                            p: 1,
+                            bgcolor: 'action.hover',
+                          }}
+                        >
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRemoveImage(index)}
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              bgcolor: 'background.paper',
+                              '&:hover': {
+                                bgcolor: 'error.light',
+                                color: 'white',
+                              },
+                            }}
+                          >
+                            <CloseOutlinedIcon fontSize="small" />
+                          </IconButton>
+                          <img
+                            src={`data:${img.mimeType};base64,${img.data}`}
+                            alt={`Reference ${index + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '120px',
+                              objectFit: 'cover',
+                              borderRadius: '4px',
+                            }}
+                          />
+                        </Paper>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Alert severity="success" sx={{ fontSize: '0.875rem' }}>
+              {connectedInputs.images.length} 個の画像が接続されています
+            </Alert>
+          )}
+
+          <Divider />
 
           {/* Image Display */}
           {node.data.config?.imageData && (
