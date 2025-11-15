@@ -51,8 +51,9 @@ export async function POST(
     }
 
     // Check ownership via user_id or studio
+    const studio = Array.isArray(conversation.studio) ? conversation.studio[0] : conversation.studio;
     const isOwner = conversation.user_id === user.id ||
-                    (conversation.studio && conversation.studio.user_id === user.id);
+                    (studio && studio.user_id === user.id);
 
     if (!isOwner) {
       return NextResponse.json(
