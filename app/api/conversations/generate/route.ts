@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildConversationPrompt, parseAIResponse, validateMessageSpeakers } from '@/lib/conversation/prompt-builder';
+import {
+  buildConversationPrompt,
+  parseAIResponse,
+  validateMessageSpeakers
+} from '@/lib/conversation/prompt-builder';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**

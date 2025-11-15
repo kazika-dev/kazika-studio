@@ -39,7 +39,7 @@ export default function TimelineContainer({
   const [gridSnapInterval] = useState(1); // 1秒
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   // WorkflowStepsをTimelineStepsに変換
