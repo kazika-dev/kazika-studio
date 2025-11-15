@@ -917,3 +917,331 @@ export async function getComfyUIQueueItemByPromptId(promptId: string) {
 
   return result.rows[0];
 }
+
+// =====================================================
+// マスターテーブル関連の関数
+// =====================================================
+
+// ----- ElevenLabs Tags -----
+
+export async function getAllElevenLabsTags() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags WHERE is_active = true ORDER BY sort_order, name'
+  );
+  return result.rows;
+}
+
+export async function getElevenLabsTagById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function createElevenLabsTag(data: {
+  name: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.eleven_labs_tags (name, description, sort_order, is_active)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.sort_order || 0,
+      data.is_active !== undefined ? data.is_active : true,
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateElevenLabsTag(id: number, data: {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    fields.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    fields.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.sort_order !== undefined) {
+    fields.push(`sort_order = $${paramIndex++}`);
+    values.push(data.sort_order);
+  }
+  if (data.is_active !== undefined) {
+    fields.push(`is_active = $${paramIndex++}`);
+    values.push(data.is_active);
+  }
+
+  if (fields.length === 0) {
+    return await getElevenLabsTagById(id);
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.eleven_labs_tags SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+export async function deleteElevenLabsTag(id: number) {
+  await query('DELETE FROM kazikastudio.eleven_labs_tags WHERE id = $1', [id]);
+  return true;
+}
+
+// ----- Camera Angles -----
+
+export async function getAllCameraAngles() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_angles WHERE is_active = true ORDER BY sort_order, name'
+  );
+  return result.rows;
+}
+
+export async function getCameraAngleById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_angles WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function createCameraAngle(data: {
+  name: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_camera_angles (name, description, sort_order, is_active)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.sort_order || 0,
+      data.is_active !== undefined ? data.is_active : true,
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateCameraAngle(id: number, data: {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    fields.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    fields.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.sort_order !== undefined) {
+    fields.push(`sort_order = $${paramIndex++}`);
+    values.push(data.sort_order);
+  }
+  if (data.is_active !== undefined) {
+    fields.push(`is_active = $${paramIndex++}`);
+    values.push(data.is_active);
+  }
+
+  if (fields.length === 0) {
+    return await getCameraAngleById(id);
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.m_camera_angles SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+export async function deleteCameraAngle(id: number) {
+  await query('DELETE FROM kazikastudio.m_camera_angles WHERE id = $1', [id]);
+  return true;
+}
+
+// ----- Camera Movements -----
+
+export async function getAllCameraMovements() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_movements WHERE is_active = true ORDER BY sort_order, name'
+  );
+  return result.rows;
+}
+
+export async function getCameraMovementById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_movements WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function createCameraMovement(data: {
+  name: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_camera_movements (name, description, sort_order, is_active)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.sort_order || 0,
+      data.is_active !== undefined ? data.is_active : true,
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateCameraMovement(id: number, data: {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    fields.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    fields.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.sort_order !== undefined) {
+    fields.push(`sort_order = $${paramIndex++}`);
+    values.push(data.sort_order);
+  }
+  if (data.is_active !== undefined) {
+    fields.push(`is_active = $${paramIndex++}`);
+    values.push(data.is_active);
+  }
+
+  if (fields.length === 0) {
+    return await getCameraMovementById(id);
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.m_camera_movements SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+export async function deleteCameraMovement(id: number) {
+  await query('DELETE FROM kazikastudio.m_camera_movements WHERE id = $1', [id]);
+  return true;
+}
+
+// ----- Shot Distances -----
+
+export async function getAllShotDistances() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_shot_distances WHERE is_active = true ORDER BY sort_order, name'
+  );
+  return result.rows;
+}
+
+export async function getShotDistanceById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_shot_distances WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function createShotDistance(data: {
+  name: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_shot_distances (name, description, sort_order, is_active)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.sort_order || 0,
+      data.is_active !== undefined ? data.is_active : true,
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateShotDistance(id: number, data: {
+  name?: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    fields.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    fields.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.sort_order !== undefined) {
+    fields.push(`sort_order = $${paramIndex++}`);
+    values.push(data.sort_order);
+  }
+  if (data.is_active !== undefined) {
+    fields.push(`is_active = $${paramIndex++}`);
+    values.push(data.is_active);
+  }
+
+  if (fields.length === 0) {
+    return await getShotDistanceById(id);
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.m_shot_distances SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+export async function deleteShotDistance(id: number) {
+  await query('DELETE FROM kazikastudio.m_shot_distances WHERE id = $1', [id]);
+  return true;
+}
