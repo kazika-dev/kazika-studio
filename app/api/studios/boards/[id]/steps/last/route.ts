@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const boardId = parseInt(params.id);
+    const { id } = await params;
+    const boardId = parseInt(id);
     if (isNaN(boardId)) {
       return NextResponse.json(
         { success: false, error: '無効なボードIDです' },
