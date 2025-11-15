@@ -238,23 +238,40 @@ function SortableMessage({
             sx={{ mb: 1 }}
           />
         ) : (
-          <Typography
-            variant="body1"
-            onClick={() => !readonly && onEditClick(message)}
-            sx={{
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              cursor: !readonly ? 'pointer' : 'default',
-              padding: 1,
-              borderRadius: 1,
-              transition: 'background-color 0.2s',
-              '&:hover': !readonly ? {
-                backgroundColor: 'action.hover'
-              } : {}
-            }}
-          >
-            {message.message_text}
-          </Typography>
+          <>
+            <Typography
+              variant="body1"
+              onClick={() => !readonly && onEditClick(message)}
+              sx={{
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                cursor: !readonly ? 'pointer' : 'default',
+                padding: 1,
+                borderRadius: 1,
+                transition: 'background-color 0.2s',
+                '&:hover': !readonly ? {
+                  backgroundColor: 'action.hover'
+                } : {}
+              }}
+            >
+              {message.message_text}
+            </Typography>
+            {message.metadata?.scene && (
+              <Typography
+                variant="body2"
+                sx={{
+                  mt: 1,
+                  padding: 1,
+                  backgroundColor: 'action.hover',
+                  borderRadius: 1,
+                  fontStyle: 'italic',
+                  color: 'text.secondary'
+                }}
+              >
+                {message.metadata.scene}
+              </Typography>
+            )}
+          </>
         )}
       </Box>
 

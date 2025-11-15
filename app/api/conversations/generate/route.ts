@@ -191,7 +191,8 @@ export async function POST(request: NextRequest) {
         message_text: msg.message,
         sequence_order: idx,
         metadata: {
-          emotion: msg.emotion || 'neutral'
+          emotion: msg.emotion || 'neutral',
+          scene: msg.scene || ''
         }
       };
     });

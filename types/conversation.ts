@@ -21,6 +21,7 @@ export interface ConversationMessage {
   created_at: string;
   metadata: {
     emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
+    scene?: string;
     voice_preset?: string;
     audio_url?: string;
     regenerated?: boolean;
@@ -171,6 +172,7 @@ export interface GeneratedMessage {
   speaker: string;
   message: string;
   emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
+  scene?: string;
 }
 
 export interface ConversationGenerationAIResponse {
