@@ -66,18 +66,47 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
 
     // Nanobanaノード
     if (nodeType === 'nanobana') {
-      const fieldName = `nanobana_prompt_${node.id}`;
-      if (!addedFieldNames.has(fieldName)) {
+      // プロンプト入力
+      const promptFieldName = `nanobana_prompt_${node.id}`;
+      if (!addedFieldNames.has(promptFieldName)) {
         fields.push({
           type: 'textarea',
-          name: fieldName,
+          name: promptFieldName,
           label: `${nodeName} プロンプト`,
           placeholder: node.data.config?.prompt || '画像生成の指示を入力',
-          required: false,
+          required: true,
           rows: 4,
-          helperText: `${nodeName}で使用するプロンプト`,
+          helperText: `${nodeName}で使用するプロンプト（必須）`,
         });
-        addedFieldNames.add(fieldName);
+        addedFieldNames.add(promptFieldName);
+      }
+
+      // キャラクターシート選択（最大4つ）
+      const characterSheetFieldName = `nanobana_characterSheets_${node.id}`;
+      if (!addedFieldNames.has(characterSheetFieldName)) {
+        fields.push({
+          type: 'characterSheets',
+          name: characterSheetFieldName,
+          label: `${nodeName} キャラクターシート`,
+          required: false,
+          maxSelections: 4,
+          helperText: `${nodeName}で使用するキャラクターシート（最大4つ）`,
+        });
+        addedFieldNames.add(characterSheetFieldName);
+      }
+
+      // 参照画像アップロード（最大4つ）
+      const referenceImagesFieldName = `nanobana_referenceImages_${node.id}`;
+      if (!addedFieldNames.has(referenceImagesFieldName)) {
+        fields.push({
+          type: 'images',
+          name: referenceImagesFieldName,
+          label: `${nodeName} 参照画像`,
+          required: false,
+          maxImages: 4,
+          helperText: `${nodeName}で使用する参照画像（最大4つ）`,
+        });
+        addedFieldNames.add(referenceImagesFieldName);
       }
     }
 
