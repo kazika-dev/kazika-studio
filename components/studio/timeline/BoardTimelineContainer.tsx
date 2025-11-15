@@ -30,7 +30,7 @@ export default function BoardTimelineContainer({
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   // BoardsをTimelineBoardsに変換
