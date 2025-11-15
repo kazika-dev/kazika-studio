@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, User, Workflow, Home, Image, Video, Users, MessageCircle } from 'lucide-react';
+import { LogOut, User, Workflow, Home, Image, Video, Users, MessageCircle, Database } from 'lucide-react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import Link from 'next/link';
 
@@ -60,17 +60,6 @@ export default function Header() {
                 ホーム
               </Link>
               <Link
-                href="/workflow"
-                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
-                  pathname === '/workflow'
-                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Workflow size={16} />
-                ワークフロー
-              </Link>
-              <Link
                 href="/outputs"
                 className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
                   pathname === '/outputs'
@@ -113,6 +102,17 @@ export default function Header() {
               >
                 <MessageCircle size={16} />
                 会話
+              </Link>
+              <Link
+                href="/master"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/master')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Database size={16} />
+                マスター管理
               </Link>
             </nav>
           </div>
