@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildConversationPrompt, parseAIResponse, validateMessageSpeakers } from '@/lib/conversation/prompt-builder';
+import {
+  buildConversationPrompt,
+  parseAIResponse,
+  validateMessageSpeakers,
+  buildScenePrompt,
+  parseScenePromptResponse
+} from '@/lib/conversation/prompt-builder';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**
@@ -216,13 +222,54 @@ export async function POST(request: NextRequest) {
       generated_messages: messages.map(m => m.id)
     });
 
+    // Generate scene image prompt
+    console.log('Generating scene image prompt...');
+    let sceneData = null;
+    try {
+      const scenePrompt = buildScenePrompt(
+        body.situation,
+        characters.map(c => ({
+          name: c.name,
+          description: c.description || 'キャラクターの説明なし'
+        })),
+        parsed.messages
+      );
+
+      const sceneResult = await model.generateContent(scenePrompt);
+      const sceneAiResponse = sceneResult.response.text();
+      const scenePromptData = await parseScenePromptResponse(sceneAiResponse);
+
+      // Save scene to database
+      const { data: scene, error: sceneError } = await supabase
+        .from('conversation_scenes')
+        .insert({
+          conversation_id: conversation.id,
+          scene_number: 1,
+          scene_description: scenePromptData.sceneDescription,
+          image_generation_prompt: scenePromptData.imagePrompt
+        })
+        .select()
+        .single();
+
+      if (sceneError) {
+        console.error('Failed to save scene:', sceneError);
+      } else {
+        sceneData = scene;
+        console.log('Scene image prompt generated successfully');
+      }
+    } catch (sceneError) {
+      console.error('Failed to generate scene prompt:', sceneError);
+      // Continue even if scene generation fails - this is not critical
+    }
+
     console.log(`Successfully generated conversation ${conversation.id} with ${messages.length} messages`);
 
     return NextResponse.json({
       success: true,
       data: {
         conversationId: conversation.id,
-        messages
+        messages,
+        scene: sceneData
       }
     } as GenerateConversationResponse);
 
