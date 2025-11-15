@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import {
+
   Box,
   Button,
   Card,
@@ -17,19 +18,23 @@ import {
   ZoomOutMap as ZoomOutMapIcon,
   Label as LabelIcon,
   ArrowBack as ArrowBackIcon,
+
 } from '@mui/icons-material';
 
 interface MasterTable {
   id: string;
   name: string;
+
   displayName: string;
   description: string;
   icon: React.ReactNode;
   color: string;
+
 }
 
 const masterTables: MasterTable[] = [
   {
+
     id: 'eleven_labs_tags',
     name: 'eleven_labs_tags',
     displayName: 'ElevenLabs タグ',
@@ -60,11 +65,13 @@ const masterTables: MasterTable[] = [
     description: 'ショット距離のマスタデータ（クローズアップ、ロングショットなど）',
     icon: <ZoomOutMapIcon />,
     color: '#ed6c02',
+
   },
 ];
 
 export default function MasterPage() {
   const router = useRouter();
+
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -82,6 +89,7 @@ export default function MasterPage() {
         </Typography>
         <Typography variant="body1" color="text.secondary">
           システムで使用するマスタデータの管理を行います。
+
         </Typography>
       </Box>
 

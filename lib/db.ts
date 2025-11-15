@@ -746,6 +746,117 @@ export async function deleteCharacterSheet(id: number) {
 }
 
 // =====================================================
+// マスターテーブル汎用関数
+// =====================================================
+
+/**
+ * マスターテーブルの全レコードを取得
+ */
+export async function getAllMasterRecords(tableName: string) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.${tableName} ORDER BY id ASC`,
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * マスターテーブルのレコードをIDで取得
+ */
+export async function getMasterRecordById(tableName: string, id: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.${tableName} WHERE id = $1`,
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルにレコードを作成
+ */
+export async function createMasterRecord(tableName: string, data: {
+  name: string;
+  description?: string;
+  name_ja?: string;
+  description_ja?: string;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.${tableName} (name, description, name_ja, description_ja)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.name_ja || '',
+      data.description_ja || '',
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルのレコードを更新
+ */
+export async function updateMasterRecord(tableName: string, id: number, data: {
+  name?: string;
+  description?: string;
+  name_ja?: string;
+  description_ja?: string;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.name_ja !== undefined) {
+    updates.push(`name_ja = $${paramIndex++}`);
+    values.push(data.name_ja);
+  }
+  if (data.description_ja !== undefined) {
+    updates.push(`description_ja = $${paramIndex++}`);
+    values.push(data.description_ja);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const sql = `UPDATE kazikastudio.${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  const result = await query(sql, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルのレコードを削除
+ */
+export async function deleteMasterRecord(tableName: string, id: number) {
+  const result = await query(
+    `DELETE FROM kazikastudio.${tableName} WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+// =====================================================
 // ElevenLabs Tags関連の関数
 // =====================================================
 

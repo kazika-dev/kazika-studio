@@ -1,3 +1,4 @@
+
 'use client';
 
 import { use } from 'react';
@@ -6,6 +7,7 @@ import MasterTableManager from '@/components/master/MasterTableManager';
 interface TableConfig {
   displayName: string;
   description: string;
+
   showJapaneseFields?: boolean; // 日本語フィールドを持つテーブルかどうか
 }
 
@@ -39,15 +41,18 @@ export default function MasterTablePage({
 }) {
   const { table } = use(params);
 
+
   const config = TABLE_CONFIGS[table];
 
   if (!config) {
+
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>テーブルが見つかりません</h1>
         <p>指定されたテーブル「{table}」は存在しません。</p>
       </div>
     );
+
   }
 
   return (
@@ -55,7 +60,9 @@ export default function MasterTablePage({
       tableName={table}
       displayName={config.displayName}
       description={config.description}
+
       showJapaneseFields={config.showJapaneseFields}
+
     />
   );
 }
