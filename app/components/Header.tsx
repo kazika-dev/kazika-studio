@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
+
 import { LogOut, User, Workflow, Home, Image, Video, Users, MessageCircle, Database } from 'lucide-react';
+
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import Link from 'next/link';
 
@@ -111,8 +113,10 @@ export default function Header() {
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
+
                 <Database size={16} />
                 マスター管理
+
               </Link>
             </nav>
           </div>
