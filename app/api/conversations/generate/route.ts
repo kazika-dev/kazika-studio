@@ -4,9 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildConversationPrompt,
   parseAIResponse,
+
   validateMessageSpeakers,
   buildScenePrompt,
   parseScenePromptResponse
+
 } from '@/lib/conversation/prompt-builder';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
