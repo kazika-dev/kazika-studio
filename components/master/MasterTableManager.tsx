@@ -48,12 +48,14 @@ interface MasterTableManagerProps {
   tableName: string;
   displayName: string;
   description: string;
+  showJapaneseFields?: boolean; // 日本語フィールドを表示するかどうか（デフォルト: false）
 }
 
 export default function MasterTableManager({
   tableName,
   displayName,
   description,
+  showJapaneseFields = false,
 }: MasterTableManagerProps) {
   const router = useRouter();
   const [records, setRecords] = useState<MasterRecord[]>([]);
@@ -286,10 +288,10 @@ export default function MasterTableManager({
             <TableHead>
               <TableRow>
                 <TableCell>ID</TableCell>
-                <TableCell>名前 (EN)</TableCell>
-                <TableCell>名前 (JA)</TableCell>
-                <TableCell>説明 (EN)</TableCell>
-                <TableCell>説明 (JA)</TableCell>
+                <TableCell>名前{showJapaneseFields && ' (EN)'}</TableCell>
+                {showJapaneseFields && <TableCell>名前 (JA)</TableCell>}
+                <TableCell>説明{showJapaneseFields && ' (EN)'}</TableCell>
+                {showJapaneseFields && <TableCell>説明 (JA)</TableCell>}
                 <TableCell>作成日時</TableCell>
                 <TableCell align="right">操作</TableCell>
               </TableRow>
@@ -305,21 +307,25 @@ export default function MasterTableManager({
                       {record.name}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body1" fontWeight="medium">
-                      {record.name_ja || '-'}
-                    </Typography>
-                  </TableCell>
+                  {showJapaneseFields && (
+                    <TableCell>
+                      <Typography variant="body1" fontWeight="medium">
+                        {record.name_ja || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Typography variant="body2" color="text.secondary">
                       {record.description || '-'}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {record.description_ja || '-'}
-                    </Typography>
-                  </TableCell>
+                  {showJapaneseFields && (
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {record.description_ja || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Typography variant="body2">
                       {formatDate(record.created_at)}
@@ -364,7 +370,7 @@ export default function MasterTableManager({
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
-              label="名前 (English)"
+              label={showJapaneseFields ? "名前 (English)" : "名前"}
               required
               fullWidth
               value={formName}
@@ -373,16 +379,18 @@ export default function MasterTableManager({
               autoFocus
               placeholder="e.g., High Angle"
             />
+            {showJapaneseFields && (
+              <TextField
+                label="名前 (日本語)"
+                fullWidth
+                value={formNameJa}
+                onChange={(e) => setFormNameJa(e.target.value)}
+                disabled={submitting}
+                placeholder="例：ハイアングル"
+              />
+            )}
             <TextField
-              label="名前 (日本語)"
-              fullWidth
-              value={formNameJa}
-              onChange={(e) => setFormNameJa(e.target.value)}
-              disabled={submitting}
-              placeholder="例：ハイアングル"
-            />
-            <TextField
-              label="説明 (English)"
+              label={showJapaneseFields ? "説明 (English)" : "説明"}
               fullWidth
               multiline
               rows={3}
@@ -391,16 +399,18 @@ export default function MasterTableManager({
               disabled={submitting}
               placeholder="e.g., Looks down on the subject..."
             />
-            <TextField
-              label="説明 (日本語)"
-              fullWidth
-              multiline
-              rows={3}
-              value={formDescriptionJa}
-              onChange={(e) => setFormDescriptionJa(e.target.value)}
-              disabled={submitting}
-              placeholder="例：上から見下ろす。被写体を弱く、小さく見せる効果。"
-            />
+            {showJapaneseFields && (
+              <TextField
+                label="説明 (日本語)"
+                fullWidth
+                multiline
+                rows={3}
+                value={formDescriptionJa}
+                onChange={(e) => setFormDescriptionJa(e.target.value)}
+                disabled={submitting}
+                placeholder="例：上から見下ろす。被写体を弱く、小さく見せる効果。"
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -425,7 +435,7 @@ export default function MasterTableManager({
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
-              label="名前 (English)"
+              label={showJapaneseFields ? "名前 (English)" : "名前"}
               required
               fullWidth
               value={formName}
@@ -434,16 +444,18 @@ export default function MasterTableManager({
               autoFocus
               placeholder="e.g., High Angle"
             />
+            {showJapaneseFields && (
+              <TextField
+                label="名前 (日本語)"
+                fullWidth
+                value={formNameJa}
+                onChange={(e) => setFormNameJa(e.target.value)}
+                disabled={submitting}
+                placeholder="例：ハイアングル"
+              />
+            )}
             <TextField
-              label="名前 (日本語)"
-              fullWidth
-              value={formNameJa}
-              onChange={(e) => setFormNameJa(e.target.value)}
-              disabled={submitting}
-              placeholder="例：ハイアングル"
-            />
-            <TextField
-              label="説明 (English)"
+              label={showJapaneseFields ? "説明 (English)" : "説明"}
               fullWidth
               multiline
               rows={3}
@@ -452,16 +464,18 @@ export default function MasterTableManager({
               disabled={submitting}
               placeholder="e.g., Looks down on the subject..."
             />
-            <TextField
-              label="説明 (日本語)"
-              fullWidth
-              multiline
-              rows={3}
-              value={formDescriptionJa}
-              onChange={(e) => setFormDescriptionJa(e.target.value)}
-              disabled={submitting}
-              placeholder="例：上から見下ろす。被写体を弱く、小さく見せる効果。"
-            />
+            {showJapaneseFields && (
+              <TextField
+                label="説明 (日本語)"
+                fullWidth
+                multiline
+                rows={3}
+                value={formDescriptionJa}
+                onChange={(e) => setFormDescriptionJa(e.target.value)}
+                disabled={submitting}
+                placeholder="例：上から見下ろす。被写体を弱く、小さく見せる効果。"
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
