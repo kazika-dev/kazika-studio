@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildConversationPrompt, parseAIResponse, validateMessageSpeakers } from '@/lib/conversation/prompt-builder';
+import {
+  buildConversationPrompt,
+  parseAIResponse,
+
+  validateMessageSpeakers,
+  buildScenePrompt,
+  parseScenePromptResponse
+
+} from '@/lib/conversation/prompt-builder';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**
@@ -183,7 +191,8 @@ export async function POST(request: NextRequest) {
         message_text: msg.message,
         sequence_order: idx,
         metadata: {
-          emotion: msg.emotion || 'neutral'
+          emotion: msg.emotion || 'neutral',
+          scene: msg.scene || ''
         }
       };
     });
@@ -206,6 +215,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate conversation scenes
+    // Group messages into scenes (e.g., every 3-5 messages or based on topic changes)
+    const scenesPerConversation = Math.max(1, Math.ceil(messages.length / 4)); // Aim for ~4 messages per scene
+    const scenesToInsert = [];
+
+    for (let i = 0; i < scenesPerConversation; i++) {
+      const startIdx = Math.floor(i * messages.length / scenesPerConversation);
+      const endIdx = Math.floor((i + 1) * messages.length / scenesPerConversation);
+      const sceneMessages = messages.slice(startIdx, endIdx);
+
+      if (sceneMessages.length === 0) continue;
+
+      // Create scene description from the messages in this scene
+      const sceneDialogue = sceneMessages
+        .map(m => `${m.speaker_name}: ${m.message_text}`)
+        .join('\n');
+
+      const sceneDescription = `Scene ${i + 1}: ${sceneMessages[0].speaker_name}との会話 (${sceneMessages.length}メッセージ)`;
+
+      // Create image generation prompt based on the scene context
+      const imagePrompt = `${body.situation}の場面で、${sceneMessages.map(m => m.speaker_name).filter((v, i, a) => a.indexOf(v) === i).join('と')}が会話している様子。${sceneMessages[0].metadata?.emotion || 'neutral'}な雰囲気。`;
+
+      scenesToInsert.push({
+        conversation_id: conversation.id,
+        scene_number: i + 1,
+        scene_description: sceneDescription,
+        image_generation_prompt: imagePrompt,
+        metadata: {
+          message_ids: sceneMessages.map(m => m.id),
+          start_sequence: startIdx,
+          end_sequence: endIdx - 1,
+          dialogue_preview: sceneDialogue.slice(0, 200)
+        }
+      });
+    }
+
+    // Insert scenes into database
+    const { data: scenes, error: sceneError } = await supabase
+      .from('conversation_scenes')
+      .insert(scenesToInsert)
+      .select();
+
+    if (sceneError) {
+      console.error('Failed to save conversation scenes:', sceneError);
+      // Don't fail the entire operation, just log the error
+    } else {
+      console.log(`Created ${scenes?.length || 0} scenes for conversation ${conversation.id}`);
+    }
+
     // Save generation log
     await supabase.from('conversation_generation_logs').insert({
       conversation_id: conversation.id,
@@ -216,13 +274,54 @@ export async function POST(request: NextRequest) {
       generated_messages: messages.map(m => m.id)
     });
 
+    // Generate scene image prompt
+    console.log('Generating scene image prompt...');
+    let sceneData = null;
+    try {
+      const scenePrompt = buildScenePrompt(
+        body.situation,
+        characters.map(c => ({
+          name: c.name,
+          description: c.description || 'キャラクターの説明なし'
+        })),
+        parsed.messages
+      );
+
+      const sceneResult = await model.generateContent(scenePrompt);
+      const sceneAiResponse = sceneResult.response.text();
+      const scenePromptData = await parseScenePromptResponse(sceneAiResponse);
+
+      // Save scene to database
+      const { data: scene, error: sceneError } = await supabase
+        .from('conversation_scenes')
+        .insert({
+          conversation_id: conversation.id,
+          scene_number: 1,
+          scene_description: scenePromptData.sceneDescription,
+          image_generation_prompt: scenePromptData.imagePrompt
+        })
+        .select()
+        .single();
+
+      if (sceneError) {
+        console.error('Failed to save scene:', sceneError);
+      } else {
+        sceneData = scene;
+        console.log('Scene image prompt generated successfully');
+      }
+    } catch (sceneError) {
+      console.error('Failed to generate scene prompt:', sceneError);
+      // Continue even if scene generation fails - this is not critical
+    }
+
     console.log(`Successfully generated conversation ${conversation.id} with ${messages.length} messages`);
 
     return NextResponse.json({
       success: true,
       data: {
         conversationId: conversation.id,
-        messages
+        messages,
+        scene: sceneData
       }
     } as GenerateConversationResponse);
 

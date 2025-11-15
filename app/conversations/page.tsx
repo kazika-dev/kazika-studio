@@ -28,6 +28,7 @@ import type {
 
 interface ConversationWithCount extends Conversation {
   messageCount?: number;
+  sceneCount?: number;
   studios?: {
     id: number;
     name: string;
@@ -370,9 +371,14 @@ export default function ConversationsPage() {
                         {conv.description}
                       </Typography>
                     )}
-                    <Typography variant="caption" color="text.secondary">
-                      {conv.messageCount || 0} メッセージ
-                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {conv.messageCount || 0} メッセージ
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {conv.sceneCount || 0} シーン
+                      </Typography>
+                    </Box>
                   </Box>
                 ))}
               </Box>
