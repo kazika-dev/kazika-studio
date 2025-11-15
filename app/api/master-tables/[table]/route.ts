@@ -8,6 +8,7 @@ import {
 
 // 許可されたマスタテーブル名のリスト
 const ALLOWED_TABLES = [
+  'eleven_labs_tags',
   'm_camera_angles',
   'm_camera_movements',
   'm_shot_distances',

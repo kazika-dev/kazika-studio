@@ -2,115 +2,167 @@
 
 import { useRouter } from 'next/navigation';
 import {
-  Container,
-  Typography,
+
   Box,
-  Grid,
+  Button,
   Card,
   CardContent,
-  CardActionArea,
-  Chip,
+  CardActions,
+  Container,
+  Grid,
+  Typography,
 } from '@mui/material';
 import {
-  Videocam as VideocamIcon,
   PhotoCamera as PhotoCameraIcon,
-  ZoomIn as ZoomInIcon,
-  MusicNote as MusicNoteIcon,
+  VideoSettings as VideoSettingsIcon,
+  ZoomOutMap as ZoomOutMapIcon,
+  Label as LabelIcon,
+  ArrowBack as ArrowBackIcon,
+
 } from '@mui/icons-material';
 
 interface MasterTable {
   id: string;
   name: string;
-  tableName: string;
+
+  displayName: string;
   description: string;
   icon: React.ReactNode;
-  count?: number;
+  color: string;
+
 }
 
 const masterTables: MasterTable[] = [
   {
+
+    id: 'eleven_labs_tags',
+    name: 'eleven_labs_tags',
+    displayName: 'ElevenLabs タグ',
+    description: 'ElevenLabs 音声生成用のタグマスタデータ',
+    icon: <LabelIcon />,
+    color: '#9c27b0',
+  },
+  {
     id: 'm_camera_angles',
-    name: 'カメラアングル',
-    tableName: 'm_camera_angles',
-    description: 'カメラの角度マスタ（High Angle, Low Angleなど）',
-    icon: <PhotoCameraIcon fontSize="large" />,
+    name: 'm_camera_angles',
+    displayName: 'カメラアングル',
+    description: 'カメラアングルのマスタデータ（ハイアングル、ローアングルなど）',
+    icon: <PhotoCameraIcon />,
+    color: '#1976d2',
   },
   {
     id: 'm_camera_movements',
-    name: 'カメラムーブメント',
-    tableName: 'm_camera_movements',
-    description: 'カメラの動きマスタ（Pan, Tilt, Zoomなど）',
-    icon: <VideocamIcon fontSize="large" />,
+    name: 'm_camera_movements',
+    displayName: 'カメラムーブメント',
+    description: 'カメラの動きのマスタデータ（パン、ティルト、ズームなど）',
+    icon: <VideoSettingsIcon />,
+    color: '#2e7d32',
   },
   {
     id: 'm_shot_distances',
-    name: 'ショット距離',
-    tableName: 'm_shot_distances',
-    description: '撮影距離マスタ（Close-up, Medium Shot, Long Shotなど）',
-    icon: <ZoomInIcon fontSize="large" />,
-  },
-  {
-    id: 'eleven_labs_tags',
-    name: 'ElevenLabs タグ',
-    tableName: 'eleven_labs_tags',
-    description: 'ElevenLabsの音声タグマスタ',
-    icon: <MusicNoteIcon fontSize="large" />,
+    name: 'm_shot_distances',
+    displayName: 'ショット距離',
+    description: 'ショット距離のマスタデータ（クローズアップ、ロングショットなど）',
+    icon: <ZoomOutMapIcon />,
+    color: '#ed6c02',
+
   },
 ];
 
 export default function MasterPage() {
   const router = useRouter();
 
-  const handleCardClick = (tableName: string) => {
-    router.push(`/master/${tableName}`);
-  };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => router.push('/')}
+        sx={{ mb: 2 }}
+      >
+        ホームに戻る
+      </Button>
+
       <Box mb={4}>
         <Typography variant="h4" component="h1" gutterBottom>
-          マスタ管理
+          マスタデータ管理
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          各種マスタデータを管理します
+          システムで使用するマスタデータの管理を行います。
+
         </Typography>
       </Box>
 
       <Grid container spacing={3}>
         {masterTables.map((table) => (
-          <Grid item xs={12} sm={6} md={6} key={table.id}>
-            <Card>
-              <CardActionArea onClick={() => handleCardClick(table.tableName)}>
-                <CardContent>
-                  <Box display="flex" alignItems="center" mb={2}>
-                    <Box
-                      sx={{
-                        mr: 2,
-                        color: 'primary.main',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {table.icon}
-                    </Box>
-                    <Box flexGrow={1}>
-                      <Typography variant="h6" component="h2">
-                        {table.name}
-                      </Typography>
-                      {table.count !== undefined && (
-                        <Chip
-                          label={`${table.count}件`}
-                          size="small"
-                          sx={{ mt: 0.5 }}
-                        />
-                      )}
-                    </Box>
+          <Grid size={{ xs: 12, sm: 6, md: 6 }} key={table.id}>
+            <Card
+              sx={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                },
+              }}
+            >
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    mb: 2,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: '8px',
+                      backgroundColor: table.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      mr: 2,
+                    }}
+                  >
+                    {table.icon}
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {table.description}
+                  <Typography variant="h6" component="h2">
+                    {table.displayName}
                   </Typography>
-                </CardContent>
-              </CardActionArea>
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {table.description}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: 'block', fontFamily: 'monospace' }}
+                >
+                  テーブル: kazikastudio.{table.name}
+                </Typography>
+              </CardContent>
+              <CardActions sx={{ p: 2, pt: 0 }}>
+                <Button
+                  size="medium"
+                  variant="contained"
+                  fullWidth
+                  onClick={() => router.push(`/master/${table.name}`)}
+                  sx={{
+                    backgroundColor: table.color,
+                    '&:hover': {
+                      backgroundColor: table.color,
+                      filter: 'brightness(0.9)',
+                    },
+                  }}
+                >
+                  管理画面を開く
+                </Button>
+              </CardActions>
             </Card>
           </Grid>
         ))}

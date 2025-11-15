@@ -1,43 +1,58 @@
+
+'use client';
+
+import { use } from 'react';
 import MasterTableManager from '@/components/master/MasterTableManager';
-import { notFound } from 'next/navigation';
 
 interface TableConfig {
   displayName: string;
   description: string;
+
+  showJapaneseFields?: boolean; // 日本語フィールドを持つテーブルかどうか
 }
 
 const TABLE_CONFIGS: Record<string, TableConfig> = {
+  'eleven_labs_tags': {
+    displayName: 'ElevenLabs タグ',
+    description: 'ElevenLabs 音声生成用のタグマスタデータを管理します。',
+    showJapaneseFields: false, // eleven_labs_tagsには日本語フィールドがない
+  },
   'm_camera_angles': {
-    displayName: 'カメラアングル マスタ',
-    description: 'カメラの角度（High Angle, Low Angleなど）を管理します',
+    displayName: 'カメラアングル',
+    description: 'カメラアングルのマスタデータを管理します（ハイアングル、ローアングルなど）。',
+    showJapaneseFields: true,
   },
   'm_camera_movements': {
-    displayName: 'カメラムーブメント マスタ',
-    description: 'カメラの動き（Pan, Tilt, Zoomなど）を管理します',
+    displayName: 'カメラムーブメント',
+    description: 'カメラの動きのマスタデータを管理します（パン、ティルト、ズームなど）。',
+    showJapaneseFields: true,
   },
   'm_shot_distances': {
-    displayName: 'ショット距離 マスタ',
-    description: '撮影距離（Close-up, Medium Shot, Long Shotなど）を管理します',
-  },
-  'eleven_labs_tags': {
-    displayName: 'ElevenLabs タグ マスタ',
-    description: 'ElevenLabsの音声タグを管理します',
+    displayName: 'ショット距離',
+    description: 'ショット距離のマスタデータを管理します（クローズアップ、ロングショットなど）。',
+    showJapaneseFields: true,
   },
 };
 
-interface PageProps {
-  params: Promise<{
-    table: string;
-  }>;
-}
+export default function MasterTablePage({
+  params,
+}: {
+  params: Promise<{ table: string }>;
+}) {
+  const { table } = use(params);
 
-export default async function MasterTablePage({ params }: PageProps) {
-  const { table } = await params;
 
   const config = TABLE_CONFIGS[table];
 
   if (!config) {
-    notFound();
+
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1>テーブルが見つかりません</h1>
+        <p>指定されたテーブル「{table}」は存在しません。</p>
+      </div>
+    );
+
   }
 
   return (
@@ -45,6 +60,9 @@ export default async function MasterTablePage({ params }: PageProps) {
       tableName={table}
       displayName={config.displayName}
       description={config.description}
+
+      showJapaneseFields={config.showJapaneseFields}
+
     />
   );
 }
