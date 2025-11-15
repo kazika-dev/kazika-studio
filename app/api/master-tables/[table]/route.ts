@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import {
+  getAllMasterRecords,
+  createMasterRecord,
+  updateMasterRecord,
+  deleteMasterRecord,
+} from '@/lib/db';
 
 // 許可されたマスタテーブル名のリスト
 const ALLOWED_TABLES = [
   'm_camera_angles',
   'm_camera_movements',
   'm_shot_distances',
+  'eleven_labs_tags',
 ];
 
 // テーブル名のバリデーション
@@ -22,16 +28,6 @@ export async function GET(
   { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { table } = await params;
 
     if (!validateTableName(table)) {
@@ -41,14 +37,7 @@ export async function GET(
       );
     }
 
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .order('id', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
+    const data = await getAllMasterRecords(table);
 
     return NextResponse.json({
       success: true,
@@ -72,16 +61,6 @@ export async function POST(
   { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { table } = await params;
 
     if (!validateTableName(table)) {
@@ -101,22 +80,12 @@ export async function POST(
       );
     }
 
-    const insertData: any = {
+    const data = await createMasterRecord(table, {
       name: name.trim(),
       description: description?.trim() || '',
       name_ja: name_ja?.trim() || '',
       description_ja: description_ja?.trim() || '',
-    };
-
-    const { data, error } = await supabase
-      .from(table)
-      .insert(insertData)
-      .select('*')
-      .single();
-
-    if (error) {
-      throw error;
-    }
+    });
 
     return NextResponse.json({
       success: true,
@@ -140,16 +109,6 @@ export async function PUT(
   { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { table } = await params;
 
     if (!validateTableName(table)) {
@@ -176,28 +135,18 @@ export async function PUT(
       );
     }
 
-    const updateData: any = {
+    const data = await updateMasterRecord(table, id, {
       name: name.trim(),
       description: description?.trim() || '',
       name_ja: name_ja?.trim() || '',
       description_ja: description_ja?.trim() || '',
-    };
+    });
 
-    const { data, error } = await supabase
-      .from(table)
-      .update(updateData)
-      .eq('id', id)
-      .select('*')
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Record not found' },
-          { status: 404 }
-        );
-      }
-      throw error;
+    if (!data) {
+      return NextResponse.json(
+        { error: 'Record not found' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
@@ -222,16 +171,6 @@ export async function DELETE(
   { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { table } = await params;
 
     if (!validateTableName(table)) {
@@ -251,19 +190,13 @@ export async function DELETE(
       );
     }
 
-    const { error } = await supabase
-      .from(table)
-      .delete()
-      .eq('id', parseInt(id));
+    const success = await deleteMasterRecord(table, parseInt(id));
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Record not found' },
-          { status: 404 }
-        );
-      }
-      throw error;
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Record not found' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
