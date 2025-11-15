@@ -746,6 +746,103 @@ export async function deleteCharacterSheet(id: number) {
 }
 
 // =====================================================
+// ElevenLabs Tags関連の関数
+// =====================================================
+
+/**
+ * 全てのElevenLabsタグを取得
+ */
+export async function getAllElevenLabsTags() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags ORDER BY created_at DESC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * IDでElevenLabsタグを取得
+ */
+export async function getElevenLabsTagById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを作成
+ */
+export async function createElevenLabsTag(data: {
+  name: string;
+  description?: string;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.eleven_labs_tags (name, description)
+     VALUES ($1, $2)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを更新
+ */
+export async function updateElevenLabsTag(id: number, data: {
+  name?: string;
+  description?: string;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const sql = `UPDATE kazikastudio.eleven_labs_tags SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  const result = await query(sql, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを削除
+ */
+export async function deleteElevenLabsTag(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.eleven_labs_tags WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+// =====================================================
 // ComfyUI Queue関連の関数
 // =====================================================
 
