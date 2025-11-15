@@ -3,9 +3,6 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "git": {
-    "deploymentEnabled": {
-      "main": true,
-      "master": true
-    }
+    "deploymentEnabled": false
   }
 }
