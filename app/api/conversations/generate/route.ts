@@ -206,6 +206,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate conversation scenes
+    // Group messages into scenes (e.g., every 3-5 messages or based on topic changes)
+    const scenesPerConversation = Math.max(1, Math.ceil(messages.length / 4)); // Aim for ~4 messages per scene
+    const scenesToInsert = [];
+
+    for (let i = 0; i < scenesPerConversation; i++) {
+      const startIdx = Math.floor(i * messages.length / scenesPerConversation);
+      const endIdx = Math.floor((i + 1) * messages.length / scenesPerConversation);
+      const sceneMessages = messages.slice(startIdx, endIdx);
+
+      if (sceneMessages.length === 0) continue;
+
+      // Create scene description from the messages in this scene
+      const sceneDialogue = sceneMessages
+        .map(m => `${m.speaker_name}: ${m.message_text}`)
+        .join('\n');
+
+      const sceneDescription = `Scene ${i + 1}: ${sceneMessages[0].speaker_name}との会話 (${sceneMessages.length}メッセージ)`;
+
+      // Create image generation prompt based on the scene context
+      const imagePrompt = `${body.situation}の場面で、${sceneMessages.map(m => m.speaker_name).filter((v, i, a) => a.indexOf(v) === i).join('と')}が会話している様子。${sceneMessages[0].metadata?.emotion || 'neutral'}な雰囲気。`;
+
+      scenesToInsert.push({
+        conversation_id: conversation.id,
+        scene_number: i + 1,
+        scene_description: sceneDescription,
+        image_generation_prompt: imagePrompt,
+        metadata: {
+          message_ids: sceneMessages.map(m => m.id),
+          start_sequence: startIdx,
+          end_sequence: endIdx - 1,
+          dialogue_preview: sceneDialogue.slice(0, 200)
+        }
+      });
+    }
+
+    // Insert scenes into database
+    const { data: scenes, error: sceneError } = await supabase
+      .from('conversation_scenes')
+      .insert(scenesToInsert)
+      .select();
+
+    if (sceneError) {
+      console.error('Failed to save conversation scenes:', sceneError);
+      // Don't fail the entire operation, just log the error
+    } else {
+      console.log(`Created ${scenes?.length || 0} scenes for conversation ${conversation.id}`);
+    }
+
     // Save generation log
     await supabase.from('conversation_generation_logs').insert({
       conversation_id: conversation.id,
@@ -216,7 +265,7 @@ export async function POST(request: NextRequest) {
       generated_messages: messages.map(m => m.id)
     });
 
-    console.log(`Successfully generated conversation ${conversation.id} with ${messages.length} messages`);
+    console.log(`Successfully generated conversation ${conversation.id} with ${messages.length} messages and ${scenes?.length || 0} scenes`);
 
     return NextResponse.json({
       success: true,

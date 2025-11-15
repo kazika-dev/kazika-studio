@@ -28,6 +28,18 @@ export interface ConversationMessage {
   };
 }
 
+export interface ConversationScene {
+  id: number;
+  conversation_id: number;
+  scene_number: number;
+  scene_description: string;
+  image_generation_prompt: string;
+  generated_image_url: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ConversationGenerationLog {
   id: number;
   conversation_id: number;
@@ -138,6 +150,7 @@ export interface ListConversationsResponse {
   data?: {
     conversations: Array<Conversation & {
       messageCount?: number;
+      sceneCount?: number;
     }>;
     total: number;
   };

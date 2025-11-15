@@ -85,11 +85,13 @@ export async function GET(request: NextRequest) {
 
     console.log('[GET /api/conversations] Found conversations:', conversations?.length || 0);
 
-    // Get message counts for each conversation
+    // Get message counts and scene counts for each conversation
     const conversationIds = conversations?.map(c => c.id) || [];
     let messageCounts: Record<string, number> = {};
+    let sceneCounts: Record<string, number> = {};
 
     if (conversationIds.length > 0) {
+      // Get message counts
       const { data: messageCountData, error: msgCountError } = await supabase
         .from('conversation_messages')
         .select('conversation_id')
@@ -101,12 +103,26 @@ export async function GET(request: NextRequest) {
           return acc;
         }, {} as Record<string, number>);
       }
+
+      // Get scene counts
+      const { data: sceneCountData, error: sceneCountError } = await supabase
+        .from('conversation_scenes')
+        .select('conversation_id')
+        .in('conversation_id', conversationIds);
+
+      if (!sceneCountError && sceneCountData) {
+        sceneCounts = sceneCountData.reduce((acc, scene) => {
+          acc[scene.conversation_id] = (acc[scene.conversation_id] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+      }
     }
 
-    // Add message counts to conversations
+    // Add message counts and scene counts to conversations
     const conversationsWithCounts = (conversations || []).map(conv => ({
       ...conv,
-      messageCount: messageCounts[conv.id] || 0
+      messageCount: messageCounts[conv.id] || 0,
+      sceneCount: sceneCounts[conv.id] || 0
     }));
 
     return NextResponse.json({
