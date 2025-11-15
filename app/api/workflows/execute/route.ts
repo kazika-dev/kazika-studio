@@ -3,6 +3,7 @@ import { executeWorkflow } from '@/lib/workflow/executor';
 import { getWorkflowById, getCharacterSheetById } from '@/lib/db';
 import { Node } from 'reactflow';
 import { createClient } from '@/lib/supabase/server';
+import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 // Next.jsのルートハンドラの設定（ワークフロー実行は時間がかかる可能性がある）
 export const maxDuration = 300; // 5分（秒単位）- Vercel hobby plan limit
@@ -261,6 +262,51 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ElevenLabsノード: elevenlabs_text_{nodeId} と elevenlabs_voiceId_{nodeId} フィールドから値を取得
+        if (nodeType === 'elevenlabs') {
+          const textFieldName = `elevenlabs_text_${nodeId}`;
+          const voiceIdFieldName = `elevenlabs_voiceId_${nodeId}`;
+
+          console.log(`Processing elevenlabs node ${nodeId}:`, {
+            textFieldName,
+            voiceIdFieldName,
+            hasTextField: inputs[textFieldName] !== undefined,
+            hasVoiceIdField: inputs[voiceIdFieldName] !== undefined,
+            currentText: node.data.config?.text,
+            currentVoiceId: node.data.config?.voiceId,
+          });
+
+          // テキストフィールドの処理
+          if (inputs[textFieldName] !== undefined) {
+            const workflowText = node.data.config?.text || '';
+            const formText = inputs[textFieldName];
+            const combinedText = workflowText ? `${workflowText} ${formText}` : formText;
+
+            console.log(`✓ Concatenating elevenlabs node ${nodeId} text:`);
+            console.log(`  Workflow text: ${workflowText}`);
+            console.log(`  Form text: ${formText}`);
+            console.log(`  Combined: ${combinedText}`);
+
+            node.data.config = {
+              ...node.data.config,
+              text: combinedText,
+            };
+          } else {
+            console.log(`✗ No matching text field found for elevenlabs node ${nodeId}`);
+          }
+
+          // 音声IDフィールドの処理
+          if (inputs[voiceIdFieldName] !== undefined) {
+            console.log(`✓ Setting elevenlabs node ${nodeId} voiceId:`, inputs[voiceIdFieldName]);
+            node.data.config = {
+              ...node.data.config,
+              voiceId: inputs[voiceIdFieldName],
+            };
+          } else {
+            console.log(`✗ No matching voiceId field found for elevenlabs node ${nodeId}`);
+          }
+        }
+
         // キャラクターシートノード: characterSheet_{nodeId} フィールドからIDを取得
         if (nodeType === 'characterSheet') {
           const fieldName = `characterSheet_${nodeId}`;
@@ -507,25 +553,43 @@ export async function POST(request: NextRequest) {
           } else if (nodeType === 'elevenlabs') {
             // 音声生成ノード
             if (output.audioData) {
-              // 音声データはbase64形式なので、そのまま保存するか、URLに変換する必要があります
-              // ここでは簡易的にmetadataに保存
-              const insertData: any = {
-                user_id: user.id,
-                workflow_id: workflowId,
-                output_type: 'audio',
-                content_text: 'Audio data (base64)',
-                prompt: prompt,
-                metadata: {
-                  nodeId,
-                  nodeType,
-                  nodeName: node?.data?.config?.name,
-                  hasAudioData: true,
-                },
-              };
+              // 音声データをGCP Storageにアップロード
+              const audioData = output.audioData;
+              const base64Data = typeof audioData === 'string' ? audioData : audioData.data;
+              const mimeType = typeof audioData === 'string' ? 'audio/mpeg' : audioData.mimeType;
 
-              savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
-              );
+              console.log('Uploading ElevenLabs audio to GCP Storage:', {
+                nodeId,
+                nodeName: node?.data?.config?.name,
+                mimeType,
+                dataLength: base64Data.length,
+              });
+
+              // GCP Storageにアップロード
+              const uploadPromise = (async () => {
+                const storagePath = await uploadImageToStorage(base64Data, mimeType, undefined, 'audio');
+
+                console.log('ElevenLabs audio uploaded to GCP Storage:', storagePath);
+
+                const insertData: any = {
+                  user_id: user.id,
+                  workflow_id: workflowId,
+                  output_type: 'audio',
+                  content_url: storagePath,
+                  prompt: nodeResult.requestBody?.text || node?.data?.config?.text || null,
+                  metadata: {
+                    nodeId,
+                    nodeType,
+                    nodeName: node?.data?.config?.name,
+                    voiceId: nodeResult.requestBody?.voiceId || node?.data?.config?.voiceId,
+                    modelId: nodeResult.requestBody?.modelId || node?.data?.config?.modelId,
+                  },
+                };
+
+                return supabase.from('workflow_outputs').insert(insertData).select();
+              })();
+
+              savePromises.push(uploadPromise);
             }
           }
           // inputやimageInputノードは保存しない（入力データなので）

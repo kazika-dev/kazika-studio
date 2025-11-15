@@ -16,12 +16,13 @@ import {
   RadioGroup,
   FormControlLabel,
   CircularProgress,
+  MenuItem,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'select';
   name: string;
   label: string;
   placeholder?: string;
@@ -29,6 +30,7 @@ export interface FormFieldConfig {
   rows?: number;
   maxImages?: number;
   helperText?: string;
+  options?: { label: string; value: string }[];
 }
 
 interface DynamicFormFieldProps {
@@ -140,6 +142,65 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
           helperText={config.helperText}
           variant="outlined"
         />
+      </Box>
+    );
+  }
+
+  // セレクトボックス
+  if (config.type === 'select') {
+    const [customVoices, setCustomVoices] = useState<{ label: string; value: string }[]>([]);
+    const [loading, setLoading] = useState(false);
+    const isVoiceIdField = config.name.includes('elevenlabs_voiceId');
+
+    useEffect(() => {
+      // ElevenLabsの音声IDフィールドの場合、カスタム音声を読み込む
+      if (isVoiceIdField) {
+        const loadCustomVoices = async () => {
+          setLoading(true);
+          try {
+            const response = await fetch('/api/character-sheets');
+            const data = await response.json();
+            if (data.success) {
+              const voices = data.characterSheets
+                .filter((c: any) => c.elevenlabs_voice_id && c.elevenlabs_voice_id.trim())
+                .map((c: any) => ({
+                  label: `${c.name} (カスタム)`,
+                  value: c.elevenlabs_voice_id,
+                }));
+              setCustomVoices(voices);
+            }
+          } catch (error) {
+            console.error('Failed to load custom voices:', error);
+          } finally {
+            setLoading(false);
+          }
+        };
+        loadCustomVoices();
+      }
+    }, [isVoiceIdField]);
+
+    const allOptions = isVoiceIdField
+      ? [...(config.options || []), ...customVoices]
+      : (config.options || []);
+
+    return (
+      <Box>
+        <TextField
+          label={config.label}
+          fullWidth
+          select
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          helperText={config.helperText}
+          variant="outlined"
+          disabled={loading}
+        >
+          {allOptions.map((option, index) => (
+            <MenuItem key={`${option.value}-${index}`} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
       </Box>
     );
   }

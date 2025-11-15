@@ -664,17 +664,19 @@ export async function createCharacterSheet(data: {
   name: string;
   image_url: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, metadata)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, elevenlabs_voice_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
       data.user_id,
       data.name,
       data.image_url,
       data.description || '',
+      data.elevenlabs_voice_id || null,
       data.metadata || {},
     ]
   );
@@ -688,6 +690,7 @@ export async function updateCharacterSheet(id: number, data: {
   name?: string;
   image_url?: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const updates: string[] = [];
@@ -705,6 +708,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.description !== undefined) {
     updates.push(`description = $${paramIndex++}`);
     values.push(data.description);
+  }
+  if (data.elevenlabs_voice_id !== undefined) {
+    updates.push(`elevenlabs_voice_id = $${paramIndex++}`);
+    values.push(data.elevenlabs_voice_id);
   }
   if (data.metadata !== undefined) {
     updates.push(`metadata = $${paramIndex++}`);
@@ -755,7 +762,7 @@ export async function createComfyUIQueueItem(data: {
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.comfyui_queue
+    `INSERT INTO kazikastudio.comfyui_queues
      (user_id, comfyui_workflow_name, workflow_json, prompt, img_gcp_storage_paths, priority, metadata)
      VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb)
      RETURNING *`,
@@ -777,7 +784,7 @@ export async function createComfyUIQueueItem(data: {
  */
 export async function getComfyUIQueueItemById(id: number) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE id = $1',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE id = $1',
     [id]
   );
 
@@ -793,7 +800,7 @@ export async function getComfyUIQueueItemById(id: number) {
  */
 export async function getComfyUIQueueItemsByUserId(userId: string) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE user_id = $1 ORDER BY created_at DESC',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
   return result.rows;
@@ -804,7 +811,7 @@ export async function getComfyUIQueueItemsByUserId(userId: string) {
  */
 export async function getNextPendingComfyUIQueueItem() {
   const result = await query(
-    `SELECT * FROM kazikastudio.comfyui_queue
+    `SELECT * FROM kazikastudio.comfyui_queues
      WHERE status = 'pending'
      ORDER BY priority DESC, created_at ASC
      LIMIT 1`
@@ -873,7 +880,7 @@ export async function updateComfyUIQueueItem(id: number, data: {
 
   values.push(id);
   const result = await query(
-    `UPDATE kazikastudio.comfyui_queue SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    `UPDATE kazikastudio.comfyui_queues SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     values
   );
 
@@ -889,7 +896,7 @@ export async function updateComfyUIQueueItem(id: number, data: {
  */
 export async function deleteComfyUIQueueItem(id: number) {
   const result = await query(
-    'DELETE FROM kazikastudio.comfyui_queue WHERE id = $1 RETURNING *',
+    'DELETE FROM kazikastudio.comfyui_queues WHERE id = $1 RETURNING *',
     [id]
   );
   return result.rows.length > 0;
@@ -900,7 +907,7 @@ export async function deleteComfyUIQueueItem(id: number) {
  */
 export async function getComfyUIQueueItemByPromptId(promptId: string) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE comfyui_prompt_id = $1',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE comfyui_prompt_id = $1',
     [promptId]
   );
 

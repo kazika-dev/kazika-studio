@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
         'hf-api-key': apiKey,
         'hf-secret': apiSecret,
         'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       body: JSON.stringify(requestBody),
     });
@@ -172,11 +173,11 @@ export async function POST(request: NextRequest) {
         console.log(`Polling... (${elapsedSeconds}s elapsed, attempt ${pollCount}/${maxPollAttempts})`);
       }
 
-      // ステータスをチェック
+      // ステータスをチェック（正しいエンドポイントを最初に試す）
       const endpoints = [
+        `https://platform.higgsfield.ai/v1/job-sets/${jobSetId}`,  // これが正しいエンドポイント
         `https://platform.higgsfield.ai/job-sets/${jobSetId}`,
         `https://platform.higgsfield.ai/job-set/${jobSetId}`,
-        `https://platform.higgsfield.ai/v1/job-sets/${jobSetId}`,
         `https://platform.higgsfield.ai/api/job-sets/${jobSetId}`,
         `https://platform.higgsfield.ai/v1/text2image/keyframes/job-sets/${jobSetId}`,
       ];
@@ -191,6 +192,7 @@ export async function POST(request: NextRequest) {
             headers: {
               'hf-api-key': apiKey,
               'hf-secret': apiSecret,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
           });
 

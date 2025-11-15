@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, image_url, description, metadata } = body;
+    const { name, image_url, description, elevenlabs_voice_id, metadata } = body;
 
     if (!name || !image_url) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       name,
       image_url,
       description,
+      elevenlabs_voice_id,
       metadata,
     });
 

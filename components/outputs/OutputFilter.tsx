@@ -7,6 +7,8 @@ interface OutputFilterProps {
   onFilterTypeChange: (type: OutputType | 'all') => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  showFavoritesOnly: boolean;
+  onShowFavoritesOnlyChange: (show: boolean) => void;
 }
 
 const filterOptions: { value: OutputType | 'all'; label: string; icon: string }[] = [
@@ -24,11 +26,29 @@ export default function OutputFilter({
   onFilterTypeChange,
   searchQuery,
   onSearchQueryChange,
+  showFavoritesOnly,
+  onShowFavoritesOnlyChange,
 }: OutputFilterProps) {
   return (
     <div className="mb-6 space-y-4">
-      {/* Search Bar */}
-      <div className="relative">
+      {/* Favorites and Search Bar */}
+      <div className="flex gap-3">
+        {/* Favorites Toggle */}
+        <button
+          onClick={() => onShowFavoritesOnlyChange(!showFavoritesOnly)}
+          className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 whitespace-nowrap
+            ${
+              showFavoritesOnly
+                ? 'bg-yellow-500 text-white shadow-md'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:border-yellow-400'
+            }`}
+        >
+          <span className="mr-2">{showFavoritesOnly ? '⭐' : '☆'}</span>
+          お気に入り
+        </button>
+
+        {/* Search Bar */}
+        <div className="relative flex-1">
         <input
           type="text"
           placeholder="プロンプトで検索..."
@@ -52,6 +72,7 @@ export default function OutputFilter({
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
+        </div>
       </div>
 
       {/* Type Filter Buttons */}

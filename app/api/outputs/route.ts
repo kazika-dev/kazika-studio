@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // クエリ構築
     let query = supabase
       .from('workflow_outputs')
-      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(parseInt(limit));
 
@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
       output_type: outputType,
       prompt: prompt || null,
       metadata: metadata || {},
+      favorite: false,
     };
 
     if (workflowId) {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('workflow_outputs')
       .insert(insertData)
-      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at')
       .single();
 
     if (error) {

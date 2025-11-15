@@ -230,6 +230,58 @@ function GeminiNode({ data, selected, id }: NodeProps<GeminiNodeData>) {
         </Typography>
       )}
 
+      {data.config.response && (
+        <Box
+          sx={{
+            mt: 1,
+            p: 1.5,
+            bgcolor: 'rgba(234, 128, 252, 0.05)',
+            borderRadius: 1,
+            border: '1px solid rgba(234, 128, 252, 0.2)',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              color: 'text.primary',
+              fontSize: '0.75rem',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 200,
+              overflow: 'auto',
+            }}
+          >
+            {data.config.response}
+          </Typography>
+        </Box>
+      )}
+
+      {data.config.error && (
+        <Box
+          sx={{
+            mt: 1,
+            p: 1,
+            bgcolor: 'error.light',
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: 'error.main',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              color: 'error.dark',
+              fontSize: '0.7rem',
+            }}
+          >
+            エラー: {data.config.error}
+          </Typography>
+        </Box>
+      )}
+
       <Handle
         type="source"
         position={Position.Bottom}

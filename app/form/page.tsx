@@ -386,8 +386,17 @@ function FormPageContent() {
 
                     {output.output?.audioData && (
                       <Box sx={{ mt: 2 }}>
+                        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                          音声
+                        </Typography>
                         <audio controls style={{ width: '100%' }}>
-                          <source src={`data:audio/mpeg;base64,${output.output.audioData}`} />
+                          <source
+                            src={
+                              typeof output.output.audioData === 'string'
+                                ? `data:audio/mpeg;base64,${output.output.audioData}`
+                                : `data:${output.output.audioData.mimeType};base64,${output.output.audioData.data}`
+                            }
+                          />
                         </audio>
                       </Box>
                     )}

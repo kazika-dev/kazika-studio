@@ -23,6 +23,7 @@ export default function NewCharacterSheetPage() {
   const [uploading, setUploading] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -108,6 +109,7 @@ export default function NewCharacterSheetPage() {
           name: name.trim(),
           image_url: imageUrl,
           description: description.trim(),
+          elevenlabs_voice_id: elevenLabsVoiceId.trim() || undefined,
         }),
       });
 
@@ -167,6 +169,16 @@ export default function NewCharacterSheetPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={loading}
+            />
+
+            <TextField
+              label="ElevenLabs音声ID（任意）"
+              fullWidth
+              value={elevenLabsVoiceId}
+              onChange={(e) => setElevenLabsVoiceId(e.target.value)}
+              disabled={loading}
+              placeholder="例: 21m00Tcm4TlvDq8ikWAM"
+              helperText="ElevenLabsの音声IDを入力すると、音声生成時に使用されます"
             />
 
             <Box>

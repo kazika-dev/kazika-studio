@@ -1078,6 +1078,150 @@ async function executeNode(
         }
         break;
 
+      case 'qwenImage':
+        // Qwen Image Generation（キューに追加）
+        let qwenPrompt = replaceVariables(node.data.config?.prompt || '', inputData);
+
+        // 前のノードからのテキスト出力を自動的に追加
+        const qwenInputTexts: string[] = [];
+        Object.values(inputData).forEach((input: any) => {
+          if (input && typeof input === 'object') {
+            // geminiノードからのresponseフィールドを追加
+            if (input.response && typeof input.response === 'string') {
+              qwenInputTexts.push(input.response);
+            }
+            // その他のvalueフィールドを追加
+            else if (input.value !== undefined && input.value !== null) {
+              qwenInputTexts.push(String(input.value));
+            }
+          }
+        });
+
+        // prompt欄の内容と前のノードの出力を組み合わせ
+        if (qwenInputTexts.length > 0) {
+          const combinedText = qwenInputTexts.join('\n\n');
+          if (qwenPrompt.trim()) {
+            qwenPrompt = `${qwenPrompt}\n\n${combinedText}`;
+          } else {
+            qwenPrompt = combinedText;
+          }
+        }
+
+        if (!qwenPrompt || !qwenPrompt.trim()) {
+          return {
+            success: false,
+            error: 'プロンプトが設定されていません',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // 入力データから参照画像を抽出
+        const qwenInputImages = extractImagesFromInput(inputData);
+        const qwenImagePaths: string[] = [];
+
+        // 参照画像がある場合はGCP Storageにアップロード
+        if (qwenInputImages.length > 0) {
+          for (const image of qwenInputImages) {
+            try {
+              // 既にstoragePathがある場合はそれを使用
+              if (image.storagePath) {
+                qwenImagePaths.push(image.storagePath);
+              } else {
+                // クライアントサイドかサーバーサイドかを判定
+                const isServer = typeof window === 'undefined';
+
+                if (!isServer) {
+                  // クライアントサイドの場合はAPIエンドポイント経由でアップロード
+                  const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      base64Data: image.data,
+                      mimeType: image.mimeType,
+                      folder: 'kazika/reference',
+                    }),
+                  });
+
+                  if (!uploadResponse.ok) {
+                    throw new Error('Failed to upload image via API');
+                  }
+
+                  const uploadData = await uploadResponse.json();
+                  qwenImagePaths.push(uploadData.storagePath);
+                  console.log('Reference image uploaded via API:', uploadData.storagePath);
+                } else {
+                  // サーバーサイドの場合は直接uploadImageToStorage関数を呼び出す
+                  const { uploadImageToStorage } = await import('@/lib/gcp-storage');
+                  const imagePath = await uploadImageToStorage(
+                    image.data,
+                    image.mimeType,
+                    undefined,
+                    'kazika/reference'
+                  );
+                  qwenImagePaths.push(imagePath);
+                  console.log('Reference image uploaded directly:', imagePath);
+                }
+              }
+            } catch (uploadError: any) {
+              console.error('Failed to upload reference image:', uploadError);
+              // 画像アップロード失敗は警告のみ（処理は続行）
+            }
+          }
+
+          console.log('Qwen reference images uploaded:', qwenImagePaths);
+        }
+
+        try {
+          console.log('Creating Qwen Image queue item:', {
+            originalPrompt: node.data.config?.prompt,
+            combinedPrompt: qwenPrompt.substring(0, 200),
+            promptLength: qwenPrompt.length,
+            referenceImageCount: qwenImagePaths.length,
+          });
+
+          const qwenResponse = await fetch(getApiUrl('/api/qwen-image'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: qwenPrompt,
+              referenceImages: qwenImagePaths, // 参照画像のパスを送信
+            }),
+          });
+
+          const qwenResult = await qwenResponse.json();
+
+          if (!qwenResponse.ok) {
+            throw new Error(qwenResult.error || 'Failed to create Qwen Image queue item');
+          }
+
+          output = {
+            queueItemId: qwenResult.queueItemId,
+            status: 'queued',
+            nodeId: node.id,
+          };
+
+          requestBody = {
+            prompt: qwenPrompt,
+            referenceImageCount: qwenImagePaths.length,
+          };
+
+          console.log('Qwen Image queue item created:', qwenResult.queueItemId);
+        } catch (error: any) {
+          console.error('Qwen Image queue error:', error);
+          return {
+            success: false,
+            error: `Qwen Image キューへの追加に失敗しました: ${error.message}`,
+            output: null,
+            nodeId: node.id,
+          };
+        }
+        break;
+
       default:
         throw new Error(`Unknown node type: ${nodeType}`);
     }
