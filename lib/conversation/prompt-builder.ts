@@ -57,7 +57,8 @@ ${previousMessagesSection}
     {
       "speaker": "キャラクター名",
       "message": "セリフ内容",
-      "emotion": "happy|sad|angry|neutral|surprised|excited|confused"
+      "emotion": "happy|sad|angry|neutral|surprised|excited|confused",
+      "scene": "このメッセージが発せられた具体的な場面の描写（キャラクターの表情、動作、周囲の状況など）"
     }
   ]
 }
@@ -68,6 +69,11 @@ ${previousMessagesSection}
 - speakerフィールドには必ずキャラクター名のいずれかを使用してください
 - 自然な会話の流れを作ってください
 - 感情(emotion)は会話の文脈に合わせて適切に設定してください
+- **scene（場面）フィールドには、そのメッセージが発せられた時の具体的な場面を描写してください**
+  - キャラクターの表情や仕草（笑顔、驚いた顔、俯く、手を振る、など）
+  - 体の動き（近づく、振り向く、立ち上がる、など）
+  - 周囲の状況や雰囲気（静かな図書室、夕日が差し込む教室、など）
+  - 視覚的にイメージできる具体的な描写を心がけてください
 - メッセージ数は正確に${input.messageCount}個生成してください
 
 自然で魅力的な会話を生成してください。
