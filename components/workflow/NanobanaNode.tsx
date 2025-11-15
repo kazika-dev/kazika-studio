@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip } from '@mui/material';
 import ImageIcon from '@mui/icons-material/Image';
@@ -122,6 +122,7 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
       sx={{
         position: 'relative',
         minWidth: 280,
+        minHeight: 320,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
         borderColor: selected ? '#ff6b9d' : 'divider',
@@ -134,17 +135,97 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
         },
       }}
     >
+      {/* プロンプト入力（必須） */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
+        id="prompt"
         style={{
-          width: 12,
-          height: 12,
-          backgroundColor: '#ff6b9d',
+          top: 40,
+          width: 10,
+          height: 10,
+          backgroundColor: '#4CAF50',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
       />
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          left: -70,
+          top: 32,
+          fontSize: '0.65rem',
+          color: '#4CAF50',
+          fontWeight: 600,
+        }}
+      >
+        プロンプト
+      </Typography>
+
+      {/* キャラクターシート入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`character-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`character-${index}`}
+            style={{
+              top: 70 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#2196F3',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -100,
+              top: 62 + index * 30,
+              fontSize: '0.65rem',
+              color: '#2196F3',
+              fontWeight: 500,
+            }}
+          >
+            キャラシート{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
+
+      {/* 画像入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`image-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`image-${index}`}
+            style={{
+              top: 190 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#FF9800',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -60,
+              top: 182 + index * 30,
+              fontSize: '0.65rem',
+              color: '#FF9800',
+              fontWeight: 500,
+            }}
+          >
+            画像{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', mb: 1 }}>
         <Box
