@@ -396,6 +396,8 @@ async function executeNode(
 
         // 3. Output画像選択から画像を追加（最大4枚）
         const geminiSelectedOutputIds = node.data.config?.selectedOutputIds || [];
+        console.log('[Gemini] node.data.config:', node.data.config);
+        console.log('[Gemini] selectedOutputIds from config:', geminiSelectedOutputIds, 'type:', typeof geminiSelectedOutputIds, 'isArray:', Array.isArray(geminiSelectedOutputIds));
         if (geminiSelectedOutputIds.length > 0) {
           console.log(`Loading ${geminiSelectedOutputIds.length} selected output image(s) for Gemini:`, geminiSelectedOutputIds);
 
@@ -614,6 +616,8 @@ async function executeNode(
 
         // 3. Output画像選択から画像を追加（最大4枚）
         const selectedOutputIds = node.data.config?.selectedOutputIds || [];
+        console.log('[Nanobana] node.data.config:', node.data.config);
+        console.log('[Nanobana] selectedOutputIds from config:', selectedOutputIds, 'type:', typeof selectedOutputIds, 'isArray:', Array.isArray(selectedOutputIds));
         if (selectedOutputIds.length > 0) {
           console.log(`Loading ${selectedOutputIds.length} selected output image(s) for Nanobana:`, selectedOutputIds);
 

@@ -15,6 +15,37 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-16: 既存ノードの後方互換性を保つマイグレーション機能を実装
+
+**目的**: 既存のワークフローノード（Nanobana, Gemini）に新しく追加された `selectedOutputIds` フィールドが自動的に追加されるようにする
+
+**問題**:
+- `selectedOutputIds` フィールドは後から追加されたため、既存のNanobana/Geminiノードには含まれていない
+- そのため、Output画像選択機能が正しく動作しない（`node.data.config.selectedOutputIds` が `undefined`）
+
+**変更内容**:
+- `/components/workflow/WorkflowEditor.tsx` に `migrateNodeConfig()` 関数を追加
+- ワークフロード込み時に自動的にマイグレーションを実行
+- Nanobana/Geminiノードで `config.selectedOutputIds === undefined` の場合、`selectedOutputIds: []` を追加
+- デバッグログを追加して、マイグレーションの実行を確認可能に
+
+**技術的詳細**:
+- `loadWorkflow()` 内でノードを `setNodes()` する前に `migrateNodeConfig()` を呼び出す
+- URLパラメータからの読み込みと最新ワークフローの読み込み、両方に適用
+- `useCallback` でメモ化して、不要な再レンダリングを防止
+
+**影響範囲**:
+- 既存のワークフローを開いたときに、自動的に `selectedOutputIds: []` が追加される
+- ワークフローを保存すると、マイグレーション後の状態が保存される
+- Output画像選択機能が既存のノードでも正しく動作するようになる
+
+**デバッグログ**:
+- `/components/form/DynamicFormField.tsx` の `outputSelector` に選択/削除時のログを追加
+- `/components/workflow/UnifiedNodeSettings.tsx` に初期化・変更・保存時のログを追加
+- `/lib/workflow/executor.ts` のNanobana/Geminiケースに `node.data.config` と `selectedOutputIds` の詳細ログを追加
+
+---
+
 ### 2025-11-16: Geminiノードに画像処理機能を追加（キャラクターシート・参照画像・Output画像対応）
 
 **目的**: Gemini AIノードでマルチモーダル機能を活用し、キャラクターシート・参照画像・Output画像を使った画像認識を可能にする
