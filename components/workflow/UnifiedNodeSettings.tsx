@@ -58,8 +58,9 @@ export default function UnifiedNodeSettings({
     setDescription(node.data.config?.description || '');
 
     // フォームの初期値を設定
+    const currentTypeConfig = getNodeTypeConfig(nodeType);
     const initialValues: Record<string, any> = {};
-    typeConfig.fields.forEach((field) => {
+    currentTypeConfig.fields.forEach((field) => {
       // デフォルト値を設定
       let defaultValue = node.data.config?.[field.name];
 
@@ -105,7 +106,7 @@ export default function UnifiedNodeSettings({
     });
 
     setFormValues(initialValues);
-  }, [node, typeConfig.fields]);
+  }, [node.id, nodeType]); // nodeTypeが変わったら再初期化
 
   const handleFormValueChange = (fieldName: string, value: any) => {
     setFormValues((prev) => ({
