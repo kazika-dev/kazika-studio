@@ -1,5 +1,6 @@
 import { Node } from 'reactflow';
 import { FormFieldConfig } from '@/components/form/DynamicFormField';
+import { ELEVENLABS_PRESET_VOICES, ELEVENLABS_MODELS_FOR_FORM } from '@/lib/elevenlabs/constants';
 
 /**
  * ワークフローのノードから必要なフォームフィールドを自動抽出
@@ -202,18 +203,10 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           label: `${nodeName} 音声ID`,
           required: false,
           helperText: 'ElevenLabsの音声を選択（プリセット音声）',
-          options: [
-            { label: 'George (英語)', value: 'JBFqnCBsd6RMkjVDRZzb' },
-            { label: 'Rachel (英語)', value: '21m00Tcm4TlvDq8ikWAM' },
-            { label: 'Domi (英語)', value: 'AZnzlk1XvdvUeBnXmlld' },
-            { label: 'Bella (英語)', value: 'EXAVITQu4vr4xnSDxMaL' },
-            { label: 'Antoni (英語)', value: 'ErXwobaYiN019PkySvjV' },
-            { label: 'Elli (英語)', value: 'MF3mGyEYCl7XYWbV9V6O' },
-            { label: 'Josh (英語)', value: 'TxGEqnHWrfWFTfGW9XjX' },
-            { label: 'Arnold (英語)', value: 'VR6AewLTigWG4xSOukaG' },
-            { label: 'Adam (英語)', value: 'pNInz6obpgDQGcFmaJgB' },
-            { label: 'Sam (英語)', value: 'yoZ06aMxZJJ28mfd3POQ' },
-          ],
+          options: ELEVENLABS_PRESET_VOICES.map(voice => ({
+            label: voice.label,
+            value: voice.value,
+          })),
         });
         addedFieldNames.add(voiceIdFieldName);
       }
@@ -227,13 +220,10 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           label: `${nodeName} モデル`,
           required: false,
           helperText: 'ElevenLabsの音声生成モデルを選択',
-          options: [
-            { label: 'Turbo v2.5 (推奨・バランス型)', value: 'eleven_turbo_v2_5' },
-            { label: 'Flash v2.5 (超高速・低コスト)', value: 'eleven_flash_v2_5' },
-            { label: 'Multilingual v2 (安定)', value: 'eleven_multilingual_v2' },
-            { label: 'Turbo v2 (高速)', value: 'eleven_turbo_v2' },
-            { label: 'Monolingual v1 (英語のみ)', value: 'eleven_monolingual_v1' },
-          ],
+          options: ELEVENLABS_MODELS_FOR_FORM.map(model => ({
+            label: model.label,
+            value: model.value,
+          })),
         });
         addedFieldNames.add(modelIdFieldName);
       }
