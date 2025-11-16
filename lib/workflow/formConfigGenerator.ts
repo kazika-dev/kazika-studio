@@ -344,11 +344,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `gemini_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -364,11 +368,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `nanobana_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' || field.type === 'outputSelector' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -384,11 +392,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `higgsfield_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : '',
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -404,11 +416,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `seedream4_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -456,11 +472,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `elevenlabs_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : '',
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);

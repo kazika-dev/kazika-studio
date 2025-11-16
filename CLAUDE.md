@@ -11,8 +11,32 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 プロジェクトの詳細なドキュメントは `/docs` ディレクトリにあります:
 
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
+- **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
 
 ## 最近の主要な変更
+
+### 2025-11-16: ワークフロー設定値を `/form` ページのデフォルト値として反映
+
+**目的**: ワークフローエディタで設定した値（アスペクト比、プロンプトなど）が、`/app/form` ページを開いたときにデフォルト値として自動的に入力されるようにする
+
+**変更内容**:
+- `/lib/workflow/formConfigGenerator.ts` の `extractFormFieldsFromNodes()` を修正し、`node.data.config` から設定値を取得して `defaultValue` として保存
+- `/components/form/DynamicFormField.tsx` の `FormFieldConfig` に `defaultValue?: any` を追加
+- `/app/form/page.tsx` で `defaultValue` が設定されている場合はそれを初期値として使用するように修正
+- 全ノードタイプ（Gemini, Nanobana, Higgsfield, Seedream4, ElevenLabs）に対応
+
+**技術的詳細**:
+- ワークフローエディタで「アスペクト比: 16:9」「プロンプト: "a cat"」と設定 → `node.data.config` に保存
+- ワークフロー保存時に `generateFormConfig()` が `form_config.fields` に `defaultValue` を含める
+- `/form` ページ読み込み時に `defaultValue` を初期値として使用
+- 後方互換性を維持（`defaultValue` がない場合は空の値を使用）
+
+**影響範囲**:
+- ワークフローをテンプレートとして使いやすくなった
+- ユーザーが毎回同じ値を入力する手間が省ける
+- 一元化されたアーキテクチャ（`getNodeTypeConfig()`）により、1箇所の修正で両方に反映される
+
+**詳細**: [workflow-config-default-values.md](/docs/workflow-config-default-values.md)
 
 ### 2025-11-16: Nanobanaノード設定にOutput画像選択フォームを追加（複数選択対応）
 
