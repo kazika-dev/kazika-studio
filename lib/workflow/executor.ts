@@ -960,8 +960,75 @@ async function executeNode(
           }
         }
 
-        // 前のノードから画像のstoragePathをすべて収集（最大8枚）（ノードIDベースのキーのみ）
+        // 画像のstoragePathを収集（最大8枚）
         const seedream4ImagePaths: string[] = [];
+
+        // 1. キャラクターシート画像を取得（最大4枚）
+        const seedream4CharacterSheetIds = node.data.config?.selectedCharacterSheetIds || [];
+        if (seedream4CharacterSheetIds.length > 0) {
+          console.log(`Loading ${seedream4CharacterSheetIds.length} character sheet(s) for Seedream4:`, seedream4CharacterSheetIds);
+
+          for (const csId of seedream4CharacterSheetIds.slice(0, 4)) {
+            try {
+              // キャラクターシート情報をDBから取得
+              const { getCharacterSheetById } = await import('@/lib/db');
+              const characterSheet = await getCharacterSheetById(parseInt(csId));
+
+              if (characterSheet && characterSheet.image_url) {
+                // GCP Storageのパスを追加
+                seedream4ImagePaths.push(characterSheet.image_url);
+                console.log(`✓ Character sheet ${csId} added: ${characterSheet.name}`);
+              } else {
+                console.warn(`✗ Character sheet ${csId} not found or has no image`);
+              }
+            } catch (error) {
+              console.error(`Failed to load character sheet ${csId}:`, error);
+              // エラーがあっても続行（他のキャラクターシートは読み込む）
+            }
+          }
+        }
+
+        // 2. 参照画像を追加（フォームからアップロードされた画像、最大4枚）
+        const seedream4ReferenceImagePaths = node.data.config?.referenceImagePaths || [];
+        if (seedream4ReferenceImagePaths.length > 0) {
+          console.log(`Loading ${seedream4ReferenceImagePaths.length} reference image(s) for Seedream4`);
+
+          let remainingSlots = 8 - seedream4ImagePaths.length;
+          for (const imagePath of seedream4ReferenceImagePaths.slice(0, Math.min(remainingSlots, 4))) {
+            seedream4ImagePaths.push(imagePath);
+            console.log(`✓ Reference image added: ${imagePath}`);
+          }
+        }
+
+        // 3. Output画像選択から画像を追加（最大4枚）
+        const seedream4SelectedOutputIds = node.data.config?.selectedOutputIds || [];
+        console.log('[Seedream4] node.data.config:', node.data.config);
+        console.log('[Seedream4] selectedOutputIds from config:', seedream4SelectedOutputIds, 'type:', typeof seedream4SelectedOutputIds, 'isArray:', Array.isArray(seedream4SelectedOutputIds));
+        if (seedream4SelectedOutputIds.length > 0) {
+          console.log(`Loading ${seedream4SelectedOutputIds.length} selected output image(s) for Seedream4:`, seedream4SelectedOutputIds);
+
+          let remainingSlots = 8 - seedream4ImagePaths.length;
+          for (const outputId of seedream4SelectedOutputIds.slice(0, Math.min(remainingSlots, 4))) {
+            try {
+              // workflow_outputsテーブルから画像を取得
+              const { getWorkflowOutputById } = await import('@/lib/db');
+              const output = await getWorkflowOutputById(parseInt(outputId));
+
+              if (output && output.content_url) {
+                // GCP Storageのパスを追加
+                seedream4ImagePaths.push(output.content_url);
+                console.log(`✓ Output image ${outputId} added`);
+              } else {
+                console.warn(`✗ Output ${outputId} not found or has no content_url`);
+              }
+            } catch (error) {
+              console.error(`Failed to load output image ${outputId}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 4. 前のノードから画像のstoragePathをすべて収集（ノードIDベースのキーのみ）
         Object.entries(inputData).forEach(([key, input]: [string, any]) => {
           // ノードIDベースのキーのみを処理（node-で始まるキー）
           if (key.startsWith('node-') && input && typeof input === 'object' && input.storagePath) {

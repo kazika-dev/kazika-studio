@@ -311,6 +311,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             maxImages: 4,
             helperText: '動画生成の参照として使用する画像（最大4つ、5MB以下）',
           },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
@@ -456,7 +464,7 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
             name: fieldName,
             label: `${nodeName} ${field.label}`,
             placeholder: field.placeholder,
-            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' ? [] : ''),
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' || field.type === 'outputSelector' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);

@@ -120,7 +120,7 @@ function Seedream4Node({ data, selected, id }: NodeProps<Seedream4NodeData>) {
       sx={{
         position: 'relative',
         minWidth: 280,
-        minHeight: 320,
+        minHeight: 440,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
         borderColor: selected ? '#ff9800' : 'divider',
@@ -221,6 +221,38 @@ function Seedream4Node({ data, selected, id }: NodeProps<Seedream4NodeData>) {
             }}
           >
             画像{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
+
+      {/* Output画像入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`output-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`output-${index}`}
+            style={{
+              top: 310 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#9C27B0',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -80,
+              top: 302 + index * 30,
+              fontSize: '0.65rem',
+              color: '#9C27B0',
+              fontWeight: 500,
+            }}
+          >
+            Output{index + 1}
           </Typography>
         </React.Fragment>
       ))}

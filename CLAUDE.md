@@ -15,6 +15,42 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-16: Seedream4ノードにOutput画像選択機能を追加
+
+**目的**: Seedream4ノードでWorkflow Outputsテーブルから生成済み画像を選択できるようにし、既存の画像を動画生成の参照として再利用可能にする
+
+**変更内容**:
+- `/lib/workflow/formConfigGenerator.ts` のSeedream4ケースに `selectedOutputIds` フィールドを追加（Nanobanaと同じパターン）
+- `/components/workflow/Seedream4Node.tsx` にOutput画像用の接続ハンドル4つを追加（紫色、ID: `output-0` ～ `output-3`）
+- ノードの高さを `minHeight: 320` → `440` に調整（13個の接続ハンドルが表示されるように）
+- `/lib/workflow/executor.ts` のSeedream4ケースにOutput画像読み込み処理を追加（キャラクターシート、参照画像、Output画像の順で最大8枚まで）
+- `/lib/workflow/migration.ts` のマイグレーション処理に `seedream4` を追加（既存ノードに `selectedOutputIds: []` を自動追加）
+- `/lib/workflow/formConfigGenerator.ts` の `extractFormFieldsFromNodes()` で `outputSelector` のデフォルト値を配列に設定
+
+**技術的詳細**:
+- CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で一元管理
+- Nanobanaノードと同じパターンで実装し、コードの一貫性を確保
+- `UnifiedNodeSettings.tsx` の既存のデフォルト値ロジックにより、`outputSelector` が自動的に `[]` で初期化される（103-105行目）
+- **画像読み込み処理（executor.ts）**:
+  1. キャラクターシートID → `character_sheets` テーブル → GCP Storage (最大4枚)
+  2. 参照画像パス (`referenceImagePaths`) → GCP Storage (最大4枚)
+  3. Output画像ID (`selectedOutputIds`) → `workflow_outputs` テーブル → GCP Storage (最大4枚)
+  4. 前のノードから接続された画像を追加（`storagePath`）
+  5. 最大8枚までの制限を適用
+
+**接続ハンドル（左側）**:
+1. **プロンプト入力** (緑色) - ID: `prompt`
+2. **キャラクターシート1〜4** (青色) - ID: `character-0` ～ `character-3`
+3. **参照画像1〜4** (オレンジ色) - ID: `image-0` ～ `image-3`
+4. **Output画像1〜4** (紫色) - ID: `output-0` ～ `output-3`
+
+**影響範囲**:
+- `getNodeTypeConfig()` の定義により、**ワークフローノード設定と `/form` ページの両方に自動反映**
+- Seedream4ノードで過去に生成された画像を動画生成の参照として使用可能に
+- 既存のSeedream4ノードを開くと、マイグレーションにより自動的に `selectedOutputIds: []` が追加される
+
+---
+
 ### 2025-11-16: 既存ノードの後方互換性を保つマイグレーション機能を実装
 
 **目的**: 既存のワークフローノード（Nanobana, Gemini）に新しく追加された `selectedOutputIds` フィールドが自動的に追加されるようにする

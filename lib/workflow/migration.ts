@@ -9,8 +9,8 @@ export function migrateNodeConfig(nodes: Node[]): Node[] {
     const nodeType = node.data.type;
     const config = node.data.config || {};
 
-    // nanobana, gemini ノードに selectedOutputIds フィールドを追加
-    if ((nodeType === 'nanobana' || nodeType === 'gemini') && config.selectedOutputIds === undefined) {
+    // nanobana, gemini, seedream4 ノードに selectedOutputIds フィールドを追加
+    if ((nodeType === 'nanobana' || nodeType === 'gemini' || nodeType === 'seedream4') && config.selectedOutputIds === undefined) {
       console.log(`[Migration] Adding selectedOutputIds to ${nodeType} node:`, node.id);
       return {
         ...node,
