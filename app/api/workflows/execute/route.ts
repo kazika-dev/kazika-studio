@@ -262,6 +262,41 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Nanobanaノード: キャラクターシートと参照画像の処理
+        if (nodeType === 'nanobana') {
+          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
+          const referenceImagesFieldName = `nanobana_referenceImages_${nodeId}`;
+
+          console.log(`Processing nanobana node ${nodeId}:`, {
+            characterSheetsFieldName,
+            referenceImagesFieldName,
+            hasCharacterSheetsField: inputs[characterSheetsFieldName] !== undefined,
+            hasReferenceImagesField: inputs[referenceImagesFieldName] !== undefined,
+          });
+
+          // キャラクターシートの処理
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+            console.log(`✓ Processing ${characterSheetIds.length} character sheet(s) for nanobana node ${nodeId}:`, characterSheetIds);
+
+            node.data.config = {
+              ...node.data.config,
+              characterSheetIds: characterSheetIds,
+            };
+          }
+
+          // 参照画像の処理
+          if (inputs[referenceImagesFieldName] !== undefined) {
+            const referenceImages = inputs[referenceImagesFieldName];
+            console.log(`✓ Processing ${referenceImages.length} reference image(s) for nanobana node ${nodeId}`);
+
+            node.data.config = {
+              ...node.data.config,
+              referenceImagePaths: referenceImages,
+            };
+          }
+        }
+
         // ElevenLabsノード: elevenlabs_text_{nodeId} と elevenlabs_voiceId_{nodeId} フィールドから値を取得
         if (nodeType === 'elevenlabs') {
           const textFieldName = `elevenlabs_text_${nodeId}`;

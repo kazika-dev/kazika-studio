@@ -505,8 +505,76 @@ async function executeNode(
           }
         }
 
-        // 入力データから画像を抽出（参照画像として使用、最大3枚）
-        const nanobanaImages = extractImagesFromInput(inputData).slice(0, 3);
+        // 入力データから画像を抽出（参照画像として使用）
+        const nanobanaImages: Array<{ mimeType: string; data: string }> = [];
+
+        // 1. キャラクターシート画像を取得（最大4枚）
+        const characterSheetIds = node.data.config?.characterSheetIds || [];
+        if (characterSheetIds.length > 0) {
+          console.log(`Loading ${characterSheetIds.length} character sheet(s) for Nanobana:`, characterSheetIds);
+
+          for (const csId of characterSheetIds.slice(0, 4)) {
+            try {
+              // キャラクターシート情報をDBから取得
+              const { getCharacterSheetById } = await import('@/lib/db');
+              const characterSheet = await getCharacterSheetById(parseInt(csId));
+
+              if (characterSheet && characterSheet.image_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading character sheet image from GCP Storage:', characterSheet.image_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(characterSheet.image_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                nanobanaImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Character sheet ${csId} loaded: ${characterSheet.name}`);
+              } else {
+                console.warn(`✗ Character sheet ${csId} not found or has no image`);
+              }
+            } catch (error) {
+              console.error(`Failed to load character sheet ${csId}:`, error);
+              // エラーがあっても続行（他のキャラクターシートは読み込む）
+            }
+          }
+        }
+
+        // 2. 参照画像を追加（フォームからアップロードされた画像、最大4枚）
+        const referenceImagePaths = node.data.config?.referenceImagePaths || [];
+        if (referenceImagePaths.length > 0) {
+          console.log(`Loading ${referenceImagePaths.length} reference image(s) for Nanobana`);
+
+          const remainingSlots = 4 - nanobanaImages.length;
+          for (const imagePath of referenceImagePaths.slice(0, remainingSlots)) {
+            try {
+              // GCP Storageから画像を取得
+              console.log('Loading reference image from GCP Storage:', imagePath);
+              const { getFileFromStorage } = await import('@/lib/gcp-storage');
+              const { data: imageBuffer, contentType } = await getFileFromStorage(imagePath);
+              const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+              nanobanaImages.push({
+                mimeType: contentType,
+                data: base64Data,
+              });
+
+              console.log(`✓ Reference image loaded: ${imagePath}`);
+            } catch (error) {
+              console.error(`Failed to load reference image ${imagePath}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 3. 前のノードから接続された画像を追加（最大4枚まで）
+        const connectedImages = extractImagesFromInput(inputData);
+        const remainingSlots = 4 - nanobanaImages.length;
+        if (connectedImages.length > 0 && remainingSlots > 0) {
+          nanobanaImages.push(...connectedImages.slice(0, remainingSlots));
+        }
 
         console.log('Nanobana execution:', {
           nodeId: node.id,
@@ -518,7 +586,10 @@ async function executeNode(
           inputTexts,
           finalPrompt: nanobanaPrompt,
           finalPromptLength: nanobanaPrompt.length,
-          imageCount: nanobanaImages.length,
+          characterSheetCount: characterSheetIds.length,
+          referenceImageCount: referenceImagePaths.length,
+          connectedImageCount: connectedImages.length,
+          totalImageCount: nanobanaImages.length,
         });
 
         if (!nanobanaPrompt.trim()) {
