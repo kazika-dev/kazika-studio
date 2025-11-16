@@ -229,18 +229,20 @@ export async function POST(request: NextRequest) {
 
         // プロンプトを持つノード: {nodeType}_prompt_{nodeId} フィールドから値を取得
         if (['gemini', 'nanobana', 'higgsfield', 'seedream4'].includes(nodeType)) {
-          const fieldName = `${nodeType}_prompt_${nodeId}`;
+          const promptFieldName = `${nodeType}_prompt_${nodeId}`;
+          const characterSheetsFieldName = `${nodeType}_characterSheets_${nodeId}`;
+
           console.log(`Processing ${nodeType} node ${nodeId} prompt:`, {
-            fieldName,
-            hasField: inputs[fieldName] !== undefined,
+            promptFieldName,
+            hasPromptField: inputs[promptFieldName] !== undefined,
             hasPrompt: inputs.prompt !== undefined,
             currentPrompt: node.data.config?.prompt,
             hasPlaceholder: node.data.config?.prompt?.includes('{{input}}'),
           });
 
-          if (inputs[fieldName] !== undefined) {
+          if (inputs[promptFieldName] !== undefined) {
             const workflowPrompt = node.data.config?.prompt || '';
-            const formPrompt = inputs[fieldName];
+            const formPrompt = inputs[promptFieldName];
             const combinedPrompt = workflowPrompt ? `${workflowPrompt} ${formPrompt}` : formPrompt;
 
             console.log(`✓ Concatenating ${nodeType} node ${nodeId} prompt:`);
@@ -259,6 +261,47 @@ export async function POST(request: NextRequest) {
             node.data.config.prompt = node.data.config.prompt.replace(/\{\{input\}\}/g, inputs.prompt);
           } else {
             console.log(`✗ No matching prompt field or placeholder found for ${nodeType} node ${nodeId}`);
+          }
+
+          // キャラクターシート配列の処理
+          console.log(`Processing ${nodeType} node ${nodeId} characterSheets:`, {
+            characterSheetsFieldName,
+            hasField: inputs[characterSheetsFieldName] !== undefined,
+            fieldValue: inputs[characterSheetsFieldName],
+          });
+
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+
+            if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
+              console.log(`✓ Loading ${characterSheetIds.length} character sheets for ${nodeType} node ${nodeId}`);
+
+              try {
+                const characterSheets = await Promise.all(
+                  characterSheetIds.map(async (id: any) => {
+                    const characterSheet = await getCharacterSheetById(parseInt(id));
+                    if (characterSheet) {
+                      console.log(`  ✓ Loaded character sheet: ${characterSheet.name} (ID: ${id})`);
+                      return characterSheet;
+                    } else {
+                      console.error(`  ✗ Character sheet ${id} not found`);
+                      return null;
+                    }
+                  })
+                );
+
+                const validCharacterSheets = characterSheets.filter(cs => cs !== null);
+
+                node.data.config = {
+                  ...node.data.config,
+                  characterSheets: validCharacterSheets,
+                };
+
+                console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets for ${nodeType} node ${nodeId}`);
+              } catch (error) {
+                console.error(`✗ Error loading character sheets for ${nodeType} node ${nodeId}:`, error);
+              }
+            }
           }
         }
 
