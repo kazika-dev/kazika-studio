@@ -19,6 +19,8 @@ import {
   MenuItem,
   Slider,
   Switch,
+  Stack,
+  Chip,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
@@ -680,7 +682,10 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
   // タグ選択（ElevenLabsタグ）
   if (config.type === 'tags') {
     const [tags, setTags] = useState<any[]>([]);
+    const [filteredTags, setFilteredTags] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [dialogOpen, setDialogOpen] = useState(false);
 
     useEffect(() => {
       const loadTags = async () => {
@@ -691,6 +696,7 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
 
           if (data.success) {
             setTags(data.tags);
+            setFilteredTags(data.tags);
           } else {
             console.error('Failed to load tags:', data.error);
           }
@@ -704,15 +710,47 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
       loadTags();
     }, []);
 
+    useEffect(() => {
+      if (searchQuery.trim() === '') {
+        setFilteredTags(tags);
+      } else {
+        const query = searchQuery.toLowerCase();
+        const filtered = tags.filter((tag) =>
+          tag.name.toLowerCase().includes(query) ||
+          tag.name_ja?.toLowerCase().includes(query) ||
+          tag.description?.toLowerCase().includes(query) ||
+          tag.description_ja?.toLowerCase().includes(query)
+        );
+        setFilteredTags(filtered);
+      }
+    }, [searchQuery, tags]);
+
     const handleInsertTag = (tagName: string) => {
       if (!config.targetFieldName || !onFieldChange || !allValues) {
         console.error('targetFieldName, onFieldChange, or allValues not provided');
         return;
       }
 
-      const currentText = allValues[config.targetFieldName] || '';
+      // targetFieldNameに基づいて実際のフィールド名を探す
+      // 例: targetFieldName='text' の場合、'elevenlabs_text_xxx' のようなフィールドを探す
+      let actualFieldName = config.targetFieldName;
+
+      // allValuesから対応するフィールド名を検索
+      const fieldNames = Object.keys(allValues);
+      const matchingField = fieldNames.find(name => name.includes(config.targetFieldName!));
+
+      if (matchingField) {
+        actualFieldName = matchingField;
+      }
+
+      console.log('Inserting tag:', tagName, 'into field:', actualFieldName);
+
+      const currentText = allValues[actualFieldName] || '';
       const newText = currentText + `[${tagName}]`;
-      onFieldChange(config.targetFieldName, newText);
+      onFieldChange(actualFieldName, newText);
+
+      setDialogOpen(false);
+      setSearchQuery('');
     };
 
     return (
@@ -726,31 +764,121 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
           </Typography>
         )}
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : tags.length === 0 ? (
-          <Alert severity="info">タグがありません</Alert>
-        ) : (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {tags.map((tag) => (
-              <Button
-                key={tag.id}
-                variant="outlined"
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={() => setDialogOpen(true)}
+          sx={{
+            py: 1.5,
+            textTransform: 'none',
+            fontWeight: 500,
+          }}
+        >
+          タグを選択して挿入
+        </Button>
+
+        {/* タグ選択ダイアログ */}
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            display: dialogOpen ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1400,
+          }}
+          onClick={() => setDialogOpen(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 600,
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ダイアログヘッダー */}
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6" fontWeight={600}>
+                  タグを選択
+                </Typography>
+                <IconButton size="small" onClick={() => setDialogOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+
+              {/* 検索フィールド */}
+              <TextField
+                fullWidth
                 size="small"
-                onClick={() => handleInsertTag(tag.name)}
-                sx={{
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  fontSize: '0.875rem',
-                }}
-              >
-                {tag.name_ja || tag.name}
-              </Button>
-            ))}
-          </Box>
-        )}
+                placeholder="タグを検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                variant="outlined"
+              />
+            </Box>
+
+            {/* タグリスト */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : filteredTags.length === 0 ? (
+                <Alert severity="info">
+                  {searchQuery ? '検索結果がありません' : 'タグがありません'}
+                </Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {filteredTags.map((tag) => (
+                    <Paper
+                      key={tag.id}
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                      onClick={() => handleInsertTag(tag.name)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {tag.name_ja || tag.name}
+                        </Typography>
+                        <Chip
+                          label={tag.name}
+                          size="small"
+                          sx={{
+                            fontSize: '0.7rem',
+                            height: 20,
+                            fontFamily: 'monospace',
+                          }}
+                        />
+                      </Box>
+                      {(tag.description_ja || tag.description) && (
+                        <Typography variant="caption" color="text.secondary">
+                          {tag.description_ja || tag.description}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Paper>
+        </Box>
       </Box>
     );
   }
