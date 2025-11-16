@@ -13,9 +13,12 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const { workflowId } = body;
+    const { workflowIds = [], workflowId } = body;
 
-    console.log('[POST /api/conversations/:id/create-studio] Creating studio from conversation ID:', id, 'with workflow ID:', workflowId);
+    // 後方互換性: workflowIdが指定されている場合はworkflowIdsに変換
+    const workflowIdsArray = workflowIds.length > 0 ? workflowIds : (workflowId ? [workflowId] : []);
+
+    console.log('[POST /api/conversations/:id/create-studio] Creating studio from conversation ID:', id, 'with workflow IDs:', workflowIdsArray);
     const supabase = await createClient();
 
     // Authentication check
@@ -58,7 +61,15 @@ export async function POST(
     const { data: messages, error: msgError } = await supabase
       .from('conversation_messages')
       .select(`
-        *,
+        id,
+        conversation_id,
+        character_id,
+        speaker_name,
+        message_text,
+        sequence_order,
+        scene_prompt_ja,
+        scene_prompt_en,
+        metadata,
         character:character_sheets(id, name, image_url, elevenlabs_voice_id)
       `)
       .eq('conversation_id', id)
@@ -141,24 +152,30 @@ export async function POST(
 
     console.log('[POST /api/conversations/:id/create-studio] Created', boards.length, 'boards');
 
-    // Create workflow steps if workflowId is provided
-    let workflowSteps = null;
-    if (workflowId) {
-      console.log('[POST /api/conversations/:id/create-studio] Creating workflow steps with workflow ID:', workflowId);
+    // Create workflow steps if workflowIds are provided
+    let totalWorkflowSteps = 0;
+    if (workflowIdsArray.length > 0) {
+      console.log('[POST /api/conversations/:id/create-studio] Creating workflow steps with workflow IDs:', workflowIdsArray);
 
-      // Verify workflow exists and belongs to user
-      const { data: workflow, error: workflowError } = await supabase
-        .from('workflows')
-        .select('id, name, nodes')
-        .eq('id', workflowId)
-        .eq('user_id', user.id)
-        .single();
+      // 各ワークフローIDに対してワークフローステップを作成
+      for (const workflowId of workflowIdsArray) {
+        console.log('[POST /api/conversations/:id/create-studio] Processing workflow ID:', workflowId);
 
-      if (workflowError || !workflow) {
-        console.error('Workflow not found or unauthorized:', workflowError);
-        // Continue without workflow steps
-        console.log('[POST /api/conversations/:id/create-studio] Warning: Workflow not found, skipping workflow steps');
-      } else {
+        // Verify workflow exists and belongs to user
+        const { data: workflow, error: workflowError } = await supabase
+          .from('workflows')
+          .select('id, name, nodes')
+          .eq('id', workflowId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (workflowError || !workflow) {
+          console.error(`Workflow ${workflowId} not found or unauthorized:`, workflowError);
+          // Continue to next workflow
+          console.log('[POST /api/conversations/:id/create-studio] Warning: Workflow not found, skipping this workflow');
+          continue;
+        }
+
         console.log('[POST /api/conversations/:id/create-studio] Found workflow:', workflow.name);
 
         // Parse workflow nodes
@@ -166,17 +183,28 @@ export async function POST(
           ? JSON.parse(workflow.nodes)
           : workflow.nodes;
 
-        // Find ElevenLabs nodes in the workflow
+        // Find ElevenLabs and Nanobana nodes in the workflow
         const elevenLabsNodes = workflowNodes.filter(
           (node: any) => node.data?.type === 'elevenlabs' || node.type === 'elevenlabs'
         );
+        const nanobanaNodes = workflowNodes.filter(
+          (node: any) => node.data?.type === 'nanobana' || node.type === 'nanobana'
+        );
 
-        console.log('[POST /api/conversations/:id/create-studio] Found', elevenLabsNodes.length, 'ElevenLabs nodes');
+        console.log('[POST /api/conversations/:id/create-studio] Found', elevenLabsNodes.length, 'ElevenLabs nodes,', nanobanaNodes.length, 'Nanobana nodes');
 
         // Create workflow steps for each board
         const workflowStepsToInsert = boards.map((board, idx) => {
           const message = messages[idx];
           const characterVoiceId = message.character?.elevenlabs_voice_id;
+
+          // デバッグ: キャラクター情報を出力
+          console.log(`[Board ${idx}] Character data:`, {
+            character_id: message.character_id,
+            character_name: message.speaker_name,
+            character_object: message.character,
+            elevenlabs_voice_id: characterVoiceId
+          });
 
           // デフォルトの音声ID（キャラクターに設定されていない場合）
           const voiceId = characterVoiceId || 'JBFqnCBsd6RMkjVDRZzb';
@@ -184,28 +212,55 @@ export async function POST(
           // Build input_config with node-specific overrides
           const nodeOverrides: any = {};
 
-          // For each ElevenLabs node, set text and voiceId
+          // For each ElevenLabs node, set text, voiceId, and modelId
           elevenLabsNodes.forEach((node: any) => {
             nodeOverrides[node.id] = {
               text: message.message_text,
               voiceId: voiceId,
+              modelId: node.data?.config?.modelId || 'eleven_turbo_v2_5', // デフォルトはTurbo v2.5
             };
+          });
+
+          // For each Nanobana node, set prompt and character sheet
+          nanobanaNodes.forEach((node: any) => {
+            // 英語プロンプトを優先、なければ日本語、それもなければシーン説明
+            const prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
+
+            if (!prompt) {
+              console.warn(`[Board ${idx}] Warning: No prompt available for Nanobana node. scene_prompt_en: ${!!message.scene_prompt_en}, scene_prompt_ja: ${!!message.scene_prompt_ja}, metadata.scene: ${!!message.metadata?.scene}`);
+            }
+
+            const nodeConfig: any = {
+              prompt: prompt,
+              aspectRatio: node.data?.config?.aspectRatio || '16:9', // デフォルトは16:9
+            };
+
+            // キャラクターIDがある場合、キャラクターシートIDを設定
+            if (message.character_id) {
+              nodeConfig.selectedCharacterSheetIds = [message.character_id];
+            }
+
+            nodeOverrides[node.id] = nodeConfig;
           });
 
           console.log(`[Board ${idx}] Message: "${message.message_text.substring(0, 50)}..."`);
           console.log(`[Board ${idx}] Character: ${message.speaker_name}, VoiceID: ${voiceId}`);
-          console.log(`[Board ${idx}] Node overrides:`, nodeOverrides);
+          console.log(`[Board ${idx}] Scene Prompt (EN): "${(message.scene_prompt_en || '').substring(0, 50)}..."`);
+          console.log(`[Board ${idx}] Scene Prompt (JA): "${(message.scene_prompt_ja || '').substring(0, 50)}..."`);
+          console.log(`[Board ${idx}] Node overrides:`, JSON.stringify(nodeOverrides, null, 2));
 
           return {
             board_id: board.id,
             workflow_id: workflowId,
-            step_order: 0,
+            step_order: workflowIdsArray.indexOf(workflowId), // 複数ワークフローの実行順序
             execution_status: 'pending',
             input_config: {
               // General metadata
               character_id: message.character_id,
               character_name: message.speaker_name,
               has_custom_voice: !!characterVoiceId,
+              scene_prompt_en: message.scene_prompt_en,
+              scene_prompt_ja: message.scene_prompt_ja,
               // Node-specific overrides
               nodeOverrides: nodeOverrides,
             }
@@ -218,16 +273,16 @@ export async function POST(
           .select();
 
         if (stepsError) {
-          console.error('Failed to create workflow steps:', stepsError);
-          // Continue even if workflow steps fail - boards are already created
-          console.log('[POST /api/conversations/:id/create-studio] Warning: Could not create workflow steps, but boards were created successfully');
+          console.error(`Failed to create workflow steps for workflow ${workflowId}:`, stepsError);
+          // Continue to next workflow even if this one fails
+          console.log('[POST /api/conversations/:id/create-studio] Warning: Could not create workflow steps for this workflow, continuing to next');
         } else {
-          workflowSteps = createdSteps;
-          console.log('[POST /api/conversations/:id/create-studio] Created', workflowSteps?.length || 0, 'workflow steps');
+          totalWorkflowSteps += createdSteps?.length || 0;
+          console.log(`[POST /api/conversations/:id/create-studio] Created ${createdSteps?.length || 0} workflow steps for workflow ${workflowId}`);
         }
       }
     } else {
-      console.log('[POST /api/conversations/:id/create-studio] No workflow ID provided, skipping workflow steps');
+      console.log('[POST /api/conversations/:id/create-studio] No workflow IDs provided, skipping workflow steps');
     }
 
     return NextResponse.json({
@@ -236,7 +291,8 @@ export async function POST(
         studioId: studio.id,
         studioName: studio.name,
         boardCount: boards.length,
-        workflowStepCount: workflowSteps?.length || 0
+        workflowStepCount: totalWorkflowSteps,
+        workflowCount: workflowIdsArray.length
       }
     });
 

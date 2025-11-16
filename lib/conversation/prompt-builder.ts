@@ -15,7 +15,7 @@ export async function buildConversationPrompt(input: ConversationPromptInput): P
   const charactersSection = input.characters
     .map(
       (char, idx) => `
-### キャラクター${idx + 1}: ${char.name}
+### キャラクター${idx + 1}: ${char.name} (ID: ${char.id})
 - 説明: ${char.description}
 - 性格: ${char.personality}
 - 話し方: ${char.speakingStyle}
@@ -69,7 +69,7 @@ ${previousMessagesSection}
 {
   "messages": [
     {
-      "speaker": "キャラクター名",
+      "speakerId": キャラクターID（数値、上記のキャラクター情報のIDを使用）,
       "message": "セリフ内容",
       "emotion": "happy|sad|angry|neutral|surprised|excited|confused",
       "emotionTag": "感情を表すタグ（下記の利用可能な感情タグから1つ選択）",
@@ -84,6 +84,8 @@ ${previousMessagesSection}
 ## 重要な注意事項
 - 各キャラクターの性格と話し方の特徴を必ず反映してください
 - speakerフィールドには必ずキャラクター名のいずれかを使用してください
+- **speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
+- **speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
 - 自然な会話の流れを作ってください
 - 感情(emotion)は会話の文脈に合わせて適切に設定してください
 - **emotionTag（感情タグ）は、メッセージの音声化に使用されます。以下の利用可能な感情タグから適切なものを選んでください：**
@@ -238,9 +240,12 @@ ${shotDistancesSection}
 ## 要件
 - sceneDescription: 日本語で、場所、時間帯、雰囲気、キャラクターの位置関係などを含む詳細な描写
 - imagePrompt: 英語で、high quality, detailed, anime style などの品質タグを含む具体的なプロンプト
-  - **選択したカメラアングルとショット距離を必ずプロンプトに含めてください**（例: "from low angle, medium close-up shot"）
-- cameraAngle: 会話の内容や雰囲気に最も適したカメラアングルを選択してください
-- shotDistance: シーンの雰囲気や強調したい要素に応じて適切なショット距離を選択してください
+  - **【必須】選択したカメラアングルとショット距離をプロンプトの先頭に必ず含めてください**
+  - フォーマット: "from [選択したカメラアングル], [選択したショット距離], [シーンの内容]"
+  - 例: "from low angle, medium close-up shot, rooftop scene at sunset, male student leaning on fence"
+  - カメラアングルとショット距離を省略しないでください
+- cameraAngle: 会話の内容や雰囲気に最も適したカメラアングルを上記リストから1つ選択してください（必須）
+- shotDistance: シーンの雰囲気や強調したい要素に応じて適切なショット距離を上記リストから1つ選択してください（必須）
 - キャラクターの外見や特徴を反映させてください
 - 会話の雰囲気に合った視覚的な描写を心がけてください
 `.trim();

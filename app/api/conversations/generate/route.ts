@@ -122,13 +122,16 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     console.log('Generating conversation with Gemini...');
+    console.log('[DEBUG] Prompt sent to AI:', prompt.substring(0, 500) + '...');
     const result = await model.generateContent(prompt);
     const aiResponse = result.response.text();
+    console.log('[DEBUG] AI raw response:', aiResponse);
 
     // Parse AI response
     let parsed;
     try {
       parsed = await parseAIResponse(aiResponse);
+      console.log('[DEBUG] Parsed messages:', JSON.stringify(parsed.messages, null, 2));
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
       return NextResponse.json(
@@ -183,8 +186,41 @@ export async function POST(request: NextRequest) {
     }
 
     // Save messages to database
+    console.log('[Conversation Generate] Available characters:', characters.map(c => ({ id: c.id, name: c.name })));
+    console.log('[Conversation Generate] Generated messages:', parsed.messages.map(m => ({ speakerId: m.speakerId, speaker: m.speaker })));
     const messagesToInsert = parsed.messages.map((msg, idx) => {
-      const character = characters.find(c => c.name === msg.speaker);
+       let character = null;
+      // 優先順位1: speakerIdが指定されている場合はそれを使用
+      if (msg.speakerId !== undefined && msg.speakerId !== null) {
+        character = characters.find(c => c.id === msg.speakerId);
+        if (character) {
+          console.log(`[Message ${idx}] Matched speakerId ${msg.speakerId} to character "${character.name}"`);
+        } else {
+          console.warn(`[Message ${idx}] speakerId ${msg.speakerId} not found in available characters`);
+        }
+      }
+      // 優先順位2: speakerIdがない場合は名前でマッチング
+      if (!character) {
+        // 完全一致を試みる
+        character = characters.find(c => c.name === msg.speaker);
+        // 完全一致しない場合、部分一致を試みる
+        if (!character) {
+          character = characters.find(c =>
+            c.name.includes(msg.speaker) || msg.speaker.includes(c.name)
+          );
+        }
+        // それでも見つからない場合、トリムして比較
+        if (!character) {
+          const trimmedSpeaker = msg.speaker.trim();
+          character = characters.find(c => c.name.trim() === trimmedSpeaker);
+        }
+        if (character) {
+          console.log(`[Message ${idx}] Matched speaker name "${msg.speaker}" to character ID ${character.id} (${character.name})`);
+        }
+      }
+      if (!character) {
+        console.warn(`[Message ${idx}] Character not found for speakerId:${msg.speakerId}, speaker:"${msg.speaker}". Available characters:`, characters.map(c => ({ id: c.id, name: c.name })));
+      }
       // Add emotion tag to message text if present
       const emotionTagPrefix = msg.emotionTag ? `[${msg.emotionTag}] ` : '';
       const messageTextWithTag = emotionTagPrefix + msg.message;
