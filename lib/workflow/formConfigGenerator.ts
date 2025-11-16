@@ -84,9 +84,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             maxSelections: 4,
             helperText: '画像生成に使用するキャラクターシート（最大4つ）',
           },
-          // referenceImagesは現時点では保存時にstoragePathに変換せず、
-          // {mimeType, data}形式のまま保持します（既存の実装に合わせる）
-          // 将来的にはstoragePathベースに統一することを検討
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '画像生成の参照として使用する画像（最大4つ、5MB以下）',
+          },
         ],
       };
 
@@ -301,20 +306,6 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           addedFieldNames.add(fieldName);
         }
       });
-
-      // 参照画像アップロード（最大4つ） - 特別な処理が必要なため個別に追加
-      const referenceImagesFieldName = `nanobana_referenceImages_${node.id}`;
-      if (!addedFieldNames.has(referenceImagesFieldName)) {
-        fields.push({
-          type: 'images',
-          name: referenceImagesFieldName,
-          label: `${nodeName} 参照画像`,
-          required: false,
-          maxImages: 4,
-          helperText: `${nodeName}で使用する参照画像（最大4つ）`,
-        });
-        addedFieldNames.add(referenceImagesFieldName);
-      }
     }
 
     // Higgsfieldノード - getNodeTypeConfig()から設定を取得
