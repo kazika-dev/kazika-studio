@@ -14,6 +14,27 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-16: Nanobanaノード設定にOutput画像選択フォームを追加
+
+**目的**: Workflow Outputsテーブルから生成済み画像を選択できるようにし、既存の画像を再利用可能にする
+
+**変更内容**:
+- `/components/form/DynamicFormField.tsx` に `outputSelector` フィールドタイプを追加（132行追加）
+- `/api/outputs` から画像タイプのoutputを取得し、2カラムのグリッドレイアウトでサムネイル表示
+- Nanobanaノード設定に `selectedOutputId` フィールドを追加（`getNodeTypeConfig()` で一元管理）
+- `/components/workflow/UnifiedNodeSettings.tsx` で `outputSelector` のデフォルト値を設定
+
+**技術的詳細**:
+- CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で1箇所定義することで、ワークフローノード設定と `/form` ページの両方で自動的に利用可能
+- ラジオボタンで画像を1つ選択し、選択されたoutputのIDを `selectedOutputId` として保存
+- デバッグログを追加して、フィールドのレンダリングとAPI呼び出しを追跡可能に
+
+**影響範囲**:
+- Nanobanaノード設定画面に新しいフィールドが追加され、過去の生成画像を選択可能に
+- `/form` ページでも自動的に表示される（一元管理の恩恵）
+
+**コミット**: `b3a59dd` - "Nanobanaノード設定にoutput画像選択フォームを追加"
+
 ### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
 
 **目的**: Seedream4ノードにキャラクターシート4枚と参照画像4枚までの登録機能を追加し、ワークフローエディタでの接続を可視化
@@ -44,8 +65,6 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 **影響範囲**:
 - `getNodeTypeConfig()` の定義により、ワークフローノード設定と `/form` ページの両方に自動反映
 - Seedream4ノードで一元管理の原則が徹底され、保守性が向上
-
----
 
 ### 2025-01-16: ノード設定の完全な一元化（`getNodeTypeConfig()` → `/form` への自動反映）
 

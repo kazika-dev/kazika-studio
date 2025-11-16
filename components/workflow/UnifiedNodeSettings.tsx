@@ -100,6 +100,9 @@ export default function UnifiedNodeSettings({
           case 'characterSheets':
             defaultValue = [];
             break;
+          case 'outputSelector':
+            defaultValue = null;
+            break;
           case 'tags':
             // tagsフィールドは状態を持たないので、初期値を設定しない
             defaultValue = undefined;
@@ -273,16 +276,19 @@ export default function UnifiedNodeSettings({
                 {typeConfig.displayName} 設定
               </Typography>
 
-              {typeConfig.fields.map((field) => (
-                <DynamicFormField
-                  key={field.name}
-                  config={field}
-                  value={formValues[field.name]}
-                  onChange={(value) => handleFormValueChange(field.name, value)}
-                  allValues={formValues}
-                  onFieldChange={handleFormValueChange}
-                />
-              ))}
+              {typeConfig.fields.map((field) => {
+                console.log('[UnifiedNodeSettings] Rendering field:', field.name, 'type:', field.type, 'value:', formValues[field.name]);
+                return (
+                  <DynamicFormField
+                    key={field.name}
+                    config={field}
+                    value={formValues[field.name]}
+                    onChange={(value) => handleFormValueChange(field.name, value)}
+                    allValues={formValues}
+                    onFieldChange={handleFormValueChange}
+                  />
+                );
+              })}
             </>
           )}
 

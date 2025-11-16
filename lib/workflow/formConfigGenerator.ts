@@ -92,6 +92,13 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             maxImages: 4,
             helperText: '画像生成の参照として使用する画像（最大4つ、5MB以下）',
           },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputId',
+            label: 'Output画像選択',
+            required: false,
+            helperText: '以前に生成された画像から選択して使用できます',
+          },
         ],
       };
 

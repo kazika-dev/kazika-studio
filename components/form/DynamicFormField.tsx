@@ -26,7 +26,7 @@ import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags' | 'outputSelector';
   name: string;
   label: string;
   placeholder?: string;
@@ -53,6 +53,8 @@ interface DynamicFormFieldProps {
 export default function DynamicFormField({ config, value, onChange, allValues, onFieldChange }: DynamicFormFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  console.log('[DynamicFormField] Rendering:', config.type, config.name, 'value:', value);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -675,6 +677,134 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
             </Box>
           }
         />
+      </Box>
+    );
+  }
+
+  // Output画像選択
+  if (config.type === 'outputSelector') {
+    const [outputs, setOutputs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const loadOutputs = async () => {
+        try {
+          setLoading(true);
+          console.log('[OutputSelector] Loading outputs from /api/outputs');
+          const response = await fetch('/api/outputs');
+          const data = await response.json();
+          console.log('[OutputSelector] Response:', data);
+
+          if (data.success) {
+            // 画像タイプのoutputのみをフィルタリング
+            const imageOutputs = data.outputs.filter((output: any) =>
+              output.output_type === 'image' && (output.output_url || output.output_data?.imageUrl)
+            );
+            console.log('[OutputSelector] Filtered image outputs:', imageOutputs.length);
+            setOutputs(imageOutputs);
+          } else {
+            console.error('[OutputSelector] Failed to load outputs:', data.error);
+          }
+        } catch (error) {
+          console.error('[OutputSelector] Failed to load outputs:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadOutputs();
+    }, []);
+
+    const getImageUrl = (output: any) => {
+      if (output.output_url) {
+        return output.output_url.startsWith('http')
+          ? output.output_url
+          : `/api/storage/${output.output_url}`;
+      }
+      if (output.output_data?.imageUrl) {
+        return output.output_data.imageUrl;
+      }
+      if (output.output_data?.imageData) {
+        return `data:${output.output_data.imageData.mimeType};base64,${output.output_data.imageData.data}`;
+      }
+      return '';
+    };
+
+    return (
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+          {config.label}
+        </Typography>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', mb: 1, display: 'block' }}>
+            {config.helperText}
+          </Typography>
+        )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : outputs.length === 0 ? (
+          <Alert severity="info">生成された画像がありません</Alert>
+        ) : (
+          <RadioGroup value={value || ''} onChange={(e) => onChange(Number(e.target.value))}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
+              {outputs.map((output) => {
+                const imageUrl = getImageUrl(output);
+                const isSelected = value === output.id;
+
+                return (
+                  <Card
+                    key={output.id}
+                    variant="outlined"
+                    sx={{
+                      cursor: 'pointer',
+                      borderColor: isSelected ? 'primary.main' : 'divider',
+                      borderWidth: isSelected ? 2 : 1,
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        boxShadow: 1,
+                      },
+                    }}
+                    onClick={() => onChange(output.id)}
+                  >
+                    {imageUrl && (
+                      <CardMedia
+                        component="img"
+                        height="150"
+                        image={imageUrl}
+                        alt={`Output ${output.id}`}
+                        sx={{ objectFit: 'cover' }}
+                      />
+                    )}
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Radio
+                          checked={isSelected}
+                          value={output.id}
+                          size="small"
+                          sx={{ p: 0 }}
+                        />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            ID: {output.id}
+                          </Typography>
+                          {output.created_at && (
+                            <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                              {new Date(output.created_at).toLocaleDateString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </Box>
+          </RadioGroup>
+        )}
       </Box>
     );
   }
