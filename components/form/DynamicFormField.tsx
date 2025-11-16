@@ -41,6 +41,7 @@ export interface FormFieldConfig {
   max?: number;
   step?: number;
   targetFieldName?: string; // タグ挿入先のフィールド名
+  defaultValue?: any; // デフォルト値（ワークフローノードの設定値）
 }
 
 interface DynamicFormFieldProps {
