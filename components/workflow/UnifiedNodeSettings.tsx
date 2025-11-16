@@ -101,7 +101,7 @@ export default function UnifiedNodeSettings({
             defaultValue = [];
             break;
           case 'outputSelector':
-            defaultValue = null;
+            defaultValue = [];
             break;
           case 'tags':
             // tagsフィールドは状態を持たないので、初期値を設定しない

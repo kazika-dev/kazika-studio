@@ -94,10 +94,11 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
           },
           {
             type: 'outputSelector',
-            name: 'selectedOutputId',
+            name: 'selectedOutputIds',
             label: 'Output画像選択',
             required: false,
-            helperText: '以前に生成された画像から選択して使用できます',
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
           },
         ],
       };

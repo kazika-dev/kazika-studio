@@ -21,6 +21,7 @@ import {
   Switch,
   Stack,
   Chip,
+  Checkbox,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
@@ -684,37 +685,43 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
   // Output画像選択
   if (config.type === 'outputSelector') {
     const [outputs, setOutputs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [page, setPage] = useState(0);
+    const itemsPerPage = 5;
+    const maxSelections = config.maxSelections || 4; // デフォルト4枚まで
 
     useEffect(() => {
-      const loadOutputs = async () => {
-        try {
-          setLoading(true);
-          console.log('[OutputSelector] Loading outputs from /api/outputs');
-          const response = await fetch('/api/outputs');
-          const data = await response.json();
-          console.log('[OutputSelector] Response:', data);
+      if (dialogOpen) {
+        loadOutputs();
+      }
+    }, [dialogOpen]);
 
-          if (data.success) {
-            // 画像タイプのoutputのみをフィルタリング
-            // APIは content_url を返す（実際のテーブルスキーマに合わせて修正済み）
-            const imageOutputs = data.outputs.filter((output: any) =>
-              output.output_type === 'image' && output.content_url
-            );
-            console.log('[OutputSelector] Filtered image outputs:', imageOutputs.length, imageOutputs);
-            setOutputs(imageOutputs);
-          } else {
-            console.error('[OutputSelector] Failed to load outputs:', data.error);
-          }
-        } catch (error) {
-          console.error('[OutputSelector] Failed to load outputs:', error);
-        } finally {
-          setLoading(false);
+    const loadOutputs = async () => {
+      try {
+        setLoading(true);
+        console.log('[OutputSelector] Loading outputs from /api/outputs');
+        const response = await fetch('/api/outputs');
+        const data = await response.json();
+        console.log('[OutputSelector] Response:', data);
+
+        if (data.success) {
+          // 画像タイプのoutputのみをフィルタリング
+          // APIは content_url を返す（実際のテーブルスキーマに合わせて修正済み）
+          const imageOutputs = data.outputs.filter((output: any) =>
+            output.output_type === 'image' && output.content_url
+          );
+          console.log('[OutputSelector] Filtered image outputs:', imageOutputs.length, imageOutputs);
+          setOutputs(imageOutputs);
+        } else {
+          console.error('[OutputSelector] Failed to load outputs:', data.error);
         }
-      };
-
-      loadOutputs();
-    }, []);
+      } catch (error) {
+        console.error('[OutputSelector] Failed to load outputs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
     const getImageUrl = (output: any) => {
       // 実際のテーブルスキーマに合わせて content_url をチェック
@@ -726,81 +733,233 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
       return '';
     };
 
+    // valueを配列として扱う（複数選択対応）
+    const selectedIds: number[] = Array.isArray(value) ? value : (value ? [value] : []);
+    const selectedOutputs = outputs.filter(o => selectedIds.includes(o.id));
+    const totalPages = Math.ceil(outputs.length / itemsPerPage);
+    const paginatedOutputs = outputs.slice(page * itemsPerPage, (page + 1) * itemsPerPage);
+
+    const handleToggle = (outputId: number) => {
+      const currentSelected = Array.isArray(value) ? [...value] : (value ? [value] : []);
+      const index = currentSelected.indexOf(outputId);
+
+      if (index > -1) {
+        // 既に選択されている場合は削除
+        currentSelected.splice(index, 1);
+        onChange(currentSelected);
+      } else {
+        // 選択されていない場合は追加（最大数チェック）
+        if (currentSelected.length < maxSelections) {
+          onChange([...currentSelected, outputId]);
+        }
+      }
+    };
+
+    const handleRemove = (outputId: number) => {
+      const currentSelected = Array.isArray(value) ? [...value] : (value ? [value] : []);
+      const filtered = currentSelected.filter(id => id !== outputId);
+      onChange(filtered);
+    };
+
     return (
       <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
           {config.label}
         </Typography>
         {config.helperText && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', mb: 1, display: 'block' }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
             {config.helperText}
           </Typography>
         )}
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress size={24} />
+        {/* 選択された画像のプレビュー（複数） */}
+        {selectedOutputs.length > 0 && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 1, mb: 1 }}>
+            {selectedOutputs.map((output) => (
+              <Paper key={output.id} variant="outlined" sx={{ p: 0.5, position: 'relative' }}>
+                <IconButton
+                  size="small"
+                  onClick={() => handleRemove(output.id)}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'background.paper',
+                    boxShadow: 1,
+                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                    width: 20,
+                    height: 20,
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+                <Box
+                  component="img"
+                  src={getImageUrl(output)}
+                  alt={`Selected output ${output.id}`}
+                  sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 1 }}
+                />
+                <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 0.5, fontSize: '0.65rem' }}>
+                  ID: {output.id}
+                </Typography>
+              </Paper>
+            ))}
           </Box>
-        ) : outputs.length === 0 ? (
-          <Alert severity="info">生成された画像がありません</Alert>
-        ) : (
-          <RadioGroup value={value || ''} onChange={(e) => onChange(Number(e.target.value))}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
-              {outputs.map((output) => {
-                const imageUrl = getImageUrl(output);
-                const isSelected = value === output.id;
-
-                return (
-                  <Card
-                    key={output.id}
-                    variant="outlined"
-                    sx={{
-                      cursor: 'pointer',
-                      borderColor: isSelected ? 'primary.main' : 'divider',
-                      borderWidth: isSelected ? 2 : 1,
-                      transition: 'all 0.2s',
-                      '&:hover': {
-                        borderColor: 'primary.main',
-                        boxShadow: 1,
-                      },
-                    }}
-                    onClick={() => onChange(output.id)}
-                  >
-                    {imageUrl && (
-                      <CardMedia
-                        component="img"
-                        height="150"
-                        image={imageUrl}
-                        alt={`Output ${output.id}`}
-                        sx={{ objectFit: 'cover' }}
-                      />
-                    )}
-                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Radio
-                          checked={isSelected}
-                          value={output.id}
-                          size="small"
-                          sx={{ p: 0 }}
-                        />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            ID: {output.id}
-                          </Typography>
-                          {output.created_at && (
-                            <Typography variant="caption" color="text.secondary" display="block" noWrap>
-                              {new Date(output.created_at).toLocaleDateString()}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </Box>
-          </RadioGroup>
         )}
+
+        {/* 選択ボタン */}
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={() => setDialogOpen(true)}
+          disabled={selectedIds.length >= maxSelections}
+          sx={{
+            py: 1.5,
+            textTransform: 'none',
+            fontWeight: 500,
+          }}
+        >
+          {selectedOutputs.length > 0
+            ? `画像を変更 (${selectedIds.length}/${maxSelections})`
+            : `画像を選択 (最大${maxSelections}枚)`}
+        </Button>
+
+        {/* 選択ダイアログ */}
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            display: dialogOpen ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1400,
+          }}
+          onClick={() => setDialogOpen(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 700,
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ダイアログヘッダー */}
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>
+                    Output画像を選択
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {selectedIds.length}/{maxSelections}枚選択中
+                  </Typography>
+                </Box>
+                <IconButton size="small" onClick={() => setDialogOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* 画像リスト */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : outputs.length === 0 ? (
+                <Alert severity="info">生成された画像がありません</Alert>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
+                  {paginatedOutputs.map((output) => {
+                    const imageUrl = getImageUrl(output);
+                    const isSelected = selectedIds.includes(output.id);
+                    const isMaxReached = selectedIds.length >= maxSelections && !isSelected;
+
+                    return (
+                      <Card
+                        key={output.id}
+                        variant="outlined"
+                        sx={{
+                          cursor: isMaxReached ? 'not-allowed' : 'pointer',
+                          borderColor: isSelected ? 'primary.main' : 'divider',
+                          borderWidth: isSelected ? 2 : 1,
+                          transition: 'all 0.2s',
+                          opacity: isMaxReached ? 0.5 : 1,
+                          '&:hover': {
+                            borderColor: isMaxReached ? 'divider' : 'primary.main',
+                            boxShadow: isMaxReached ? 0 : 2,
+                          },
+                        }}
+                        onClick={() => !isMaxReached && handleToggle(output.id)}
+                      >
+                        {imageUrl && (
+                          <CardMedia
+                            component="img"
+                            height="150"
+                            image={imageUrl}
+                            alt={`Output ${output.id}`}
+                            sx={{ objectFit: 'cover' }}
+                          />
+                        )}
+                        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Checkbox
+                              checked={isSelected}
+                              disabled={isMaxReached}
+                              size="small"
+                              sx={{ p: 0 }}
+                            />
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="caption" color="text.secondary" noWrap>
+                                ID: {output.id}
+                              </Typography>
+                              {output.created_at && (
+                                <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                                  {new Date(output.created_at).toLocaleDateString()}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+
+            {/* ページング */}
+            {totalPages > 1 && (
+              <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Button
+                  size="small"
+                  disabled={page === 0}
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  前へ
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  {page + 1} / {totalPages} ページ ({outputs.length}件)
+                </Typography>
+                <Button
+                  size="small"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  次へ
+                </Button>
+              </Box>
+            )}
+          </Paper>
+        </Box>
       </Box>
     );
   }
