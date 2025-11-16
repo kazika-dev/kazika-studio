@@ -217,6 +217,26 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         });
         addedFieldNames.add(voiceIdFieldName);
       }
+
+      // モデルID選択フィールド
+      const modelIdFieldName = `elevenlabs_modelId_${node.id}`;
+      if (!addedFieldNames.has(modelIdFieldName)) {
+        fields.push({
+          type: 'select',
+          name: modelIdFieldName,
+          label: `${nodeName} モデル`,
+          required: false,
+          helperText: 'ElevenLabsの音声生成モデルを選択',
+          options: [
+            { label: 'Turbo v2.5 (推奨・バランス型)', value: 'eleven_turbo_v2_5' },
+            { label: 'Flash v2.5 (超高速・低コスト)', value: 'eleven_flash_v2_5' },
+            { label: 'Multilingual v2 (安定)', value: 'eleven_multilingual_v2' },
+            { label: 'Turbo v2 (高速)', value: 'eleven_turbo_v2' },
+            { label: 'Monolingual v1 (英語のみ)', value: 'eleven_monolingual_v1' },
+          ],
+        });
+        addedFieldNames.add(modelIdFieldName);
+      }
     }
   });
 
