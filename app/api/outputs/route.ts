@@ -18,14 +18,39 @@ export async function GET(request: NextRequest) {
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
     const outputType = searchParams.get('output_type');
     const workflowId = searchParams.get('workflow_id');
     const limit = searchParams.get('limit') || '50';
 
+    // 特定のIDで取得する場合
+    if (id) {
+      const { data, error } = await supabase
+        .from('workflow_outputs')
+        .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+        .eq('id', parseInt(id))
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return NextResponse.json(
+            { success: false, error: 'Output not found' },
+            { status: 404 }
+          );
+        }
+        throw error;
+      }
+
+      return NextResponse.json({
+        success: true,
+        outputs: [data], // 配列形式で返す（フロントエンドの互換性のため）
+      });
+    }
+
     // クエリ構築
     let query = supabase
       .from('workflow_outputs')
-      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+      .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(parseInt(limit));
 
@@ -140,6 +165,7 @@ export async function POST(request: NextRequest) {
       output_type: outputType,
       prompt: prompt || null,
       metadata: metadata || {},
+      favorite: false,
     };
 
     if (workflowId) {
@@ -157,7 +183,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('workflow_outputs')
       .insert(insertData)
-      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at')
       .single();
 
     if (error) {

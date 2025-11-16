@@ -625,6 +625,18 @@ export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
   return result.rows;
 }
 
+/**
+ * IDでworkflow outputを1つ取得
+ */
+export async function getWorkflowOutputById(id: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.workflow_outputs
+     WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 // =====================================================
 // キャラクターシート関連の関数
 // =====================================================
@@ -664,17 +676,19 @@ export async function createCharacterSheet(data: {
   name: string;
   image_url: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, metadata)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO kazikastudio.character_sheets (user_id, name, image_url, description, elevenlabs_voice_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
       data.user_id,
       data.name,
       data.image_url,
       data.description || '',
+      data.elevenlabs_voice_id || null,
       data.metadata || {},
     ]
   );
@@ -688,6 +702,7 @@ export async function updateCharacterSheet(id: number, data: {
   name?: string;
   image_url?: string;
   description?: string;
+  elevenlabs_voice_id?: string;
   metadata?: any;
 }) {
   const updates: string[] = [];
@@ -705,6 +720,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.description !== undefined) {
     updates.push(`description = $${paramIndex++}`);
     values.push(data.description);
+  }
+  if (data.elevenlabs_voice_id !== undefined) {
+    updates.push(`elevenlabs_voice_id = $${paramIndex++}`);
+    values.push(data.elevenlabs_voice_id);
   }
   if (data.metadata !== undefined) {
     updates.push(`metadata = $${paramIndex++}`);
@@ -739,6 +758,214 @@ export async function deleteCharacterSheet(id: number) {
 }
 
 // =====================================================
+// マスターテーブル汎用関数
+// =====================================================
+
+/**
+ * マスターテーブルの全レコードを取得
+ */
+export async function getAllMasterRecords(tableName: string) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.${tableName} ORDER BY id ASC`,
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * マスターテーブルのレコードをIDで取得
+ */
+export async function getMasterRecordById(tableName: string, id: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.${tableName} WHERE id = $1`,
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルにレコードを作成
+ */
+export async function createMasterRecord(tableName: string, data: {
+  name: string;
+  description?: string;
+  name_ja?: string;
+  description_ja?: string;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.${tableName} (name, description, name_ja, description_ja)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.name_ja || '',
+      data.description_ja || '',
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルのレコードを更新
+ */
+export async function updateMasterRecord(tableName: string, id: number, data: {
+  name?: string;
+  description?: string;
+  name_ja?: string;
+  description_ja?: string;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.name_ja !== undefined) {
+    updates.push(`name_ja = $${paramIndex++}`);
+    values.push(data.name_ja);
+  }
+  if (data.description_ja !== undefined) {
+    updates.push(`description_ja = $${paramIndex++}`);
+    values.push(data.description_ja);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const sql = `UPDATE kazikastudio.${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  const result = await query(sql, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * マスターテーブルのレコードを削除
+ */
+export async function deleteMasterRecord(tableName: string, id: number) {
+  const result = await query(
+    `DELETE FROM kazikastudio.${tableName} WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+// =====================================================
+// ElevenLabs Tags関連の関数
+// =====================================================
+
+/**
+ * 全てのElevenLabsタグを取得
+ */
+export async function getAllElevenLabsTags() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags ORDER BY created_at DESC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * IDでElevenLabsタグを取得
+ */
+export async function getElevenLabsTagById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.eleven_labs_tags WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを作成
+ */
+export async function createElevenLabsTag(data: {
+  name: string;
+  description?: string;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.eleven_labs_tags (name, description)
+     VALUES ($1, $2)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを更新
+ */
+export async function updateElevenLabsTag(id: number, data: {
+  name?: string;
+  description?: string;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const sql = `UPDATE kazikastudio.eleven_labs_tags SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  const result = await query(sql, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * ElevenLabsタグを削除
+ */
+export async function deleteElevenLabsTag(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.eleven_labs_tags WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+// =====================================================
 // ComfyUI Queue関連の関数
 // =====================================================
 
@@ -755,7 +982,7 @@ export async function createComfyUIQueueItem(data: {
   metadata?: any;
 }) {
   const result = await query(
-    `INSERT INTO kazikastudio.comfyui_queue
+    `INSERT INTO kazikastudio.comfyui_queues
      (user_id, comfyui_workflow_name, workflow_json, prompt, img_gcp_storage_paths, priority, metadata)
      VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb)
      RETURNING *`,
@@ -777,7 +1004,7 @@ export async function createComfyUIQueueItem(data: {
  */
 export async function getComfyUIQueueItemById(id: number) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE id = $1',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE id = $1',
     [id]
   );
 
@@ -793,7 +1020,7 @@ export async function getComfyUIQueueItemById(id: number) {
  */
 export async function getComfyUIQueueItemsByUserId(userId: string) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE user_id = $1 ORDER BY created_at DESC',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
   return result.rows;
@@ -804,7 +1031,7 @@ export async function getComfyUIQueueItemsByUserId(userId: string) {
  */
 export async function getNextPendingComfyUIQueueItem() {
   const result = await query(
-    `SELECT * FROM kazikastudio.comfyui_queue
+    `SELECT * FROM kazikastudio.comfyui_queues
      WHERE status = 'pending'
      ORDER BY priority DESC, created_at ASC
      LIMIT 1`
@@ -873,7 +1100,7 @@ export async function updateComfyUIQueueItem(id: number, data: {
 
   values.push(id);
   const result = await query(
-    `UPDATE kazikastudio.comfyui_queue SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    `UPDATE kazikastudio.comfyui_queues SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     values
   );
 
@@ -889,7 +1116,7 @@ export async function updateComfyUIQueueItem(id: number, data: {
  */
 export async function deleteComfyUIQueueItem(id: number) {
   const result = await query(
-    'DELETE FROM kazikastudio.comfyui_queue WHERE id = $1 RETURNING *',
+    'DELETE FROM kazikastudio.comfyui_queues WHERE id = $1 RETURNING *',
     [id]
   );
   return result.rows.length > 0;
@@ -900,7 +1127,7 @@ export async function deleteComfyUIQueueItem(id: number) {
  */
 export async function getComfyUIQueueItemByPromptId(promptId: string) {
   const result = await query(
-    'SELECT * FROM kazikastudio.comfyui_queue WHERE comfyui_prompt_id = $1',
+    'SELECT * FROM kazikastudio.comfyui_queues WHERE comfyui_prompt_id = $1',
     [promptId]
   );
 

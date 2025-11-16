@@ -103,6 +103,11 @@ function FormPageContent() {
         const initialValues: Record<string, any> = {};
         if (data.workflow.form_config?.fields) {
           data.workflow.form_config.fields.forEach((field: FormFieldConfig) => {
+            // tagsフィールドは状態を持たないのでスキップ
+            if (field.type === 'tags') {
+              return;
+            }
+
             if (field.type === 'images') {
               initialValues[field.name] = [];
             } else if (field.type === 'image') {
@@ -194,11 +199,87 @@ function FormPageContent() {
     }
   };
 
-  const handleFieldChange = (fieldName: string, value: any) => {
-    setFormValues(prev => ({
-      ...prev,
+  const handleFieldChange = async (fieldName: string, value: any) => {
+    // 新しいフォーム値を作成
+    const newFormValues = {
+      ...formValues,
       [fieldName]: value,
-    }));
+    };
+
+    setFormValues(newFormValues);
+
+    // キャラクターシート選択時の自動実行を無効化
+    // ユーザーが明示的に「ワークフローを実行」ボタンをクリックしたときのみ実行される
+  };
+
+  const executeWithFormValues = async (formValuesToUse: Record<string, any>) => {
+    try {
+      setExecuting(true);
+      setError(null);
+      setResult(null);
+
+      // 入力されたフィールドのみを抽出
+      const filledInputs: Record<string, any> = {};
+      Object.entries(formValuesToUse).forEach(([key, value]) => {
+        // 値が存在する場合のみ追加
+        if (value !== null && value !== undefined && value !== '' &&
+            (!Array.isArray(value) || value.length > 0)) {
+          filledInputs[key] = value;
+        }
+      });
+
+      console.log('========================================');
+      console.log('Sending workflow execution request');
+      console.log('========================================');
+      console.log('Workflow ID:', workflowId);
+      console.log('All form values:', formValuesToUse);
+      console.log('Filled inputs only:', filledInputs);
+      console.log('Filled input keys:', Object.keys(filledInputs));
+      console.log('========================================');
+
+      const response = await fetch('/api/workflows/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workflowId: parseInt(workflowId!),
+          inputs: filledInputs,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResult(data);
+      } else {
+        console.error('========================================');
+        console.error('Workflow execution failed');
+        console.error('========================================');
+        console.error('Error:', data.error);
+        console.error('Details:', data.details);
+        console.error('Error type:', data.errorType);
+        console.error('Error code:', data.errorCode);
+        console.error('Error cause:', data.errorCause);
+        console.error('Stack:', data.stack);
+        console.error('Full response:', data);
+        console.error('========================================');
+
+        setError(data.details || data.error || 'ワークフローの実行に失敗しました');
+      }
+    } catch (err: any) {
+      console.error('========================================');
+      console.error('Workflow execution exception');
+      console.error('========================================');
+      console.error('Error:', err);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+      console.error('========================================');
+
+      setError('ワークフローの実行中にエラーが発生しました: ' + (err.message || ''));
+    } finally {
+      setExecuting(false);
+    }
   };
 
   if (loading) {
@@ -267,6 +348,8 @@ function FormPageContent() {
                   config={field}
                   value={formValues[field.name]}
                   onChange={(value) => handleFieldChange(field.name, value)}
+                  allValues={formValues}
+                  onFieldChange={handleFieldChange}
                 />
               ))}
             </Stack>
@@ -386,8 +469,17 @@ function FormPageContent() {
 
                     {output.output?.audioData && (
                       <Box sx={{ mt: 2 }}>
+                        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                          音声
+                        </Typography>
                         <audio controls style={{ width: '100%' }}>
-                          <source src={`data:audio/mpeg;base64,${output.output.audioData}`} />
+                          <source
+                            src={
+                              typeof output.output.audioData === 'string'
+                                ? `data:audio/mpeg;base64,${output.output.audioData}`
+                                : `data:${output.output.audioData.mimeType};base64,${output.output.audioData.data}`
+                            }
+                          />
                         </audio>
                       </Box>
                     )}

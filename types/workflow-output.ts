@@ -13,6 +13,7 @@ export interface WorkflowOutput {
   content_text: string | null;
   prompt: string | null;
   metadata: Record<string, any>;
+  favorite: boolean;
   created_at: string;
   updated_at: string;
 }

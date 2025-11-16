@@ -16,7 +16,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 
 interface ToolbarProps {
-  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn') => void;
+  onAddNode: (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn' | 'qwenImage') => void;
 }
 
 export default function Toolbar({ onAddNode }: ToolbarProps) {
@@ -267,6 +267,24 @@ export default function Toolbar({ onAddNode }: ToolbarProps) {
           }}
         >
           ComfyUI ワークフロー
+        </Button>
+
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<ImageIcon />}
+          onClick={() => onAddNode('qwenImage')}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            py: 1,
+            bgcolor: '#9c27b0',
+            '&:hover': {
+              bgcolor: '#7b1fa2',
+            },
+          }}
+        >
+          Qwen 画像生成
         </Button>
       </Stack>
     </Paper>

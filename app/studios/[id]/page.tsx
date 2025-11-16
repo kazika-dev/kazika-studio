@@ -24,6 +24,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
+import TimelineIcon from '@mui/icons-material/Timeline';
 import StudioBoard from '@/components/studio/StudioBoard';
 
 interface Studio {
@@ -259,9 +260,18 @@ export default function StudioDetailPage() {
               </Typography>
             )}
           </Box>
-          <IconButton onClick={() => setEditDialogOpen(true)} size="large">
-            <EditIcon />
-          </IconButton>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<TimelineIcon />}
+              onClick={() => router.push(`/studios/${studioId}/timeline`)}
+            >
+              タイムラインビュー
+            </Button>
+            <IconButton onClick={() => setEditDialogOpen(true)} size="large">
+              <EditIcon />
+            </IconButton>
+          </Box>
         </Box>
       </Box>
 

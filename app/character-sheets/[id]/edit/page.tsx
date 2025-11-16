@@ -23,6 +23,7 @@ interface CharacterSheet {
   name: string;
   image_url: string;
   description: string;
+  elevenlabs_voice_id?: string;
   metadata: any;
   created_at: string;
   updated_at: string;
@@ -39,6 +40,7 @@ export default function EditCharacterSheetPage() {
   const [characterSheet, setCharacterSheet] = useState<CharacterSheet | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -56,6 +58,7 @@ export default function EditCharacterSheetPage() {
         setCharacterSheet(data.characterSheet);
         setName(data.characterSheet.name);
         setDescription(data.characterSheet.description || '');
+        setElevenLabsVoiceId(data.characterSheet.elevenlabs_voice_id || '');
         setImagePreview(data.characterSheet.image_url);
       } else {
         toast.error('キャラクターシートの取得に失敗しました');
@@ -154,6 +157,7 @@ export default function EditCharacterSheetPage() {
           name: name.trim(),
           image_url: imageUrl,
           description: description.trim(),
+          elevenlabs_voice_id: elevenLabsVoiceId.trim() || undefined,
         }),
       });
 
@@ -223,6 +227,16 @@ export default function EditCharacterSheetPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={saving}
+            />
+
+            <TextField
+              label="ElevenLabs音声ID（任意）"
+              fullWidth
+              value={elevenLabsVoiceId}
+              onChange={(e) => setElevenLabsVoiceId(e.target.value)}
+              disabled={saving}
+              placeholder="例: 21m00Tcm4TlvDq8ikWAM"
+              helperText="ElevenLabsの音声IDを入力すると、音声生成時に使用されます"
             />
 
             <Box>

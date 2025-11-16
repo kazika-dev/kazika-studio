@@ -30,6 +30,7 @@ import CharacterSheetNode from './CharacterSheetNode';
 import RapidNode from './RapidNode';
 import ComfyUINode from './ComfyUINode';
 import PopcornNode from './PopcornNode';
+import QwenImageNode from './QwenImageNode';
 import NodeSettings from './NodeSettings';
 import GeminiNodeSettings from './GeminiNodeSettings';
 import NanobanaNodeSettings from './NanobanaNodeSettings';
@@ -41,6 +42,7 @@ import CharacterSheetNodeSettings from './CharacterSheetNodeSettings';
 import RapidNodeSettings from './RapidNodeSettings';
 import ComfyUINodeSettings from './ComfyUINodeSettings';
 import PopcornNodeSettings from './PopcornNodeSettings';
+import QwenImageNodeSettings from './QwenImageNodeSettings';
 import Toolbar from './Toolbar';
 import ExecutionPanel from './ExecutionPanel';
 import FormConfigEditor from './FormConfigEditor';
@@ -90,6 +92,7 @@ const nodeTypes = {
   rapid: RapidNode,
   comfyui: ComfyUINode,
   popcorn: PopcornNode,
+  qwenImage: QwenImageNode,
 };
 
 const initialNodes: Node[] = [
@@ -262,16 +265,16 @@ export default function WorkflowEditor() {
   }, [selectedEdge, setEdges]);
 
   const addNode = useCallback(
-    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn') => {
+    (type: 'input' | 'process' | 'output' | 'gemini' | 'nanobana' | 'imageInput' | 'elevenlabs' | 'higgsfield' | 'seedream4' | 'characterSheet' | 'rapid' | 'comfyui' | 'popcorn' | 'qwenImage') => {
       const newNode: Node = {
         id: `node-${Date.now()}`, // 一意のIDを生成
-        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : type === 'comfyui' ? 'comfyui' : type === 'popcorn' ? 'popcorn' : 'custom',
+        type: type === 'gemini' ? 'gemini' : type === 'nanobana' ? 'nanobana' : type === 'imageInput' ? 'imageInput' : type === 'elevenlabs' ? 'elevenlabs' : type === 'higgsfield' ? 'higgsfield' : type === 'seedream4' ? 'seedream4' : type === 'characterSheet' ? 'characterSheet' : type === 'rapid' ? 'rapid' : type === 'comfyui' ? 'comfyui' : type === 'popcorn' ? 'popcorn' : type === 'qwenImage' ? 'qwenImage' : 'custom',
         position: {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100
         },
         data: {
-          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'comfyui' ? 'ComfyUI ワークフロー' : type === 'popcorn' ? 'Popcorn 画像生成' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
+          label: type === 'nanobana' ? 'Nanobana 画像生成' : type === 'gemini' ? 'Gemini AI' : type === 'imageInput' ? '画像入力' : type === 'elevenlabs' ? 'ElevenLabs TTS' : type === 'higgsfield' ? 'Higgsfield 動画生成' : type === 'seedream4' ? 'Seedream4 画像生成' : type === 'characterSheet' ? 'キャラクターシート' : type === 'rapid' ? 'Rapid 画像編集' : type === 'comfyui' ? 'ComfyUI ワークフロー' : type === 'popcorn' ? 'Popcorn 画像生成' : type === 'qwenImage' ? 'Qwen 画像生成' : type === 'input' ? '入力ノード' : type === 'process' ? '処理ノード' : '出力ノード',
           type,
           config: type === 'nanobana' ? {
             name: `Nanobana ノード${nodes.length + 1}`,
@@ -337,6 +340,11 @@ export default function WorkflowEditor() {
             quality: '720p',
             presetId: '',
             enhancePrompt: false,
+            status: 'idle',
+          } : type === 'qwenImage' ? {
+            name: `Qwen ノード${nodes.length + 1}`,
+            description: 'Qwenで画像を生成します',
+            prompt: '',
             status: 'idle',
           } : {
             name: `${type === 'input' ? '入力' : type === 'process' ? '処理' : '出力'}ノード${nodes.length + 1}`,
@@ -621,6 +629,14 @@ export default function WorkflowEditor() {
             />
           ) : selectedNode.type === 'comfyui' ? (
             <ComfyUINodeSettings
+              nodeId={selectedNode.id}
+              config={selectedNode.data.config}
+              onUpdate={updateNodeConfig}
+              onClose={() => setSelectedNode(null)}
+              onDelete={deleteNode}
+            />
+          ) : selectedNode.type === 'qwenImage' ? (
+            <QwenImageNodeSettings
               nodeId={selectedNode.id}
               config={selectedNode.data.config}
               onUpdate={updateNodeConfig}

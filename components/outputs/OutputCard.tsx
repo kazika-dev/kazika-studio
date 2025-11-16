@@ -3,17 +3,22 @@
 import { WorkflowOutput } from '@/types/workflow-output';
 import { useState } from 'react';
 import ImageModal from './ImageModal';
+import { useRouter } from 'next/navigation';
 
 interface OutputCardProps {
   output: WorkflowOutput;
-  onDelete: (id: number) => void;
+  onDelete: (id: number) => Promise<void>;
+  onFavoriteToggle?: (id: number, isFavorite: boolean) => void;
 }
 
-export default function OutputCard({ output, onDelete }: OutputCardProps) {
+export default function OutputCard({ output, onDelete, onFavoriteToggle }: OutputCardProps) {
+  const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(output.favorite || false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
 
   const handleDelete = async () => {
     if (!confirm('このアウトプットを削除してもよろしいですか？')) {
@@ -27,6 +32,41 @@ export default function OutputCard({ output, onDelete }: OutputCardProps) {
       console.error('Failed to delete output:', error);
       setIsDeleting(false);
     }
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTogglingFavorite(true);
+
+    try {
+      const response = await fetch(`/api/outputs/${output.id}/favorite`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ isFavorite: !isFavorite }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle favorite');
+      }
+
+      const newFavoriteStatus = !isFavorite;
+      setIsFavorite(newFavoriteStatus);
+
+      // 親コンポーネントに通知
+      if (onFavoriteToggle) {
+        onFavoriteToggle(output.id, newFavoriteStatus);
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
+  const handleEdit = () => {
+    router.push(`/outputs/edit/${output.id}`);
   };
 
   const formatDate = (dateString: string) => {
@@ -187,18 +227,78 @@ export default function OutputCard({ output, onDelete }: OutputCardProps) {
 
       {/* Info */}
       <div className="p-4 space-y-3">
-        {/* Type Badge */}
+        {/* Type Badge and Actions */}
         <div className="flex items-center justify-between">
           <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
             <span className="mr-1">{getTypeIcon(output.output_type)}</span>
             {output.output_type}
           </span>
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            title="削除"
-          >
+          <div className="flex items-center gap-2">
+            {/* Edit Button (only for images) */}
+            {output.output_type === 'image' && (
+              <button
+                onClick={handleEdit}
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                title="編集"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
+
+            {/* Favorite Button */}
+            <button
+              onClick={handleToggleFavorite}
+              disabled={isTogglingFavorite}
+              className={`p-2 rounded-lg transition-colors ${
+                isFavorite
+                  ? 'text-yellow-500 hover:text-yellow-600'
+                  : 'text-gray-400 hover:text-yellow-500'
+              }`}
+              title={isFavorite ? 'お気に入りから削除' : 'お気に入りに追加'}
+            >
+              {isTogglingFavorite ? (
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                  />
+                </svg>
+              )}
+            </button>
+
+            {/* Delete Button */}
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              title="削除"
+            >
             {isDeleting ? (
               <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                 <circle
@@ -228,6 +328,7 @@ export default function OutputCard({ output, onDelete }: OutputCardProps) {
             )}
           </button>
         </div>
+      </div>
 
         {/* Prompt */}
         {output.prompt && (

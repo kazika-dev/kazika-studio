@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Node, Edge } from 'reactflow';
 import {
   Box,
@@ -30,7 +30,10 @@ import ErrorIcon from '@mui/icons-material/Error';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
 import EditIcon from '@mui/icons-material/Edit';
-import { executeWorkflow, ExecutionResult, topologicalSort } from '@/lib/workflow/executor';
+import type { ExecutionResult } from '@/lib/workflow/types';
+import { topologicalSort } from '@/lib/workflow/types';
+import FindInLogsToolbar from './FindInLogsToolbar';
+import { highlightText, countMatches } from '@/lib/utils/highlightText';
 
 interface ExecutionPanelProps {
   nodes: Node[];
@@ -55,6 +58,13 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState('');
+
+  // ログ内検索機能の状態
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
 
   // ノードを実行順序でソート
   const sortedNodes = useMemo(() => {
@@ -97,40 +107,63 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
     setNodeStatuses(initialStatuses);
 
     try {
-      const result = await executeWorkflow(nodes, edges, (nodeId, status, executionResult) => {
+      // API経由でワークフローを実行
+      const response = await fetch('/api/workflows/execute-draft', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nodes,
+          edges,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        setError(data.error || data.details || 'ワークフローの実行に失敗しました');
+        return;
+      }
+
+      // API レスポンスから結果を復元
+      const resultsMap = new Map<string, ExecutionResult>();
+
+      Object.entries(data.outputs || {}).forEach(([nodeName, output]: [string, any]) => {
+        const nodeId = output.nodeId;
+        resultsMap.set(nodeId, {
+          nodeId: nodeId,
+          success: output.success,
+          output: output.output,
+          error: output.error,
+          requestBody: output.requestBody,
+        });
+
+        // 各ノードの状態を更新
         setNodeStatuses((prev) => {
           const newStatuses = new Map(prev);
-          newStatuses.set(nodeId, status);
+          newStatuses.set(nodeId, output.success ? 'completed' : 'failed');
           return newStatuses;
         });
 
-        // 処理が完了したノードの結果を即座に表示
-        if ((status === 'completed' || status === 'failed') && executionResult) {
-          setResults((prev) => {
-            const newResults = new Map(prev);
-            newResults.set(nodeId, executionResult);
-            return newResults;
-          });
-
-          // 処理が完了したノードを自動的に展開
-          setExpandedNodes((prev) => {
-            const newExpanded = new Set(prev);
-            newExpanded.add(nodeId);
-            return newExpanded;
-          });
-        }
+        // 完了したノードを自動的に展開
+        setExpandedNodes((prev) => {
+          const newExpanded = new Set(prev);
+          newExpanded.add(nodeId);
+          return newExpanded;
+        });
       });
 
-      setResults(result.results);
+      setResults(resultsMap);
 
-      if (!result.success) {
-        setError(result.error || 'ワークフローの実行に失敗しました');
-      } else {
-        // ワークフロー実行成功後、アウトプットをDBに保存
-        await saveOutputsToDatabase(result.results, currentWorkflowId);
+      // ワークフロー実行成功後、アウトプットをDBに保存
+      if (currentWorkflowId) {
+        await saveOutputsToDatabase(resultsMap, currentWorkflowId);
       }
+
     } catch (error: any) {
-      setError(error.message);
+      console.error('Failed to execute workflow:', error);
+      setError(error.message || 'ワークフローの実行中にエラーが発生しました');
     } finally {
       setIsExecuting(false);
     }
@@ -437,9 +470,66 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
     }
   };
 
+  // Ctrl+F / Cmd+F キーボードショートカット
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        const target = event.target as HTMLElement;
+        // パネル内でのみCtrl+Fを有効化
+        if (panelRef.current && panelRef.current.contains(target)) {
+          event.preventDefault();
+          setIsSearchOpen(true);
+        }
+      }
+      if (event.key === 'Escape' && isSearchOpen) {
+        setIsSearchOpen(false);
+        setSearchQuery('');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSearchOpen]);
+
+  // 検索クエリが変わったら、マッチ数を再計算
+  useEffect(() => {
+    if (!searchQuery || !panelRef.current) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+      return;
+    }
+
+    // パネル内の全テキストを取得してマッチ数をカウント
+    const textContent = panelRef.current.innerText || '';
+    const matches = countMatches(textContent, searchQuery);
+    setTotalMatches(matches);
+    setCurrentMatchIndex(0);
+  }, [searchQuery, results]);
+
+  // 次のマッチに移動
+  const handleNextMatch = () => {
+    if (totalMatches === 0) return;
+    setCurrentMatchIndex((prev) => (prev + 1) % totalMatches);
+  };
+
+  // 前のマッチに移動
+  const handlePreviousMatch = () => {
+    if (totalMatches === 0) return;
+    setCurrentMatchIndex((prev) => (prev - 1 + totalMatches) % totalMatches);
+  };
+
+  // テキストをハイライト表示（検索クエリがある場合のみ）
+  const renderHighlightedText = (text: string) => {
+    if (!searchQuery) {
+      return text;
+    }
+    return highlightText(text, searchQuery, currentMatchIndex);
+  };
+
   return (
     <>
       <Paper
+        ref={panelRef}
         elevation={3}
         sx={{
           position: 'absolute',
@@ -454,6 +544,21 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
           borderRadius: 2,
         }}
       >
+        {/* ログ内検索ツールバー */}
+        <FindInLogsToolbar
+          isOpen={isSearchOpen}
+          searchQuery={searchQuery}
+          currentMatchIndex={currentMatchIndex}
+          totalMatches={totalMatches}
+          onSearchChange={setSearchQuery}
+          onClose={() => {
+            setIsSearchOpen(false);
+            setSearchQuery('');
+          }}
+          onNext={handleNextMatch}
+          onPrevious={handlePreviousMatch}
+        />
+
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
           <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>
             {currentWorkflowName || 'ワークフロー'}
@@ -617,7 +722,7 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                 whiteSpace: 'pre-wrap',
                               }}
                             >
-                              {JSON.stringify(result.input, null, 2)}
+                              {renderHighlightedText(JSON.stringify(result.input, null, 2))}
                             </Typography>
                           </Paper>
                         </Box>
@@ -648,7 +753,7 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                 whiteSpace: 'pre-wrap',
                               }}
                             >
-                              {JSON.stringify(result.requestBody, null, 2)}
+                              {renderHighlightedText(JSON.stringify(result.requestBody, null, 2))}
                             </Typography>
                           </Paper>
                         </Box>
@@ -685,7 +790,7 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                     whiteSpace: 'pre-wrap',
                                   }}
                                 >
-                                  {JSON.stringify(result.errorDetails, null, 2)}
+                                  {renderHighlightedText(JSON.stringify(result.errorDetails, null, 2))}
                                 </Typography>
                               </Paper>
                             )}
@@ -774,7 +879,7 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                     fontSize: '0.8rem',
                                   }}
                                 >
-                                  {result.output.response}
+                                  {renderHighlightedText(result.output.response)}
                                 </Typography>
                               </Paper>
                             )}
@@ -991,7 +1096,7 @@ export default function ExecutionPanel({ nodes, edges, onSave, currentWorkflowId
                                     whiteSpace: 'pre-wrap',
                                   }}
                                 >
-                                  {JSON.stringify(result.output, null, 2)}
+                                  {renderHighlightedText(JSON.stringify(result.output, null, 2))}
                                 </Typography>
                               </Paper>
                             )}

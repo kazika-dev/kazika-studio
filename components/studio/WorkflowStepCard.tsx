@@ -41,6 +41,10 @@ interface WorkflowStep {
     usePreviousAudio?: boolean;
     usePreviousText?: boolean;
     workflowInputs?: Record<string, any>;
+    nodeOverrides?: Record<string, any>;
+    character_id?: number;
+    character_name?: string;
+    has_custom_voice?: boolean;
   };
   execution_status: 'pending' | 'running' | 'completed' | 'failed';
   output_data: any;
@@ -293,6 +297,47 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                     プロンプト
                   </Typography>
                   <Typography variant="body2">{step.input_config.prompt}</Typography>
+                </Box>
+              )}
+
+              {/* ノード設定の上書き */}
+              {!loadingDetails && step.input_config.nodeOverrides && Object.keys(step.input_config.nodeOverrides).length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                    ノード設定
+                    {step.input_config.character_name && (
+                      <Chip
+                        label={step.input_config.character_name}
+                        size="small"
+                        sx={{ ml: 1, height: 18, fontSize: '0.7rem' }}
+                      />
+                    )}
+                  </Typography>
+                  <Stack spacing={1.5}>
+                    {Object.entries(step.input_config.nodeOverrides).map(([nodeId, config]: [string, any]) => (
+                      <Box key={nodeId} sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" gutterBottom>
+                          ノードID: {nodeId}
+                        </Typography>
+                        {config.text && (
+                          <Box sx={{ mb: 1 }}>
+                            <Typography variant="caption" color="text.secondary">テキスト:</Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {config.text}
+                            </Typography>
+                          </Box>
+                        )}
+                        {config.voiceId && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">音声ID:</Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5, fontFamily: 'monospace' }}>
+                              {config.voiceId}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
                 </Box>
               )}
 

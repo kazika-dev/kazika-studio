@@ -18,7 +18,7 @@ interface ComfyUINodeData {
     workflowName: string; // ComfyUI workflow name
     workflowJson?: any; // ComfyUI workflow definition
     prompt?: string;
-    queueItemId?: number; // ID in comfyui_queue table
+    queueItemId?: number; // ID in comfyui_queues table
     imageData?: {
       mimeType: string;
       data: string;

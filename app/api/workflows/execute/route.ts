@@ -3,6 +3,7 @@ import { executeWorkflow } from '@/lib/workflow/executor';
 import { getWorkflowById, getCharacterSheetById } from '@/lib/db';
 import { Node } from 'reactflow';
 import { createClient } from '@/lib/supabase/server';
+import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 // Next.jsのルートハンドラの設定（ワークフロー実行は時間がかかる可能性がある）
 export const maxDuration = 300; // 5分（秒単位）- Vercel hobby plan limit
@@ -228,18 +229,20 @@ export async function POST(request: NextRequest) {
 
         // プロンプトを持つノード: {nodeType}_prompt_{nodeId} フィールドから値を取得
         if (['gemini', 'nanobana', 'higgsfield', 'seedream4'].includes(nodeType)) {
-          const fieldName = `${nodeType}_prompt_${nodeId}`;
+          const promptFieldName = `${nodeType}_prompt_${nodeId}`;
+          const characterSheetsFieldName = `${nodeType}_characterSheets_${nodeId}`;
+
           console.log(`Processing ${nodeType} node ${nodeId} prompt:`, {
-            fieldName,
-            hasField: inputs[fieldName] !== undefined,
+            promptFieldName,
+            hasPromptField: inputs[promptFieldName] !== undefined,
             hasPrompt: inputs.prompt !== undefined,
             currentPrompt: node.data.config?.prompt,
             hasPlaceholder: node.data.config?.prompt?.includes('{{input}}'),
           });
 
-          if (inputs[fieldName] !== undefined) {
+          if (inputs[promptFieldName] !== undefined) {
             const workflowPrompt = node.data.config?.prompt || '';
-            const formPrompt = inputs[fieldName];
+            const formPrompt = inputs[promptFieldName];
             const combinedPrompt = workflowPrompt ? `${workflowPrompt} ${formPrompt}` : formPrompt;
 
             console.log(`✓ Concatenating ${nodeType} node ${nodeId} prompt:`);
@@ -258,6 +261,172 @@ export async function POST(request: NextRequest) {
             node.data.config.prompt = node.data.config.prompt.replace(/\{\{input\}\}/g, inputs.prompt);
           } else {
             console.log(`✗ No matching prompt field or placeholder found for ${nodeType} node ${nodeId}`);
+          }
+
+          // キャラクターシート配列の処理
+          console.log(`Processing ${nodeType} node ${nodeId} characterSheets:`, {
+            characterSheetsFieldName,
+            hasField: inputs[characterSheetsFieldName] !== undefined,
+            fieldValue: inputs[characterSheetsFieldName],
+          });
+
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+
+            if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
+              console.log(`✓ Loading ${characterSheetIds.length} character sheets for ${nodeType} node ${nodeId}`);
+
+              try {
+                const characterSheets = await Promise.all(
+                  characterSheetIds.map(async (id: any) => {
+                    const characterSheet = await getCharacterSheetById(parseInt(id));
+                    if (characterSheet) {
+                      console.log(`  ✓ Loaded character sheet: ${characterSheet.name} (ID: ${id})`);
+                      return characterSheet;
+                    } else {
+                      console.error(`  ✗ Character sheet ${id} not found`);
+                      return null;
+                    }
+                  })
+                );
+
+                const validCharacterSheets = characterSheets.filter(cs => cs !== null);
+
+                node.data.config = {
+                  ...node.data.config,
+                  characterSheets: validCharacterSheets,
+                };
+
+                console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets for ${nodeType} node ${nodeId}`);
+              } catch (error) {
+                console.error(`✗ Error loading character sheets for ${nodeType} node ${nodeId}:`, error);
+              }
+            }
+          }
+        }
+
+        // Nanobanaノード: キャラクターシートと参照画像の処理
+        if (nodeType === 'nanobana') {
+          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
+          const referenceImagesFieldName = `nanobana_referenceImages_${nodeId}`;
+
+          console.log(`Processing nanobana node ${nodeId}:`, {
+            characterSheetsFieldName,
+            referenceImagesFieldName,
+            hasCharacterSheetsField: inputs[characterSheetsFieldName] !== undefined,
+            hasReferenceImagesField: inputs[referenceImagesFieldName] !== undefined,
+          });
+
+          // キャラクターシートの処理
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+            console.log(`✓ Processing ${characterSheetIds.length} character sheet(s) for nanobana node ${nodeId}:`, characterSheetIds);
+
+            node.data.config = {
+              ...node.data.config,
+              characterSheetIds: characterSheetIds,
+            };
+          }
+
+          // 参照画像の処理
+          if (inputs[referenceImagesFieldName] !== undefined) {
+            const referenceImages = inputs[referenceImagesFieldName];
+            console.log(`✓ Processing ${referenceImages.length} reference image(s) for nanobana node ${nodeId}`);
+
+            node.data.config = {
+              ...node.data.config,
+              referenceImagePaths: referenceImages,
+            };
+          }
+        }
+
+        // Nanobanaノード: キャラクターシートの処理
+        if (nodeType === 'nanobana') {
+          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
+          console.log(`Processing nanobana node ${nodeId} characterSheets:`, {
+            fieldName: characterSheetsFieldName,
+            hasField: inputs[characterSheetsFieldName] !== undefined,
+            currentCharacterSheets: node.data.config?.characterSheets,
+          });
+
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+            console.log(`✓ Setting nanobana node ${nodeId} characterSheets with IDs:`, characterSheetIds);
+
+            // キャラクターシート情報をDBから取得
+            if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
+              try {
+                const characterSheets = await Promise.all(
+                  characterSheetIds.map((id: string) => getCharacterSheetById(parseInt(id)))
+                );
+
+                // nullでないものだけフィルタ
+                const validCharacterSheets = characterSheets.filter((cs) => cs !== null);
+
+                if (validCharacterSheets.length > 0) {
+                  node.data.config = {
+                    ...node.data.config,
+                    characterSheets: validCharacterSheets,
+                  };
+                  console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets:`,
+                    validCharacterSheets.map((cs) => cs.name)
+                  );
+                } else {
+                  console.error(`✗ No valid character sheets found for IDs:`, characterSheetIds);
+                }
+              } catch (error) {
+                console.error(`✗ Error loading character sheets:`, error);
+              }
+            } else {
+              console.log(`✗ characterSheetIds is not a valid array:`, characterSheetIds);
+            }
+          } else {
+            console.log(`✗ No matching characterSheets field found for nanobana node ${nodeId}`);
+          }
+        }
+
+        // ElevenLabsノード: elevenlabs_text_{nodeId} と elevenlabs_voiceId_{nodeId} フィールドから値を取得
+        if (nodeType === 'elevenlabs') {
+          const textFieldName = `elevenlabs_text_${nodeId}`;
+          const voiceIdFieldName = `elevenlabs_voiceId_${nodeId}`;
+
+          console.log(`Processing elevenlabs node ${nodeId}:`, {
+            textFieldName,
+            voiceIdFieldName,
+            hasTextField: inputs[textFieldName] !== undefined,
+            hasVoiceIdField: inputs[voiceIdFieldName] !== undefined,
+            currentText: node.data.config?.text,
+            currentVoiceId: node.data.config?.voiceId,
+          });
+
+          // テキストフィールドの処理
+          if (inputs[textFieldName] !== undefined) {
+            const workflowText = node.data.config?.text || '';
+            const formText = inputs[textFieldName];
+            const combinedText = workflowText ? `${workflowText} ${formText}` : formText;
+
+            console.log(`✓ Concatenating elevenlabs node ${nodeId} text:`);
+            console.log(`  Workflow text: ${workflowText}`);
+            console.log(`  Form text: ${formText}`);
+            console.log(`  Combined: ${combinedText}`);
+
+            node.data.config = {
+              ...node.data.config,
+              text: combinedText,
+            };
+          } else {
+            console.log(`✗ No matching text field found for elevenlabs node ${nodeId}`);
+          }
+
+          // 音声IDフィールドの処理
+          if (inputs[voiceIdFieldName] !== undefined) {
+            console.log(`✓ Setting elevenlabs node ${nodeId} voiceId:`, inputs[voiceIdFieldName]);
+            node.data.config = {
+              ...node.data.config,
+              voiceId: inputs[voiceIdFieldName],
+            };
+          } else {
+            console.log(`✗ No matching voiceId field found for elevenlabs node ${nodeId}`);
           }
         }
 
@@ -507,25 +676,43 @@ export async function POST(request: NextRequest) {
           } else if (nodeType === 'elevenlabs') {
             // 音声生成ノード
             if (output.audioData) {
-              // 音声データはbase64形式なので、そのまま保存するか、URLに変換する必要があります
-              // ここでは簡易的にmetadataに保存
-              const insertData: any = {
-                user_id: user.id,
-                workflow_id: workflowId,
-                output_type: 'audio',
-                content_text: 'Audio data (base64)',
-                prompt: prompt,
-                metadata: {
-                  nodeId,
-                  nodeType,
-                  nodeName: node?.data?.config?.name,
-                  hasAudioData: true,
-                },
-              };
+              // 音声データをGCP Storageにアップロード
+              const audioData = output.audioData;
+              const base64Data = typeof audioData === 'string' ? audioData : audioData.data;
+              const mimeType = typeof audioData === 'string' ? 'audio/mpeg' : audioData.mimeType;
 
-              savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
-              );
+              console.log('Uploading ElevenLabs audio to GCP Storage:', {
+                nodeId,
+                nodeName: node?.data?.config?.name,
+                mimeType,
+                dataLength: base64Data.length,
+              });
+
+              // GCP Storageにアップロード
+              const uploadPromise = (async () => {
+                const storagePath = await uploadImageToStorage(base64Data, mimeType, undefined, 'audio');
+
+                console.log('ElevenLabs audio uploaded to GCP Storage:', storagePath);
+
+                const insertData: any = {
+                  user_id: user.id,
+                  workflow_id: workflowId,
+                  output_type: 'audio',
+                  content_url: storagePath,
+                  prompt: nodeResult.requestBody?.text || node?.data?.config?.text || null,
+                  metadata: {
+                    nodeId,
+                    nodeType,
+                    nodeName: node?.data?.config?.name,
+                    voiceId: nodeResult.requestBody?.voiceId || node?.data?.config?.voiceId,
+                    modelId: nodeResult.requestBody?.modelId || node?.data?.config?.modelId,
+                  },
+                };
+
+                return supabase.from('workflow_outputs').insert(insertData).select();
+              })();
+
+              savePromises.push(uploadPromise);
             }
           }
           // inputやimageInputノードは保存しない（入力データなので）

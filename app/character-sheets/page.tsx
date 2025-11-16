@@ -28,6 +28,7 @@ interface CharacterSheet {
   name: string;
   image_url: string;
   description: string;
+  elevenlabs_voice_id?: string;
   metadata: any;
   created_at: string;
   updated_at: string;

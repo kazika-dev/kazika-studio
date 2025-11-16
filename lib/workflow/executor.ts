@@ -1,22 +1,9 @@
 import { Node, Edge } from 'reactflow';
 import { getApiUrl } from '@/lib/utils/apiUrl';
+import { ExecutionResult, WorkflowExecutionResult, topologicalSort } from './types';
 
-export interface ExecutionResult {
-  success: boolean;
-  nodeId: string;
-  input?: any;
-  requestBody?: any;
-  output: any;
-  error?: string;
-  errorDetails?: any; // APIから返された詳細なエラー情報
-  skipped?: boolean; // ノードがスキップされた場合にtrue（例: 選択されていないキャラクターシート）
-}
-
-export interface WorkflowExecutionResult {
-  success: boolean;
-  results: Map<string, ExecutionResult>;
-  error?: string;
-}
+// このファイルはサーバー専用です（Node.js組み込みモジュールを使用します）
+// クライアントコンポーネントからは API route 経由でのみアクセスしてください
 
 /**
  * ログ出力用に画像データを省略する
@@ -44,57 +31,6 @@ function sanitizeForLog(obj: any): any {
     }
   }
   return sanitized;
-}
-
-/**
- * トポロジカルソートでワークフローの実行順序を決定
- */
-export function topologicalSort(nodes: Node[], edges: Edge[]): string[] {
-  const graph = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-
-  // グラフを初期化
-  nodes.forEach((node) => {
-    graph.set(node.id, []);
-    inDegree.set(node.id, 0);
-  });
-
-  // エッジからグラフを構築
-  edges.forEach((edge) => {
-    graph.get(edge.source)?.push(edge.target);
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
-  });
-
-  // 入次数が0のノードをキューに追加
-  const queue: string[] = [];
-  inDegree.forEach((degree, nodeId) => {
-    if (degree === 0) {
-      queue.push(nodeId);
-    }
-  });
-
-  // トポロジカルソート実行
-  const result: string[] = [];
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-    result.push(nodeId);
-
-    graph.get(nodeId)?.forEach((neighbor) => {
-      const newDegree = (inDegree.get(neighbor) || 0) - 1;
-      inDegree.set(neighbor, newDegree);
-
-      if (newDegree === 0) {
-        queue.push(neighbor);
-      }
-    });
-  }
-
-  // 循環参照チェック
-  if (result.length !== nodes.length) {
-    throw new Error('Circular dependency detected in workflow');
-  }
-
-  return result;
 }
 
 /**
@@ -505,8 +441,111 @@ async function executeNode(
           }
         }
 
-        // 入力データから画像を抽出（参照画像として使用、最大3枚）
-        const nanobanaImages = extractImagesFromInput(inputData).slice(0, 3);
+        // 入力データから画像を抽出（参照画像として使用）
+        const nanobanaImages: Array<{ mimeType: string; data: string }> = [];
+
+        // 1. キャラクターシート画像を取得（最大4枚）
+        const characterSheetIds = node.data.config?.characterSheetIds || [];
+        if (characterSheetIds.length > 0) {
+          console.log(`Loading ${characterSheetIds.length} character sheet(s) for Nanobana:`, characterSheetIds);
+
+          for (const csId of characterSheetIds.slice(0, 4)) {
+            try {
+              // キャラクターシート情報をDBから取得
+              const { getCharacterSheetById } = await import('@/lib/db');
+              const characterSheet = await getCharacterSheetById(parseInt(csId));
+
+              if (characterSheet && characterSheet.image_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading character sheet image from GCP Storage:', characterSheet.image_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(characterSheet.image_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                nanobanaImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Character sheet ${csId} loaded: ${characterSheet.name}`);
+              } else {
+                console.warn(`✗ Character sheet ${csId} not found or has no image`);
+              }
+            } catch (error) {
+              console.error(`Failed to load character sheet ${csId}:`, error);
+              // エラーがあっても続行（他のキャラクターシートは読み込む）
+            }
+          }
+        }
+
+        // 2. 参照画像を追加（フォームからアップロードされた画像、最大4枚）
+        const referenceImagePaths = node.data.config?.referenceImagePaths || [];
+        if (referenceImagePaths.length > 0) {
+          console.log(`Loading ${referenceImagePaths.length} reference image(s) for Nanobana`);
+
+          let remainingSlots = 4 - nanobanaImages.length;
+          for (const imagePath of referenceImagePaths.slice(0, remainingSlots)) {
+            try {
+              // GCP Storageから画像を取得
+              console.log('Loading reference image from GCP Storage:', imagePath);
+              const { getFileFromStorage } = await import('@/lib/gcp-storage');
+              const { data: imageBuffer, contentType } = await getFileFromStorage(imagePath);
+              const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+              nanobanaImages.push({
+                mimeType: contentType,
+                data: base64Data,
+              });
+
+              console.log(`✓ Reference image loaded: ${imagePath}`);
+            } catch (error) {
+              console.error(`Failed to load reference image ${imagePath}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 3. Output画像選択から画像を追加（最大4枚）
+        const selectedOutputIds = node.data.config?.selectedOutputIds || [];
+        if (selectedOutputIds.length > 0) {
+          console.log(`Loading ${selectedOutputIds.length} selected output image(s) for Nanobana:`, selectedOutputIds);
+
+          let remainingSlots = 4 - nanobanaImages.length;
+          for (const outputId of selectedOutputIds.slice(0, remainingSlots)) {
+            try {
+              // workflow_outputsテーブルから画像を取得
+              const { getWorkflowOutputById } = await import('@/lib/db');
+              const output = await getWorkflowOutputById(parseInt(outputId));
+
+              if (output && output.content_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading output image from GCP Storage:', output.content_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(output.content_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                nanobanaImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Output image ${outputId} loaded`);
+              } else {
+                console.warn(`✗ Output ${outputId} not found or has no content_url`);
+              }
+            } catch (error) {
+              console.error(`Failed to load output image ${outputId}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 4. 前のノードから接続された画像を追加（最大4枚まで）
+        const connectedImages = extractImagesFromInput(inputData);
+        const remainingSlots = 4 - nanobanaImages.length;
+        if (connectedImages.length > 0 && remainingSlots > 0) {
+          nanobanaImages.push(...connectedImages.slice(0, remainingSlots));
+        }
 
         console.log('Nanobana execution:', {
           nodeId: node.id,
@@ -518,7 +557,10 @@ async function executeNode(
           inputTexts,
           finalPrompt: nanobanaPrompt,
           finalPromptLength: nanobanaPrompt.length,
-          imageCount: nanobanaImages.length,
+          characterSheetCount: characterSheetIds.length,
+          referenceImageCount: referenceImagePaths.length,
+          connectedImageCount: connectedImages.length,
+          totalImageCount: nanobanaImages.length,
         });
 
         if (!nanobanaPrompt.trim()) {
@@ -549,7 +591,20 @@ async function executeNode(
         }
 
         if (!nanobanaResponse.ok) {
-          const error: any = new Error(nanobanaData.error || 'Nanobana API call failed');
+          // エラーメッセージを詳細に構築
+          let errorMessage = nanobanaData.error || 'Nanobana API call failed';
+
+          // APIから返された詳細メッセージも含める
+          if (nanobanaData.message) {
+            errorMessage = `${errorMessage}: ${nanobanaData.message}`;
+          }
+
+          // finishReasonがある場合も含める
+          if (nanobanaData.finishReason) {
+            errorMessage = `${errorMessage} (Reason: ${nanobanaData.finishReason})`;
+          }
+
+          const error: any = new Error(errorMessage);
           error.apiErrorDetails = nanobanaData; // API全体のエラーレスポンスを保存
           throw error;
         }
@@ -1073,6 +1128,150 @@ async function executeNode(
             jobIds: popcornData.jobIds,
             dashboardUrl: popcornData.dashboardUrl,
             note: popcornData.note,
+            nodeId: node.id,
+          };
+        }
+        break;
+
+      case 'qwenImage':
+        // Qwen Image Generation（キューに追加）
+        let qwenPrompt = replaceVariables(node.data.config?.prompt || '', inputData);
+
+        // 前のノードからのテキスト出力を自動的に追加
+        const qwenInputTexts: string[] = [];
+        Object.values(inputData).forEach((input: any) => {
+          if (input && typeof input === 'object') {
+            // geminiノードからのresponseフィールドを追加
+            if (input.response && typeof input.response === 'string') {
+              qwenInputTexts.push(input.response);
+            }
+            // その他のvalueフィールドを追加
+            else if (input.value !== undefined && input.value !== null) {
+              qwenInputTexts.push(String(input.value));
+            }
+          }
+        });
+
+        // prompt欄の内容と前のノードの出力を組み合わせ
+        if (qwenInputTexts.length > 0) {
+          const combinedText = qwenInputTexts.join('\n\n');
+          if (qwenPrompt.trim()) {
+            qwenPrompt = `${qwenPrompt}\n\n${combinedText}`;
+          } else {
+            qwenPrompt = combinedText;
+          }
+        }
+
+        if (!qwenPrompt || !qwenPrompt.trim()) {
+          return {
+            success: false,
+            error: 'プロンプトが設定されていません',
+            output: null,
+            nodeId: node.id,
+          };
+        }
+
+        // 入力データから参照画像を抽出
+        const qwenInputImages = extractImagesFromInput(inputData);
+        const qwenImagePaths: string[] = [];
+
+        // 参照画像がある場合はGCP Storageにアップロード
+        if (qwenInputImages.length > 0) {
+          for (const image of qwenInputImages) {
+            try {
+              // 既にstoragePathがある場合はそれを使用
+              if (image.storagePath) {
+                qwenImagePaths.push(image.storagePath);
+              } else {
+                // クライアントサイドかサーバーサイドかを判定
+                const isServer = typeof window === 'undefined';
+
+                if (!isServer) {
+                  // クライアントサイドの場合はAPIエンドポイント経由でアップロード
+                  const uploadResponse = await fetch(getApiUrl('/api/upload-image'), {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      base64Data: image.data,
+                      mimeType: image.mimeType,
+                      folder: 'kazika/reference',
+                    }),
+                  });
+
+                  if (!uploadResponse.ok) {
+                    throw new Error('Failed to upload image via API');
+                  }
+
+                  const uploadData = await uploadResponse.json();
+                  qwenImagePaths.push(uploadData.storagePath);
+                  console.log('Reference image uploaded via API:', uploadData.storagePath);
+                } else {
+                  // サーバーサイドの場合は直接uploadImageToStorage関数を呼び出す
+                  const { uploadImageToStorage } = await import('@/lib/gcp-storage');
+                  const imagePath = await uploadImageToStorage(
+                    image.data,
+                    image.mimeType,
+                    undefined,
+                    'kazika/reference'
+                  );
+                  qwenImagePaths.push(imagePath);
+                  console.log('Reference image uploaded directly:', imagePath);
+                }
+              }
+            } catch (uploadError: any) {
+              console.error('Failed to upload reference image:', uploadError);
+              // 画像アップロード失敗は警告のみ（処理は続行）
+            }
+          }
+
+          console.log('Qwen reference images uploaded:', qwenImagePaths);
+        }
+
+        try {
+          console.log('Creating Qwen Image queue item:', {
+            originalPrompt: node.data.config?.prompt,
+            combinedPrompt: qwenPrompt.substring(0, 200),
+            promptLength: qwenPrompt.length,
+            referenceImageCount: qwenImagePaths.length,
+          });
+
+          const qwenResponse = await fetch(getApiUrl('/api/qwen-image'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: qwenPrompt,
+              referenceImages: qwenImagePaths, // 参照画像のパスを送信
+            }),
+          });
+
+          const qwenResult = await qwenResponse.json();
+
+          if (!qwenResponse.ok) {
+            throw new Error(qwenResult.error || 'Failed to create Qwen Image queue item');
+          }
+
+          output = {
+            queueItemId: qwenResult.queueItemId,
+            status: 'queued',
+            nodeId: node.id,
+          };
+
+          requestBody = {
+            prompt: qwenPrompt,
+            referenceImageCount: qwenImagePaths.length,
+          };
+
+          console.log('Qwen Image queue item created:', qwenResult.queueItemId);
+        } catch (error: any) {
+          console.error('Qwen Image queue error:', error);
+          return {
+            success: false,
+            error: `Qwen Image キューへの追加に失敗しました: ${error.message}`,
+            output: null,
             nodeId: node.id,
           };
         }
