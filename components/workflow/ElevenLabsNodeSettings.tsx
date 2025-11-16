@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Node } from 'reactflow';
 import {
   Box,
@@ -21,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import { ELEVENLABS_PRESET_VOICES, ELEVENLABS_MODELS, ELEVENLABS_DEFAULTS } from '@/lib/elevenlabs/constants';
 
 interface CharacterSheet {
   id: number;
@@ -39,8 +39,8 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
   const [name, setName] = useState(node.data.config?.name || '');
   const [description, setDescription] = useState(node.data.config?.description || '');
   const [text, setText] = useState(node.data.config?.text || '');
-  const [voiceId, setVoiceId] = useState(node.data.config?.voiceId || 'JBFqnCBsd6RMkjVDRZzb');
-  const [modelId, setModelId] = useState(node.data.config?.modelId || 'eleven_turbo_v2_5');
+  const [voiceId, setVoiceId] = useState(node.data.config?.voiceId || ELEVENLABS_DEFAULTS.voiceId);
+  const [modelId, setModelId] = useState(node.data.config?.modelId || ELEVENLABS_DEFAULTS.modelId);
   const [characters, setCharacters] = useState<CharacterSheet[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -48,8 +48,8 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
     setName(node.data.config?.name || '');
     setDescription(node.data.config?.description || '');
     setText(node.data.config?.text || '');
-    setVoiceId(node.data.config?.voiceId || 'JBFqnCBsd6RMkjVDRZzb');
-    setModelId(node.data.config?.modelId || 'eleven_turbo_v2_5');
+    setVoiceId(node.data.config?.voiceId || ELEVENLABS_DEFAULTS.voiceId);
+    setModelId(node.data.config?.modelId || ELEVENLABS_DEFAULTS.modelId);
   }, [node]);
 
   useEffect(() => {
@@ -99,9 +99,8 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
   };
 
   return (
-    <Drawer
-      anchor="right"
-      open={true}
+    <UnifiedNodeSettings
+      node={node}
       onClose={onClose}
       slotProps={{
         backdrop: {
@@ -223,16 +222,11 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
             <MenuItem disabled sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
               プリセット音声
             </MenuItem>
-            <MenuItem value="JBFqnCBsd6RMkjVDRZzb">George (英語)</MenuItem>
-            <MenuItem value="21m00Tcm4TlvDq8ikWAM">Rachel (英語)</MenuItem>
-            <MenuItem value="AZnzlk1XvdvUeBnXmlld">Domi (英語)</MenuItem>
-            <MenuItem value="EXAVITQu4vr4xnSDxMaL">Bella (英語)</MenuItem>
-            <MenuItem value="ErXwobaYiN019PkySvjV">Antoni (英語)</MenuItem>
-            <MenuItem value="MF3mGyEYCl7XYWbV9V6O">Elli (英語)</MenuItem>
-            <MenuItem value="TxGEqnHWrfWFTfGW9XjX">Josh (英語)</MenuItem>
-            <MenuItem value="VR6AewLTigWG4xSOukaG">Arnold (英語)</MenuItem>
-            <MenuItem value="pNInz6obpgDQGcFmaJgB">Adam (英語)</MenuItem>
-            <MenuItem value="yoZ06aMxZJJ28mfd3POQ">Sam (英語)</MenuItem>
+            {ELEVENLABS_PRESET_VOICES.map((voice) => (
+              <MenuItem key={voice.value} value={voice.value}>
+                {voice.label}
+              </MenuItem>
+            ))}
 
             {/* キャラクターのカスタム音声 */}
             {characters.filter(c => c.elevenlabs_voice_id && c.elevenlabs_voice_id.trim()).length > 0 && [
@@ -269,12 +263,11 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
             variant="outlined"
             helperText="Turbo v2.5推奨（バランス型）、v3は最高品質だが要アクセス権"
           >
-            <MenuItem value="eleven_turbo_v2_5">Turbo v2.5 (推奨・バランス型) ⭐</MenuItem>
-            <MenuItem value="eleven_flash_v2_5">Flash v2.5 (超高速・低コスト)</MenuItem>
-            <MenuItem value="eleven_multilingual_v2">Multilingual v2 (安定)</MenuItem>
-            <MenuItem value="eleven_turbo_v2">Turbo v2 (高速)</MenuItem>
-            <MenuItem value="eleven_monolingual_v1">Monolingual v1 (英語のみ)</MenuItem>
-            <MenuItem value="eleven_v3">Eleven v3 (最高品質・Alpha・要アクセス権)</MenuItem>
+            {ELEVENLABS_MODELS.map((model) => (
+              <MenuItem key={model.value} value={model.value}>
+                {model.label}{model.recommended ? ' ⭐' : ''}
+              </MenuItem>
+            ))}
           </TextField>
 
           <Box>

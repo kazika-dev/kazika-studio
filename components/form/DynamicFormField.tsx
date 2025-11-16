@@ -17,12 +17,14 @@ import {
   FormControlLabel,
   CircularProgress,
   MenuItem,
+  Slider,
+  Switch,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch';
   name: string;
   label: string;
   placeholder?: string;
@@ -32,6 +34,9 @@ export interface FormFieldConfig {
   maxSelections?: number;
   helperText?: string;
   options?: { label: string; value: string }[];
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 interface DynamicFormFieldProps {
@@ -607,6 +612,64 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
           </Box>
         )}
 
+      </Box>
+    );
+  }
+
+  // スライダー
+  if (config.type === 'slider') {
+    const min = config.min ?? 0;
+    const max = config.max ?? 100;
+    const step = config.step ?? 1;
+
+    return (
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+          {config.label}: {typeof value === 'number' ? value.toFixed(step < 1 ? 1 : 0) : min}
+        </Typography>
+        <Slider
+          value={typeof value === 'number' ? value : min}
+          onChange={(_, newValue) => onChange(newValue)}
+          min={min}
+          max={max}
+          step={step}
+          marks={[
+            { value: min, label: min.toString() },
+            { value: (min + max) / 2, label: ((min + max) / 2).toString() },
+            { value: max, label: max.toString() },
+          ]}
+        />
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 0.5, display: 'block' }}>
+            {config.helperText}
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+
+  // スイッチ
+  if (config.type === 'switch') {
+    return (
+      <Box>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={!!value}
+              onChange={(e) => onChange(e.target.checked)}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="body2">{config.label}</Typography>
+              {config.helperText && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {config.helperText}
+                </Typography>
+              )}
+            </Box>
+          }
+        />
       </Box>
     );
   }
