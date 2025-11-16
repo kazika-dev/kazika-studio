@@ -697,9 +697,9 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
 
           if (data.success) {
             // 画像タイプのoutputのみをフィルタリング
-            // APIは output_url を返す（テーブルスキーマに合わせて修正済み）
+            // APIは content_url を返す（実際のテーブルスキーマに合わせて修正済み）
             const imageOutputs = data.outputs.filter((output: any) =>
-              output.output_type === 'image' && (output.output_url || output.output_data?.imageUrl)
+              output.output_type === 'image' && output.content_url
             );
             console.log('[OutputSelector] Filtered image outputs:', imageOutputs.length, imageOutputs);
             setOutputs(imageOutputs);
@@ -717,18 +717,11 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
     }, []);
 
     const getImageUrl = (output: any) => {
-      // テーブルスキーマに合わせて output_url をチェック
-      if (output.output_url) {
-        return output.output_url.startsWith('http')
-          ? output.output_url
-          : `/api/storage/${output.output_url}`;
-      }
-      // output_data内の画像データもチェック
-      if (output.output_data?.imageUrl) {
-        return output.output_data.imageUrl;
-      }
-      if (output.output_data?.imageData) {
-        return `data:${output.output_data.imageData.mimeType};base64,${output.output_data.imageData.data}`;
+      // 実際のテーブルスキーマに合わせて content_url をチェック
+      if (output.content_url) {
+        return output.content_url.startsWith('http')
+          ? output.content_url
+          : `/api/storage/${output.content_url}`;
       }
       return '';
     };

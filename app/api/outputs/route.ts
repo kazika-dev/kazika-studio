@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     if (id) {
       const { data, error } = await supabase
         .from('workflow_outputs')
-        .select('id, workflow_id, output_type, output_url, output_data, metadata, created_at, updated_at')
+        .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
         .eq('id', parseInt(id))
         .single();
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // クエリ構築
     let query = supabase
       .from('workflow_outputs')
-      .select('id, workflow_id, output_type, output_url, output_data, metadata, created_at, updated_at')
+      .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(parseInt(limit));
 
@@ -238,7 +238,7 @@ export async function DELETE(request: NextRequest) {
     // 削除前にアウトプット情報を取得（GCPから削除するため）
     const { data: output, error: fetchError } = await supabase
       .from('workflow_outputs')
-      .select('id, output_type, output_url')
+      .select('id, output_type, content_url')
       .eq('id', parseInt(id))
       .single();
 
@@ -263,9 +263,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     // GCPストレージからも削除（ファイル系の場合のみ）
-    if (output.output_url && ['image', 'video', 'audio', 'file'].includes(output.output_type)) {
+    if (output.content_url && ['image', 'video', 'audio', 'file'].includes(output.output_type)) {
       try {
-        await deleteImageFromStorage(output.output_url);
+        await deleteImageFromStorage(output.content_url);
       } catch (storageError) {
         console.error('Failed to delete from GCP storage:', storageError);
         // ストレージ削除失敗はログのみで、エラーにはしない
