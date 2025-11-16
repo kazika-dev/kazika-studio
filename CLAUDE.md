@@ -23,17 +23,23 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - `/api/outputs` から画像タイプのoutputを取得し、2カラムのグリッドレイアウトでサムネイル表示
 - Nanobanaノード設定に `selectedOutputId` フィールドを追加（`getNodeTypeConfig()` で一元管理）
 - `/components/workflow/UnifiedNodeSettings.tsx` で `outputSelector` のデフォルト値を設定
+- `/app/api/outputs/route.ts` をテーブルスキーマ (`output_url`, `output_data`) に合わせて修正
 
 **技術的詳細**:
 - CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で1箇所定義することで、ワークフローノード設定と `/form` ページの両方で自動的に利用可能
 - ラジオボタンで画像を1つ選択し、選択されたoutputのIDを `selectedOutputId` として保存
 - デバッグログを追加して、フィールドのレンダリングとAPI呼び出しを追跡可能に
+- マイグレーションSQLで定義された実際のカラム名 (`output_url`, `output_data`) に合わせてAPIを修正
 
 **影響範囲**:
 - Nanobanaノード設定画面に新しいフィールドが追加され、過去の生成画像を選択可能に
 - `/form` ページでも自動的に表示される（一元管理の恩恵）
+- `workflow_outputs` テーブルから画像データを正しく取得できるようになった
 
-**コミット**: `b3a59dd` - "Nanobanaノード設定にoutput画像選択フォームを追加"
+**コミット**:
+- `33bbedf` - "Nanobanaノード設定にoutput画像選択フォームを追加"
+- `aaf7aa3` - "OutputSelectorでcontent_urlフィールドに対応"
+- `d79b997` - "workflow_outputsテーブルスキーマに合わせてAPI修正"
 
 ### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
 
