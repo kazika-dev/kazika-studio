@@ -118,10 +118,12 @@ export default function UnifiedNodeSettings({
       }
     });
 
+    console.log('[UnifiedNodeSettings] Initializing formValues for node:', node.id, 'initialValues:', initialValues);
     setFormValues(initialValues);
   }, [node.id, nodeType]); // nodeTypeが変わったら再初期化
 
   const handleFormValueChange = (fieldName: string, value: any) => {
+    console.log('[UnifiedNodeSettings] Field value changed:', fieldName, '=', value);
     setFormValues((prev) => ({
       ...prev,
       [fieldName]: value,
@@ -129,7 +131,7 @@ export default function UnifiedNodeSettings({
   };
 
   const handleSave = () => {
-    console.log('Saving node config:', {
+    console.log('[UnifiedNodeSettings] Saving node config:', {
       nodeId: node.id,
       nodeType,
       name,
@@ -145,6 +147,7 @@ export default function UnifiedNodeSettings({
       ...formValues,
     };
 
+    console.log('[UnifiedNodeSettings] Updated config:', updatedConfig);
     onUpdate(node.id, updatedConfig);
 
     setSaveSuccess(true);

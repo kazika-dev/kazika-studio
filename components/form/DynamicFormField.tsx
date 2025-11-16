@@ -747,11 +747,16 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
       if (index > -1) {
         // 既に選択されている場合は削除
         currentSelected.splice(index, 1);
+        console.log('[OutputSelector] Removed outputId:', outputId, 'New selection:', currentSelected);
         onChange(currentSelected);
       } else {
         // 選択されていない場合は追加（最大数チェック）
         if (currentSelected.length < maxSelections) {
-          onChange([...currentSelected, outputId]);
+          const newSelection = [...currentSelected, outputId];
+          console.log('[OutputSelector] Added outputId:', outputId, 'New selection:', newSelection);
+          onChange(newSelection);
+        } else {
+          console.log('[OutputSelector] Max selections reached:', maxSelections);
         }
       }
     };

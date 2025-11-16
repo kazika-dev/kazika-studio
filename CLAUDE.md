@@ -12,8 +12,203 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
+- **[会話生成機能の拡張](/docs/conversation-generation-enhancements.md)** - 感情タグ、カメラ情報、シーンプロンプトの統合
 
 ## 最近の主要な変更
+
+### 2025-11-16: 会話生成機能に感情タグ、カメラ情報、シーンプロンプトを追加
+
+**目的**: 会話生成時にElevenLabs感情タグとカメラ情報を動的に取得し、シーンプロンプトを日本語と英語の両方で生成
+
+**変更内容**:
+- `/lib/db.ts` にマスターデータ取得関数を追加（`getAllElevenLabsTags`, `getAllCameraAngles`, `getAllShotDistances`）
+- `/lib/conversation/prompt-builder.ts` をasync化し、データベースから最新のマスターデータを取得
+- `/types/conversation.ts` に `scene_prompt_ja`, `scene_prompt_en`, `emotionTag` フィールドを追加
+- `/app/api/conversations/generate/route.ts` で感情タグをメッセージテキストの先頭に付加、シーンプロンプトを専用カラムに保存
+- `/components/studio/conversation/ConversationViewer.tsx` でシーンプロンプトを専用カラムから表示
+
+**技術的詳細**:
+- **データベース駆動アプローチ**: マスターデータ（感情タグ、カメラアングル、ショット距離）を生成のたびにデータベースから取得
+- **感情タグ機能**:
+  - `kazikastudio.eleven_labs_tags` テーブルから最新の感情タグを取得
+  - AIが会話内容に応じて適切な感情タグを選択
+  - メッセージテキストの先頭に `[感情タグ名]` を付加（例: `[emotional] こんにちは`）
+  - ElevenLabs音声生成で使用され、感情表現豊かな音声を生成
+- **カメラ情報機能**:
+  - `kazikastudio.m_camera_angles` (6種類) と `kazikastudio.m_shot_distances` (7種類) から取得
+  - シーン生成時に適切なカメラアングルとショット距離を選択
+  - 画像生成プロンプトに含めることで、一貫性のあるビジュアル表現を実現
+- **シーンプロンプト機能（日本語・英語）**:
+  - AIが各メッセージごとに画像生成用のプロンプトを**日本語と英語の両方**で生成
+  - **日本語プロンプト（`scenePromptJa`）**: 100-150文字程度で、場所・時間帯・キャラクターの配置・表情・雰囲気を詳細に描写
+  - **英語プロンプト（`scenePromptEn`）**: Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含む
+  - `conversation_messages` テーブルの `scene_prompt_ja` と `scene_prompt_en` カラムに保存
+  - metadataではなく専用カラムに保存することで、検索・フィルタリングが容易に
+
+**データベーステーブル**:
+```sql
+-- 感情タグ（ElevenLabs用）
+kazikastudio.eleven_labs_tags
+  - id, name, description, description_ja, created_at
+
+-- カメラアングル（6種類）
+kazikastudio.m_camera_angles
+  - id, name, description, created_at
+
+-- ショット距離（7種類）
+kazikastudio.m_shot_distances
+  - id, name, description, created_at
+
+-- 会話メッセージ（シーンプロンプトカラム追加）
+conversation_messages
+  - scene_prompt_ja: 日本語シーンプロンプト
+  - scene_prompt_en: 英語シーンプロンプト
+  - metadata.emotionTag: 感情タグ名
+```
+
+**AI生成出力例**:
+```json
+{
+  "messages": [
+    {
+      "speaker": "太郎",
+      "message": "驚いた！そんなことがあったんだ！",
+      "emotion": "surprised",
+      "emotionTag": "energetic",
+      "scene": "太郎が目を見開いて驚いた表情で立っている",
+      "scenePromptJa": "学校の廊下、昼下がり。太郎が驚いて目を見開き、両手を広げている。背景には教室のドアと窓から差し込む光。",
+      "scenePromptEn": "school hallway, afternoon, young boy with wide eyes, surprised expression, hands spread out, classroom door and window light in background, anime style, high quality, detailed, medium shot, eye level angle"
+    }
+  ]
+}
+```
+
+**データフロー**:
+1. **プロンプト生成時**: `buildConversationPrompt()` → データベースから最新の感情タグ、カメラアングル、ショット距離を取得 → AIプロンプトに含める
+2. **AI応答**: 会話内容と各メッセージの感情タグ、シーンプロンプト（日・英）を生成
+3. **データ保存**:
+   - メッセージテキスト = `[emotionTag] message`
+   - `scene_prompt_ja` カラム = 日本語プロンプト
+   - `scene_prompt_en` カラム = 英語プロンプト
+   - `metadata.emotionTag` = 感情タグ名
+4. **GUI表示**: ConversationViewer が専用カラムからシーンプロンプトを読み込んで表示（青枠=日本語、緑枠=英語）
+
+**影響範囲**:
+- ✅ 会話生成時に最新のマスターデータを常に使用
+- ✅ ElevenLabs音声生成で感情タグを活用
+- ✅ シーン画像生成で日本語・英語の両プロンプトを使い分け可能
+- ✅ カメラアングル・ショット距離でビジュアル表現を制御
+- ✅ 専用カラムに保存することでクエリ効率が向上
+
+**関連ドキュメント**: [conversation-generation-enhancements.md](/docs/conversation-generation-enhancements.md)
+
+---
+
+### 2025-11-16: Seedream4ノードにOutput画像選択機能を追加
+
+**目的**: Seedream4ノードでWorkflow Outputsテーブルから生成済み画像を選択できるようにし、既存の画像を動画生成の参照として再利用可能にする
+
+**変更内容**:
+- `/lib/workflow/formConfigGenerator.ts` のSeedream4ケースに `selectedOutputIds` フィールドを追加（Nanobanaと同じパターン）
+- `/components/workflow/Seedream4Node.tsx` にOutput画像用の接続ハンドル4つを追加（紫色、ID: `output-0` ～ `output-3`）
+- ノードの高さを `minHeight: 320` → `440` に調整（13個の接続ハンドルが表示されるように）
+- `/lib/workflow/executor.ts` のSeedream4ケースにOutput画像読み込み処理を追加（キャラクターシート、参照画像、Output画像の順で最大8枚まで）
+- `/lib/workflow/migration.ts` のマイグレーション処理に `seedream4` を追加（既存ノードに `selectedOutputIds: []` を自動追加）
+- `/lib/workflow/formConfigGenerator.ts` の `extractFormFieldsFromNodes()` で `outputSelector` のデフォルト値を配列に設定
+
+**技術的詳細**:
+- CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で一元管理
+- Nanobanaノードと同じパターンで実装し、コードの一貫性を確保
+- `UnifiedNodeSettings.tsx` の既存のデフォルト値ロジックにより、`outputSelector` が自動的に `[]` で初期化される（103-105行目）
+- **画像読み込み処理（executor.ts）**:
+  1. キャラクターシートID → `character_sheets` テーブル → GCP Storage (最大4枚)
+  2. 参照画像パス (`referenceImagePaths`) → GCP Storage (最大4枚)
+  3. Output画像ID (`selectedOutputIds`) → `workflow_outputs` テーブル → GCP Storage (最大4枚)
+  4. 前のノードから接続された画像を追加（`storagePath`）
+  5. 最大8枚までの制限を適用
+
+**接続ハンドル（左側）**:
+1. **プロンプト入力** (緑色) - ID: `prompt`
+2. **キャラクターシート1〜4** (青色) - ID: `character-0` ～ `character-3`
+3. **参照画像1〜4** (オレンジ色) - ID: `image-0` ～ `image-3`
+4. **Output画像1〜4** (紫色) - ID: `output-0` ～ `output-3`
+
+**影響範囲**:
+- `getNodeTypeConfig()` の定義により、**ワークフローノード設定と `/form` ページの両方に自動反映**
+- Seedream4ノードで過去に生成された画像を動画生成の参照として使用可能に
+- 既存のSeedream4ノードを開くと、マイグレーションにより自動的に `selectedOutputIds: []` が追加される
+
+---
+
+### 2025-11-16: 既存ノードの後方互換性を保つマイグレーション機能を実装
+
+**目的**: 既存のワークフローノード（Nanobana, Gemini）に新しく追加された `selectedOutputIds` フィールドが自動的に追加されるようにする
+
+**問題**:
+- `selectedOutputIds` フィールドは後から追加されたため、既存のNanobana/Geminiノードには含まれていない
+- そのため、Output画像選択機能が正しく動作しない（`node.data.config.selectedOutputIds` が `undefined`）
+
+**変更内容**:
+- `/lib/workflow/migration.ts` に共通のマイグレーション関数 `migrateNodeConfig()` を作成
+- `/app/api/workflows/execute-draft/route.ts` で実行前にマイグレーションを適用
+- `/app/api/workflows/execute/route.ts` で `/form` ページからの inputs を node.data.config にマージする処理を追加
+- `/components/workflow/WorkflowEditor.tsx` でワークフロード込み時にマイグレーションを適用
+- Nanobana/Geminiノードで `config.selectedOutputIds === undefined` の場合、`selectedOutputIds: []` を追加
+- デバッグログを追加して、マイグレーションの実行を確認可能に
+
+**技術的詳細**:
+- マイグレーション関数を `/lib/workflow/migration.ts` で一元管理
+- **API側（`execute-draft/route.ts`）で実行前に自動的にマイグレーションを適用** ← これが重要！
+- **`/form` ページからの実行時**: `execute/route.ts` で inputs の `selectedOutputIds`, `aspectRatio`, `model` などを `node.data.config` にマージ
+- WorkflowEditor では `loadWorkflow()` 内でノードを `setNodes()` する前に `migrateNodeConfig()` を呼び出す
+- URLパラメータからの読み込みと最新ワークフローの読み込み、両方に適用
+
+**影響範囲**:
+- 既存のワークフローを開いたときに、自動的に `selectedOutputIds: []` が追加される
+- ワークフローを保存すると、マイグレーション後の状態が保存される
+- Output画像選択機能が既存のノードでも正しく動作するようになる
+
+**デバッグログ**:
+- `/components/form/DynamicFormField.tsx` の `outputSelector` に選択/削除時のログを追加
+- `/components/workflow/UnifiedNodeSettings.tsx` に初期化・変更・保存時のログを追加
+- `/lib/workflow/executor.ts` のNanobana/Geminiケースに `node.data.config` と `selectedOutputIds` の詳細ログを追加
+
+---
+
+### 2025-11-16: Geminiノードに画像処理機能を追加（キャラクターシート・参照画像・Output画像対応）
+
+**目的**: Gemini AIノードでマルチモーダル機能を活用し、キャラクターシート・参照画像・Output画像を使った画像認識を可能にする
+
+**変更内容**:
+- `/lib/workflow/formConfigGenerator.ts` のGeminiケースに3つのフィールドを追加：
+  - `selectedCharacterSheetIds` (キャラクターシート、最大4つ)
+  - `referenceImages` (参照画像、最大4つ)
+  - `selectedOutputIds` (Output画像選択、最大4つ)
+- `/components/workflow/GeminiNode.tsx` に接続ハンドルを追加（プロンプト×1、キャラクターシート×4、参照画像×4）
+- ノードの `minHeight: 320` に設定し、全13個の接続ハンドル（プロンプト1 + キャラシート4 + 画像4 + Output画像4）が表示されるように調整
+- **`/lib/workflow/executor.ts` のGeminiケースに画像読み込み処理を追加**（326-453行目）
+
+**技術的詳細**:
+- **CLAUDE.mdの原則に従い、`getNodeTypeConfig()`で一元管理**
+- Nanobanaノードと同じパターンで実装し、コードの一貫性を確保
+- `UnifiedNodeSettings.tsx` の既存のデフォルト値ロジック（100-105行目）により、配列フィールドが自動的に `[]` で初期化される
+- **画像読み込み処理（executor.ts）**:
+  1. キャラクターシートIDから `character_sheets` テーブルを検索し、GCP Storageから画像を取得してbase64に変換
+  2. 参照画像パス (`referenceImagePaths`) からGCP Storageの画像を取得してbase64に変換
+  3. Output画像ID (`selectedOutputIds`) から `workflow_outputs` テーブルを検索し、GCP Storageから画像を取得してbase64に変換
+  4. 前のノードから接続された画像を追加（`extractImagesFromInput`）
+  5. 最大4枚までの制限を各段階で適用
+
+**接続ハンドル（左側）**:
+1. **プロンプト入力** (緑色) - ID: `prompt`
+2. **キャラクターシート1〜4** (青色) - ID: `character-0` 〜 `character-3`
+3. **参照画像1〜4** (オレンジ色) - ID: `image-0` 〜 `image-3`
+
+**影響範囲**:
+- `getNodeTypeConfig()` の定義により、**ワークフローノード設定と `/form` ページの両方に自動反映**
+- Geminiノードで画像認識が可能になり、キャラクターの表情分析、画像の説明生成などが実現可能に
+- `/form` ページでも自動的に3つのフィールドが表示される（一元管理の恩恵）
+- **Output画像選択で選んだ画像がbase64形式でGemini APIに正しく送信される**
 
 ### 2025-11-16: ワークフロー設定値を `/form` ページのデフォルト値として反映
 

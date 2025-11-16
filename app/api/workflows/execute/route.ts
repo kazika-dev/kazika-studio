@@ -305,6 +305,31 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Geminiノード: Output画像選択の処理
+        if (nodeType === 'gemini') {
+          const selectedOutputIdsFieldName = `gemini_selectedOutputIds_${nodeId}`;
+          if (inputs[selectedOutputIdsFieldName] !== undefined) {
+            const selectedOutputIds = inputs[selectedOutputIdsFieldName];
+            console.log(`✓ Setting selectedOutputIds for gemini node ${nodeId}:`, selectedOutputIds);
+
+            node.data.config = {
+              ...node.data.config,
+              selectedOutputIds: selectedOutputIds,
+            };
+          }
+
+          // モデル選択の処理
+          const modelFieldName = `gemini_model_${nodeId}`;
+          if (inputs[modelFieldName] !== undefined) {
+            console.log(`✓ Setting model for gemini node ${nodeId}:`, inputs[modelFieldName]);
+
+            node.data.config = {
+              ...node.data.config,
+              model: inputs[modelFieldName],
+            };
+          }
+        }
+
         // Nanobanaノード: キャラクターシートと参照画像の処理
         if (nodeType === 'nanobana') {
           const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
@@ -336,6 +361,29 @@ export async function POST(request: NextRequest) {
             node.data.config = {
               ...node.data.config,
               referenceImagePaths: referenceImages,
+            };
+          }
+
+          // Output画像選択の処理
+          const selectedOutputIdsFieldName = `nanobana_selectedOutputIds_${nodeId}`;
+          if (inputs[selectedOutputIdsFieldName] !== undefined) {
+            const selectedOutputIds = inputs[selectedOutputIdsFieldName];
+            console.log(`✓ Setting selectedOutputIds for nanobana node ${nodeId}:`, selectedOutputIds);
+
+            node.data.config = {
+              ...node.data.config,
+              selectedOutputIds: selectedOutputIds,
+            };
+          }
+
+          // アスペクト比の処理
+          const aspectRatioFieldName = `nanobana_aspectRatio_${nodeId}`;
+          if (inputs[aspectRatioFieldName] !== undefined) {
+            console.log(`✓ Setting aspectRatio for nanobana node ${nodeId}:`, inputs[aspectRatioFieldName]);
+
+            node.data.config = {
+              ...node.data.config,
+              aspectRatio: inputs[aspectRatioFieldName],
             };
           }
         }
