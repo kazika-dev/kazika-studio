@@ -30,7 +30,8 @@ import ErrorIcon from '@mui/icons-material/Error';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
 import EditIcon from '@mui/icons-material/Edit';
-import { executeWorkflow, ExecutionResult, topologicalSort } from '@/lib/workflow/executor';
+import { executeWorkflow } from '@/lib/workflow/executor';
+import { ExecutionResult, topologicalSort } from '@/lib/workflow/types';
 import FindInLogsToolbar from './FindInLogsToolbar';
 import { highlightText, countMatches } from '@/lib/utils/highlightText';
 
