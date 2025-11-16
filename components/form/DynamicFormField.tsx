@@ -727,26 +727,43 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
 
     const handleInsertTag = (tagName: string) => {
       if (!config.targetFieldName || !onFieldChange || !allValues) {
-        console.error('targetFieldName, onFieldChange, or allValues not provided');
+        console.error('targetFieldName, onFieldChange, or allValues not provided', {
+          targetFieldName: config.targetFieldName,
+          hasOnFieldChange: !!onFieldChange,
+          hasAllValues: !!allValues,
+        });
         return;
       }
 
       // targetFieldNameに基づいて実際のフィールド名を探す
-      // 例: targetFieldName='text' の場合、'elevenlabs_text_xxx' のようなフィールドを探す
+      // 例: targetFieldName='text' の場合、UnifiedNodeSettingsでは 'text'、formページでは 'elevenlabs_text_xxx'
       let actualFieldName = config.targetFieldName;
 
       // allValuesから対応するフィールド名を検索
       const fieldNames = Object.keys(allValues);
-      const matchingField = fieldNames.find(name => name.includes(config.targetFieldName!));
+      console.log('Available field names:', fieldNames);
+      console.log('Looking for field matching:', config.targetFieldName);
 
-      if (matchingField) {
-        actualFieldName = matchingField;
+      // まず完全一致を試す
+      if (fieldNames.includes(config.targetFieldName)) {
+        actualFieldName = config.targetFieldName;
+      } else {
+        // 次に部分一致を探す（formページ用）
+        const matchingField = fieldNames.find(name => name.includes(config.targetFieldName!));
+        if (matchingField) {
+          actualFieldName = matchingField;
+        }
       }
 
       console.log('Inserting tag:', tagName, 'into field:', actualFieldName);
+      console.log('Current text value:', allValues[actualFieldName]);
 
-      const currentText = allValues[actualFieldName] || '';
+      const currentText = String(allValues[actualFieldName] || '');
       const newText = currentText + `[${tagName}]`;
+
+      console.log('New text value:', newText);
+
+      // 状態を更新
       onFieldChange(actualFieldName, newText);
 
       setDialogOpen(false);

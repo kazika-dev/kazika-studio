@@ -103,6 +103,11 @@ function FormPageContent() {
         const initialValues: Record<string, any> = {};
         if (data.workflow.form_config?.fields) {
           data.workflow.form_config.fields.forEach((field: FormFieldConfig) => {
+            // tagsフィールドは状態を持たないのでスキップ
+            if (field.type === 'tags') {
+              return;
+            }
+
             if (field.type === 'images') {
               initialValues[field.name] = [];
             } else if (field.type === 'image') {

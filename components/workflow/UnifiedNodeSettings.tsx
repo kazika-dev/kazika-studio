@@ -97,12 +97,19 @@ export default function UnifiedNodeSettings({
           case 'characterSheets':
             defaultValue = [];
             break;
+          case 'tags':
+            // tagsフィールドは状態を持たないので、初期値を設定しない
+            defaultValue = undefined;
+            break;
           default:
             defaultValue = '';
         }
       }
 
-      initialValues[field.name] = defaultValue;
+      // tagsフィールドは状態を持たないので、initialValuesに追加しない
+      if (field.type !== 'tags') {
+        initialValues[field.name] = defaultValue;
+      }
     });
 
     setFormValues(initialValues);
