@@ -15,6 +15,95 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-16: 会話生成機能に感情タグ、カメラ情報、シーンプロンプトを追加
+
+**目的**: 会話生成時に感情タグ（ElevenLabs用）とカメラアングル・ショット距離を自動設定し、各メッセージに日本語・英語のシーンプロンプトを生成して画像生成を容易にする
+
+**変更内容**:
+- `/lib/db.ts` にカメラアングル・ショット距離・感情タグ取得関数を追加（`getAllCameraAngles`, `getAllShotDistances`, `getAllElevenLabsTags`, `getRandomCameraAngle`, `getRandomShotDistance`）
+- `/lib/conversation/prompt-builder.ts` の `buildConversationPrompt()` を**async化**し、データベースから最新の感情タグを自動取得してプロンプトに含める
+- `/lib/conversation/prompt-builder.ts` の `buildConversationPrompt()` にシーンプロンプト生成の指示を追加（日本語・英語の両方）
+- `/lib/conversation/prompt-builder.ts` の `buildScenePrompt()` を**async化**し、データベースから最新のカメラアングル・ショット距離を自動取得してプロンプトに含める
+- `/types/conversation.ts` の `GeneratedMessage` に `scenePromptJa`, `scenePromptEn` フィールドを追加
+- `/types/conversation.ts` の `ConversationMessage` に `scene_prompt_ja`, `scene_prompt_en` カラムを追加
+- `/app/api/conversations/generate/route.ts` でメッセージ保存時に `[emotionTag]` プレフィックスを自動追加（例: `[friendly] こんにちは！`）
+- `/app/api/conversations/generate/route.ts` でメッセージ保存時に `scene_prompt_ja`, `scene_prompt_en` をデータベースカラムに保存
+- `/app/api/conversations/generate/route.ts` でシーン生成時にカメラ情報を取得し、プロンプトと metadata に保存
+
+**技術的詳細**:
+- **感情タグ機能（データベース駆動）**:
+  - `buildConversationPrompt()` が呼び出されるたびに `kazikastudio.eleven_labs_tags` テーブルから**最新の感情タグ**を取得
+  - マスターテーブルに新しい感情タグを追加すると、次回の会話生成から**自動的に反映**される
+  - AIが取得した感情タグのリストから、会話の文脈に応じて各メッセージに適切な感情タグを自動選択
+  - メッセージテキストに `[タグ名]` 形式でプレフィックスとして追加され、ElevenLabs音声生成時に使用される
+  - メタデータにも `emotionTag` として保存され、後から参照可能
+
+- **シーンプロンプト機能（日本語・英語）**:
+  - AIが各メッセージごとに画像生成用のプロンプトを**日本語と英語の両方**で生成
+  - **日本語プロンプト（`scenePromptJa`）**: 100-150文字程度で、場所・時間帯・キャラクターの配置・表情・雰囲気を詳細に描写
+  - **英語プロンプト（`scenePromptEn`）**: Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含む
+  - `conversation_messages` テーブルの `scene_prompt_ja` と `scene_prompt_en` カラムに保存
+  - metadataではなく専用カラムに保存することで、検索・フィルタリングが容易に
+
+- **カメラ情報機能（データベース駆動）**:
+  - `buildScenePrompt()` が呼び出されるたびに `kazikastudio.m_camera_angles` と `kazikastudio.m_shot_distances` テーブルから**最新のカメラ情報**を取得
+  - マスターテーブルに新しいカメラアングルやショット距離を追加すると、次回のシーン生成から**自動的に反映**される
+  - **会話全体の最初のシーン**: AIが取得したカメラ情報のリストから、会話の内容に応じて適切なカメラアングルとショット距離を選択
+  - **メッセージグループごとのシーン**: ランダムなカメラアングルとショット距離を割り当てて、シーンにバリエーションを追加
+  - 選択されたカメラ情報は画像生成プロンプトに含まれ（例: "from low angle, medium close-up shot"）、metadata にも保存
+
+**データフロー**:
+1. ユーザーが会話生成をリクエスト（キャラクター、シチュエーション、メッセージ数）
+2. `buildConversationPrompt()` が `kazikastudio.eleven_labs_tags` から**最新の感情タグリスト**を取得
+3. プロンプトに感情タグリストとシーンプロンプト生成指示を含めてGemini AIに送信
+4. Gemini AIが各メッセージに `emotionTag`, `scenePromptJa`, `scenePromptEn` を付けて会話を生成
+5. メッセージ保存時に：
+   - `[emotionTag]` をテキストの先頭に追加
+   - `scenePromptJa` を `conversation_messages.scene_prompt_ja` に保存
+   - `scenePromptEn` を `conversation_messages.scene_prompt_en` に保存
+6. `buildScenePrompt()` が `kazikastudio.m_camera_angles` と `kazikastudio.m_shot_distances` から**最新のカメラ情報**を取得
+7. プロンプトにカメラ情報リストを含めてGemini AIに送信
+8. 最初のシーンはAIがカメラ情報リストから適切なものを選択、その他のシーンはランダムに割り当て
+9. シーンプロンプトにカメラ情報を含めて保存
+
+**影響範囲**:
+- 会話生成時に感情タグが自動的に設定され、ElevenLabs音声生成で感情表現が可能に
+- シーン生成時にカメラ情報が自動的に設定され、より映像的な画像生成プロンプトが作成される
+- **マスターテーブルの変更が即座に反映**: `/app/master` ページで感情タグやカメラ情報を追加・編集すると、次回の会話生成から自動的に利用可能になる
+- 既存の会話データには影響なし（後方互換性を維持）
+- `/docs/conversation-generation-enhancements.md` に詳細なドキュメントを追加
+
+**使用例**:
+```json
+// メッセージ生成例
+{
+  "speaker": "主人公",
+  "message": "実は最近、将来のことで悩んでいるんだ...",
+  "emotion": "sad",
+  "emotionTag": "serious",
+  "scene": "主人公は柵に寄りかかり、遠くを見つめながら話す",
+  "scenePromptJa": "夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。真剣な表情で将来について考えている。",
+  "scenePromptEn": "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, serious expression thinking about future, anime style, high quality, detailed, cinematic lighting"
+}
+
+// データベース保存
+{
+  "message_text": "[serious] 実は最近、将来のことで悩んでいるんだ...",
+  "scene_prompt_ja": "夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。真剣な表情で将来について考えている。",
+  "scene_prompt_en": "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, serious expression thinking about future, anime style, high quality, detailed, cinematic lighting"
+}
+
+// シーン生成例
+{
+  "sceneDescription": "夕暮れ時の学校の屋上。主人公は柵に寄りかかり...",
+  "imagePrompt": "rooftop scene at sunset, from low angle, medium close-up shot, anime style",
+  "cameraAngle": "ローアングル",
+  "shotDistance": "ミディアムクローズアップ"
+}
+```
+
+---
+
 ### 2025-11-16: Seedream4ノードにOutput画像選択機能を追加
 
 **目的**: Seedream4ノードでWorkflow Outputsテーブルから生成済み画像を選択できるようにし、既存の画像を動画生成の参照として再利用可能にする

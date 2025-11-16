@@ -19,8 +19,11 @@ export interface ConversationMessage {
   sequence_order: number;
   timestamp_ms: number | null;
   created_at: string;
+  scene_prompt_ja: string | null;
+  scene_prompt_en: string | null;
   metadata: {
     emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
+    emotionTag?: 'emotional' | 'calm' | 'energetic' | 'professional' | 'friendly' | 'serious';
     scene?: string;
     voice_preset?: string;
     audio_url?: string;
@@ -185,7 +188,10 @@ export interface GeneratedMessage {
   speaker: string;
   message: string;
   emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
+  emotionTag?: 'emotional' | 'calm' | 'energetic' | 'professional' | 'friendly' | 'serious';
   scene?: string;
+  scenePromptJa?: string;
+  scenePromptEn?: string;
 }
 
 export interface ConversationGenerationAIResponse {
