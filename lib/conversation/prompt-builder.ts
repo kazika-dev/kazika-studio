@@ -169,6 +169,9 @@ export function validateMessageSpeakers(
   const invalidSpeakers: string[] = [];
 
   for (const msg of messages) {
+    // Type guard: speaker must be defined
+    if (!msg.speaker) continue;
+
     if (!validCharacterNames.includes(msg.speaker)) {
       if (!invalidSpeakers.includes(msg.speaker)) {
         invalidSpeakers.push(msg.speaker);

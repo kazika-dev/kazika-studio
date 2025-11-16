@@ -196,7 +196,9 @@ export async function POST(
         // Create workflow steps for each board
         const workflowStepsToInsert = boards.map((board, idx) => {
           const message = messages[idx];
-          const characterVoiceId = message.character?.elevenlabs_voice_id;
+          // Type assertion: Supabase infers character as array, but it's actually a single object
+          const character = Array.isArray(message.character) ? message.character[0] : message.character;
+          const characterVoiceId = character?.elevenlabs_voice_id;
 
           // デバッグ: キャラクター情報を出力
           console.log(`[Board ${idx}] Character data:`, {

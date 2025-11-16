@@ -541,29 +541,9 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any, ste
   console.log('Number of nodes:', nodes.length);
   console.log('Workflow form_config:', JSON.stringify(workflow?.form_config, null, 2));
 
-  // Apply nodeOverrides from step.input_config
-  if (step?.input_config?.nodeOverrides) {
-    console.log('=== Applying nodeOverrides from step.input_config ===');
-    console.log('Node overrides:', JSON.stringify(step.input_config.nodeOverrides, null, 2));
-
-    Object.entries(step.input_config.nodeOverrides).forEach(([nodeId, overrides]: [string, any]) => {
-      const node = nodes.find(n => n.id === nodeId);
-      if (node) {
-        console.log(`Applying overrides to node ${nodeId}:`, overrides);
-        node.data.config = {
-          ...node.data.config,
-          ...overrides,
-        };
-        console.log(`Node ${nodeId} config after override:`, node.data.config);
-      } else {
-        console.log(`Node ${nodeId} not found in workflow`);
-      }
-    });
-  }
-
   if (!inputs || Object.keys(inputs).length === 0) {
-    console.log('No inputs to apply');
-    return;
+    console.log('No inputs to apply (besides nodeOverrides)');
+    // Even if no inputs, we still need to apply nodeOverrides at the end
   }
 
   // form_configからフィールドタイプのマップを作成
@@ -804,6 +784,26 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any, ste
     }
 
     console.log('Node config after:', JSON.stringify(node.data.config, null, 2));
+  }
+
+  // Apply nodeOverrides from step.input_config (LAST, so they are not overridden by other inputs)
+  if (step?.input_config?.nodeOverrides) {
+    console.log('=== Applying nodeOverrides from step.input_config (final) ===');
+    console.log('Node overrides:', JSON.stringify(step.input_config.nodeOverrides, null, 2));
+
+    Object.entries(step.input_config.nodeOverrides).forEach(([nodeId, overrides]: [string, any]) => {
+      const node = nodes.find(n => n.id === nodeId);
+      if (node) {
+        console.log(`Applying overrides to node ${nodeId}:`, overrides);
+        node.data.config = {
+          ...node.data.config,
+          ...overrides,
+        };
+        console.log(`Node ${nodeId} config after override:`, node.data.config);
+      } else {
+        console.warn(`Node ${nodeId} not found in workflow - nodeOverride will be ignored`);
+      }
+    });
   }
 }
 

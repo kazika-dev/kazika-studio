@@ -16,6 +16,42 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-16: nodeOverrides適用順序の修正（scene_prompt_en がNanobanaに正しく設定されるように）
+
+**目的**: スタジオのワークフローステップ実行時に、`input_config.nodeOverrides` の設定が他の入力処理で上書きされないようにする
+
+**問題**:
+- `/app/api/studios/steps/[id]/execute/route.ts` の `applyInputsToNodes()` で、`nodeOverrides` を関数の最初に適用していたため、その後の処理（`inputs.prompt`, `inputs.workflowInputs`）で上書きされる可能性があった
+- 特に Nanobana ノードの `prompt` が `scene_prompt_en` で設定されても、後続の処理で空になる問題があった
+
+**修正内容**:
+- `applyInputsToNodes()` で `nodeOverrides` の適用を**関数の最後**に移動（789-807行目）
+- これにより、`nodeOverrides` の値が最優先で適用され、他の処理で上書きされないことを保証
+
+**技術的詳細**:
+```typescript
+// Before: nodeOverrides を最初に適用 → 後続の処理で上書きされる可能性
+async function applyInputsToNodes(nodes, inputs, workflow, step) {
+  // 1. nodeOverrides を適用
+  // 2. inputs.prompt で上書き
+  // 3. inputs.workflowInputs で追加/上書き
+}
+
+// After: nodeOverrides を最後に適用 → 確実に反映される
+async function applyInputsToNodes(nodes, inputs, workflow, step) {
+  // 1. inputs.prompt を適用
+  // 2. inputs.workflowInputs を適用
+  // 3. nodeOverrides を適用（最優先）← ここで確定
+}
+```
+
+**影響範囲**:
+- 会話からスタジオを作成した場合、`scene_prompt_en` が Nanobana ノードに**確実に**設定される
+- その他の `nodeOverrides` の設定（`voiceId`, `aspectRatio`, `selectedCharacterSheetIds` など）も確実に反映される
+- `/docs/conversation-to-studio-workflow.md` に詳細を追記
+
+---
+
 ### 2025-11-16: 会話からスタジオ作成時のワークフロー設定自動化
 
 **目的**: 会話データからスタジオを作成する際、ワークフローノード（ElevenLabs、Nanobana）の設定を会話データから自動的に生成し、手作業を削減する

@@ -152,20 +152,30 @@ const workflowStepsToInsert = boards.map((board, idx) => {
 
 ### ワークフロー実行時の処理
 
-**ファイル**: `/app/api/workflows/execute/route.ts`
+**ファイル**: `/app/api/studios/steps/[id]/execute/route.ts`
 
 ```typescript
 // input_config.nodeOverrides を node.data.config にマージ
-if (workflowStep?.input_config?.nodeOverrides?.[node.id]) {
-  const overrides = workflowStep.input_config.nodeOverrides[node.id];
-  node.data.config = {
-    ...node.data.config,
-    ...overrides, // ← ここでマージされる
-  };
+// IMPORTANT: この処理は applyInputsToNodes() の最後に実行される
+// これにより、他の入力処理で上書きされることを防ぐ
+if (step?.input_config?.nodeOverrides) {
+  Object.entries(step.input_config.nodeOverrides).forEach(([nodeId, overrides]) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) {
+      node.data.config = {
+        ...node.data.config,
+        ...overrides, // ← ここでマージされる（最優先）
+      };
+    }
+  });
 }
 ```
 
-この処理により、スタジオ作成時に設定した `nodeOverrides` が、ワークフロー実行時に各ノードの設定として反映されます。
+**重要**: `nodeOverrides` は `applyInputsToNodes()` の**最後**に適用されます。これにより、以下の処理による上書きを防ぎます：
+- `inputs.prompt` による上書き
+- `inputs.workflowInputs` のプロンプトフィールドによる追加
+
+この処理により、スタジオ作成時に設定した `nodeOverrides` が、ワークフロー実行時に各ノードの設定として**確実に**反映されます。
 
 ## CLAUDE.mdの原則との整合性
 
