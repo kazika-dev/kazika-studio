@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     if (id) {
       const { data, error } = await supabase
         .from('workflow_outputs')
-        .select('id, workflow_id, step_id, node_id, output_type, output_url, output_data, metadata, created_at, updated_at')
+        .select('id, workflow_id, output_type, output_url, output_data, metadata, created_at, updated_at')
         .eq('id', parseInt(id))
         .single();
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // クエリ構築
     let query = supabase
       .from('workflow_outputs')
-      .select('id, workflow_id, step_id, node_id, output_type, output_url, output_data, metadata, created_at, updated_at')
+      .select('id, workflow_id, output_type, output_url, output_data, metadata, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(parseInt(limit));
 

@@ -40,6 +40,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - `33bbedf` - "Nanobanaノード設定にoutput画像選択フォームを追加"
 - `aaf7aa3` - "OutputSelectorでcontent_urlフィールドに対応"
 - `d79b997` - "workflow_outputsテーブルスキーマに合わせてAPI修正"
+- `8f638a3` - "workflow_outputs APIからstep_id/node_idを削除" (マイグレーション未適用のため)
 
 ### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
 
