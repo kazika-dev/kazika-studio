@@ -536,7 +536,7 @@ async function executeNode(
         requestBody = {
           prompt: nanobanaPrompt,
           aspectRatio: node.data.config?.aspectRatio || '1:1',
-          referenceImages: finalNanobanaImages.length > 0 ? finalNanobanaImages : undefined,
+          referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
         };
 
         const nanobanaResponse = await fetch(getApiUrl('/api/nanobana'), {

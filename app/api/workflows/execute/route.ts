@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
             if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
               try {
                 const characterSheets = await Promise.all(
-                  characterSheetIds.map((id: string) => getCharacterSheetById(id))
+                  characterSheetIds.map((id: string) => getCharacterSheetById(parseInt(id)))
                 );
 
                 // nullでないものだけフィルタ
