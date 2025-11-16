@@ -7,6 +7,8 @@ import ImageIcon from '@mui/icons-material/Image';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import EditIcon from '@mui/icons-material/Edit';
+import ImageEditorModal from '@/components/outputs/ImageEditorModal';
 
 interface NanobanaNodeData {
   label: string;
@@ -27,6 +29,7 @@ interface NanobanaNodeData {
 
 function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   const handleExecute = async () => {
     if (!data.config.prompt) {
@@ -114,6 +117,27 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
       default:
         return null;
     }
+  };
+
+  const handleEditImage = () => {
+    setIsEditorOpen(true);
+  };
+
+  const handleSaveEditedImage = (imageData: { mimeType: string; data: string }) => {
+    // ノードの状態を更新
+    const updateEvent = new CustomEvent('update-node', {
+      detail: {
+        id,
+        updates: {
+          config: {
+            ...data.config,
+            imageData,
+          },
+        },
+      },
+    });
+    window.dispatchEvent(updateEvent);
+    setIsEditorOpen(false);
   };
 
   return (
@@ -322,10 +346,14 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
             borderRadius: 1,
             overflow: 'hidden',
             maxHeight: 150,
+            position: 'relative',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
             bgcolor: 'action.hover',
+            '&:hover .edit-button': {
+              opacity: 1,
+            },
           }}
         >
           <img
@@ -337,6 +365,25 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
               objectFit: 'contain',
             }}
           />
+          <IconButton
+            className="edit-button"
+            onClick={handleEditImage}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              bgcolor: 'rgba(0, 0, 0, 0.6)',
+              color: 'white',
+              opacity: 0,
+              transition: 'opacity 0.2s',
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.8)',
+              },
+            }}
+            size="small"
+          >
+            <EditIcon fontSize="small" />
+          </IconButton>
         </Box>
       )}
 
@@ -351,6 +398,16 @@ function NanobanaNode({ data, selected, id }: NodeProps<NanobanaNodeData>) {
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
       />
+
+      {/* 画像編集モーダル */}
+      {data.config.imageData && (
+        <ImageEditorModal
+          open={isEditorOpen}
+          imageUrl={`data:${data.config.imageData.mimeType};base64,${data.config.imageData.data}`}
+          onClose={() => setIsEditorOpen(false)}
+          onSave={handleSaveEditedImage}
+        />
+      )}
     </Paper>
   );
 }

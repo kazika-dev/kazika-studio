@@ -1,5 +1,6 @@
 import { Node } from 'reactflow';
 import { FormFieldConfig } from '@/components/form/DynamicFormField';
+import { ELEVENLABS_PRESET_VOICES, ELEVENLABS_MODELS_FOR_FORM } from '@/lib/elevenlabs/constants';
 
 /**
  * ノードタイプごとの設定フィールド定義
@@ -416,20 +417,29 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
           label: `${nodeName} 音声ID`,
           required: false,
           helperText: 'ElevenLabsの音声を選択（プリセット音声）',
-          options: [
-            { label: 'George (英語)', value: 'JBFqnCBsd6RMkjVDRZzb' },
-            { label: 'Rachel (英語)', value: '21m00Tcm4TlvDq8ikWAM' },
-            { label: 'Domi (英語)', value: 'AZnzlk1XvdvUeBnXmlld' },
-            { label: 'Bella (英語)', value: 'EXAVITQu4vr4xnSDxMaL' },
-            { label: 'Antoni (英語)', value: 'ErXwobaYiN019PkySvjV' },
-            { label: 'Elli (英語)', value: 'MF3mGyEYCl7XYWbV9V6O' },
-            { label: 'Josh (英語)', value: 'TxGEqnHWrfWFTfGW9XjX' },
-            { label: 'Arnold (英語)', value: 'VR6AewLTigWG4xSOukaG' },
-            { label: 'Adam (英語)', value: 'pNInz6obpgDQGcFmaJgB' },
-            { label: 'Sam (英語)', value: 'yoZ06aMxZJJ28mfd3POQ' },
-          ],
+          options: ELEVENLABS_PRESET_VOICES.map(voice => ({
+            label: voice.label,
+            value: voice.value,
+          })),
         });
         addedFieldNames.add(voiceIdFieldName);
+      }
+
+      // モデルID選択フィールド
+      const modelIdFieldName = `elevenlabs_modelId_${node.id}`;
+      if (!addedFieldNames.has(modelIdFieldName)) {
+        fields.push({
+          type: 'select',
+          name: modelIdFieldName,
+          label: `${nodeName} モデル`,
+          required: false,
+          helperText: 'ElevenLabsの音声生成モデルを選択',
+          options: ELEVENLABS_MODELS_FOR_FORM.map(model => ({
+            label: model.label,
+            value: model.value,
+          })),
+        });
+        addedFieldNames.add(modelIdFieldName);
       }
     }
   });

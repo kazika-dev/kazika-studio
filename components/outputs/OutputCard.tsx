@@ -3,6 +3,7 @@
 import { WorkflowOutput } from '@/types/workflow-output';
 import { useState } from 'react';
 import ImageModal from './ImageModal';
+import { useRouter } from 'next/navigation';
 
 interface OutputCardProps {
   output: WorkflowOutput;
@@ -11,6 +12,7 @@ interface OutputCardProps {
 }
 
 export default function OutputCard({ output, onDelete, onFavoriteToggle }: OutputCardProps) {
+  const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -61,6 +63,10 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
     } finally {
       setIsTogglingFavorite(false);
     }
+  };
+
+  const handleEdit = () => {
+    router.push(`/outputs/edit/${output.id}`);
   };
 
   const formatDate = (dateString: string) => {
@@ -228,6 +234,24 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
             {output.output_type}
           </span>
           <div className="flex items-center gap-2">
+            {/* Edit Button (only for images) */}
+            {output.output_type === 'image' && (
+              <button
+                onClick={handleEdit}
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                title="編集"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
+
             {/* Favorite Button */}
             <button
               onClick={handleToggleFavorite}
