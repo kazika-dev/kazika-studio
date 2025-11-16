@@ -620,7 +620,20 @@ async function executeNode(
         }
 
         if (!nanobanaResponse.ok) {
-          const error: any = new Error(nanobanaData.error || 'Nanobana API call failed');
+          // エラーメッセージを詳細に構築
+          let errorMessage = nanobanaData.error || 'Nanobana API call failed';
+
+          // APIから返された詳細メッセージも含める
+          if (nanobanaData.message) {
+            errorMessage = `${errorMessage}: ${nanobanaData.message}`;
+          }
+
+          // finishReasonがある場合も含める
+          if (nanobanaData.finishReason) {
+            errorMessage = `${errorMessage} (Reason: ${nanobanaData.finishReason})`;
+          }
+
+          const error: any = new Error(errorMessage);
           error.apiErrorDetails = nanobanaData; // API全体のエラーレスポンスを保存
           throw error;
         }
