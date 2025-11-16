@@ -26,6 +26,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 **変更内容**:
 - `/lib/workflow/migration.ts` に共通のマイグレーション関数 `migrateNodeConfig()` を作成
 - `/app/api/workflows/execute-draft/route.ts` で実行前にマイグレーションを適用
+- `/app/api/workflows/execute/route.ts` で `/form` ページからの inputs を node.data.config にマージする処理を追加
 - `/components/workflow/WorkflowEditor.tsx` でワークフロード込み時にマイグレーションを適用
 - Nanobana/Geminiノードで `config.selectedOutputIds === undefined` の場合、`selectedOutputIds: []` を追加
 - デバッグログを追加して、マイグレーションの実行を確認可能に
@@ -33,6 +34,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 **技術的詳細**:
 - マイグレーション関数を `/lib/workflow/migration.ts` で一元管理
 - **API側（`execute-draft/route.ts`）で実行前に自動的にマイグレーションを適用** ← これが重要！
+- **`/form` ページからの実行時**: `execute/route.ts` で inputs の `selectedOutputIds`, `aspectRatio`, `model` などを `node.data.config` にマージ
 - WorkflowEditor では `loadWorkflow()` 内でノードを `setNodes()` する前に `migrateNodeConfig()` を呼び出す
 - URLパラメータからの読み込みと最新ワークフローの読み込み、両方に適用
 
