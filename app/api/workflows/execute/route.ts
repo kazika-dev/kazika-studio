@@ -340,6 +340,51 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Nanobanaノード: キャラクターシートの処理
+        if (nodeType === 'nanobana') {
+          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
+          console.log(`Processing nanobana node ${nodeId} characterSheets:`, {
+            fieldName: characterSheetsFieldName,
+            hasField: inputs[characterSheetsFieldName] !== undefined,
+            currentCharacterSheets: node.data.config?.characterSheets,
+          });
+
+          if (inputs[characterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[characterSheetsFieldName];
+            console.log(`✓ Setting nanobana node ${nodeId} characterSheets with IDs:`, characterSheetIds);
+
+            // キャラクターシート情報をDBから取得
+            if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
+              try {
+                const characterSheets = await Promise.all(
+                  characterSheetIds.map((id: string) => getCharacterSheetById(id))
+                );
+
+                // nullでないものだけフィルタ
+                const validCharacterSheets = characterSheets.filter((cs) => cs !== null);
+
+                if (validCharacterSheets.length > 0) {
+                  node.data.config = {
+                    ...node.data.config,
+                    characterSheets: validCharacterSheets,
+                  };
+                  console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets:`,
+                    validCharacterSheets.map((cs) => cs.name)
+                  );
+                } else {
+                  console.error(`✗ No valid character sheets found for IDs:`, characterSheetIds);
+                }
+              } catch (error) {
+                console.error(`✗ Error loading character sheets:`, error);
+              }
+            } else {
+              console.log(`✗ characterSheetIds is not a valid array:`, characterSheetIds);
+            }
+          } else {
+            console.log(`✗ No matching characterSheets field found for nanobana node ${nodeId}`);
+          }
+        }
+
         // ElevenLabsノード: elevenlabs_text_{nodeId} と elevenlabs_voiceId_{nodeId} フィールドから値を取得
         if (nodeType === 'elevenlabs') {
           const textFieldName = `elevenlabs_text_${nodeId}`;
