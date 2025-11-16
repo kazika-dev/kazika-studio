@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeWorkflow } from '@/lib/workflow/executor';
+import { migrateNodeConfig } from '@/lib/workflow/migration';
 import { Node } from 'reactflow';
 
 // Next.jsのルートハンドラの設定（ワークフロー実行は時間がかかる可能性がある）
@@ -12,7 +13,7 @@ export const maxDuration = 300; // 5分（秒単位）- Vercel hobby plan limit
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { nodes, edges } = body;
+    let { nodes, edges } = body;
 
     if (!nodes || !Array.isArray(nodes)) {
       return NextResponse.json(
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
       nodeCount: nodes.length,
       edgeCount: edges.length,
     });
+
+    // マイグレーション処理を適用（後方互換性のため）
+    nodes = migrateNodeConfig(nodes);
 
     // ワークフローを実行
     const result = await executeWorkflow(nodes, edges);

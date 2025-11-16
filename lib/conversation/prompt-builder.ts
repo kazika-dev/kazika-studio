@@ -3,15 +3,19 @@ import type {
   ConversationGenerationAIResponse,
   GeneratedMessage
 } from '@/types/conversation';
+import { getAllElevenLabsTags, getAllCameraAngles, getAllShotDistances } from '@/lib/db';
 
 /**
  * Build a conversation generation prompt for the AI model
+ * Fetches the latest emotion tags from database
  */
-export function buildConversationPrompt(input: ConversationPromptInput): string {
+export async function buildConversationPrompt(input: ConversationPromptInput): Promise<string> {
+  // Fetch latest emotion tags from database
+  const emotionTags = await getAllElevenLabsTags();
   const charactersSection = input.characters
     .map(
       (char, idx) => `
-### キャラクター${idx + 1}: ${char.name}
+### キャラクター${idx + 1}: ${char.name} (ID: ${char.id})
 - 説明: ${char.description}
 - 性格: ${char.personality}
 - 話し方: ${char.speakingStyle}
@@ -35,6 +39,16 @@ ${input.previousMessages.map((m) => `${m.speaker}: ${m.message}`).join('\n')}
     humorous: 'ユーモラスで面白い'
   }[input.tone || 'casual'];
 
+  // Build emotion tags section from database
+  const emotionTagsSection = emotionTags && emotionTags.length > 0
+    ? emotionTags.map(tag => `  - ${tag.name}: ${tag.description || tag.description_ja || ''}`).join('\n')
+    : `  - emotional: 感情を込めた音声（感動的なシーンや重要な告白など）
+  - calm: 落ち着いた優しい音声（穏やかな会話や慰めのシーンなど）
+  - energetic: 元気で活気のある音声（楽しい会話や興奮しているシーンなど）
+  - professional: ビジネス的で正式な音声（真面目な会話や報告など）
+  - friendly: 親しみやすい音声（カジュアルな友人との会話など）
+  - serious: 真剣で権威のある音声（重要な決断や厳粛なシーンなど）`;
+
   return `
 あなたはキャラクター間の自然な会話を生成するAIです。
 以下の情報に基づいて、キャラクターらしい会話を生成してください。
@@ -55,10 +69,13 @@ ${previousMessagesSection}
 {
   "messages": [
     {
-      "speaker": "キャラクター名",
+      "speakerId": キャラクターID（数値、上記のキャラクター情報のIDを使用）,
       "message": "セリフ内容",
       "emotion": "happy|sad|angry|neutral|surprised|excited|confused",
-      "scene": "このメッセージが発せられた具体的な場面の描写（キャラクターの表情、動作、周囲の状況など）"
+      "emotionTag": "感情を表すタグ（下記の利用可能な感情タグから1つ選択）",
+      "scene": "このメッセージが発せられた具体的な場面の描写（キャラクターの表情、動作、周囲の状況など）",
+      "scenePromptJa": "シーンを画像生成するための日本語プロンプト（100-150文字程度、視覚的な要素を詳細に描写）",
+      "scenePromptEn": "シーンを画像生成するための英語プロンプト（Stable Diffusion/DALL-E形式、high quality, detailed, anime styleなどの品質タグを含む）"
     }
   ]
 }
@@ -66,14 +83,26 @@ ${previousMessagesSection}
 
 ## 重要な注意事項
 - 各キャラクターの性格と話し方の特徴を必ず反映してください
-- speakerフィールドには必ずキャラクター名のいずれかを使用してください
+- **【必須】speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
+- **【オプション】speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
+  - speakerIdが正しく設定されていれば、speakerフィールドは省略可能です
 - 自然な会話の流れを作ってください
 - 感情(emotion)は会話の文脈に合わせて適切に設定してください
+- **emotionTag（感情タグ）は、メッセージの音声化に使用されます。以下の利用可能な感情タグから適切なものを選んでください：**
+${emotionTagsSection}
 - **scene（場面）フィールドには、そのメッセージが発せられた時の具体的な場面を描写してください**
   - キャラクターの表情や仕草（笑顔、驚いた顔、俯く、手を振る、など）
   - 体の動き（近づく、振り向く、立ち上がる、など）
   - 周囲の状況や雰囲気（静かな図書室、夕日が差し込む教室、など）
   - 視覚的にイメージできる具体的な描写を心がけてください
+- **scenePromptJa（日本語シーンプロンプト）には、このメッセージのシーンを画像生成するための日本語プロンプトを記述してください**
+  - 100-150文字程度で、場所、時間帯、キャラクターの配置、表情、周囲の雰囲気などを含める
+  - 視覚的な要素を詳細に描写する
+  - 例: 「夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。」
+- **scenePromptEn（英語シーンプロンプト）には、画像生成AIに渡す英語プロンプトを記述してください**
+  - Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含める
+  - シーンの視覚的な要素を英語で具体的に記述
+  - 例: "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, anime style, high quality, detailed, cinematic lighting"
 - メッセージ数は正確に${input.messageCount}個生成してください
 
 自然で魅力的な会話を生成してください。
@@ -112,8 +141,10 @@ export async function parseAIResponse(
 
     // Validate each message
     for (const msg of parsed.messages) {
-      if (!msg.speaker || typeof msg.speaker !== 'string') {
-        throw new Error('Invalid message: missing or invalid speaker');
+      // Either speaker or speakerId must be present
+      if ((!msg.speaker || typeof msg.speaker !== 'string') &&
+          (msg.speakerId === undefined || msg.speakerId === null)) {
+        throw new Error('Invalid message: missing or invalid speaker/speakerId');
       }
       if (!msg.message || typeof msg.message !== 'string') {
         throw new Error('Invalid message: missing or invalid message text');
@@ -138,6 +169,9 @@ export function validateMessageSpeakers(
   const invalidSpeakers: string[] = [];
 
   for (const msg of messages) {
+    // Type guard: speaker must be defined
+    if (!msg.speaker) continue;
+
     if (!validCharacterNames.includes(msg.speaker)) {
       if (!invalidSpeakers.includes(msg.speaker)) {
         invalidSpeakers.push(msg.speaker);
@@ -153,12 +187,17 @@ export function validateMessageSpeakers(
 
 /**
  * Build a scene image generation prompt based on the conversation
+ * Fetches the latest camera angles and shot distances from database
  */
-export function buildScenePrompt(
+export async function buildScenePrompt(
   situation: string,
   characters: Array<{ name: string; description: string }>,
   messages: GeneratedMessage[]
-): string {
+): Promise<string> {
+  // Fetch latest camera angles and shot distances from database
+  const cameraAngles = await getAllCameraAngles();
+  const shotDistances = await getAllShotDistances();
+
   const charactersSection = characters
     .map((char) => `- ${char.name}: ${char.description}`)
     .join('\n');
@@ -167,6 +206,14 @@ export function buildScenePrompt(
     .slice(0, 5) // Take first 5 messages for context
     .map((m) => `${m.speaker}: ${m.message}`)
     .join('\n');
+
+  const cameraAnglesSection = cameraAngles && cameraAngles.length > 0
+    ? `\n## 利用可能なカメラアングル\n${cameraAngles.map(a => `- ${a.name}: ${a.description}`).join('\n')}`
+    : '';
+
+  const shotDistancesSection = shotDistances && shotDistances.length > 0
+    ? `\n## 利用可能なショット距離\n${shotDistances.map(s => `- ${s.name}: ${s.description}`).join('\n')}`
+    : '';
 
   return `
 あなたは会話シーンのビジュアル描写とイラスト生成プロンプトを作成するAIです。
@@ -180,6 +227,8 @@ ${charactersSection}
 
 ## 会話の始まり
 ${conversationSummary}
+${cameraAnglesSection}
+${shotDistancesSection}
 
 ## 出力形式
 以下のJSON形式で出力してください：
@@ -187,13 +236,21 @@ ${conversationSummary}
 \`\`\`json
 {
   "sceneDescription": "シーンの詳細な視覚的描写（200文字程度）",
-  "imagePrompt": "イラスト生成用の英語プロンプト（Stable Diffusion/DALL-E形式）"
+  "imagePrompt": "イラスト生成用の英語プロンプト（Stable Diffusion/DALL-E形式）",
+  "cameraAngle": "選択したカメラアングル名（上記リストから1つ選択）",
+  "shotDistance": "選択したショット距離名（上記リストから1つ選択）"
 }
 \`\`\`
 
 ## 要件
 - sceneDescription: 日本語で、場所、時間帯、雰囲気、キャラクターの位置関係などを含む詳細な描写
 - imagePrompt: 英語で、high quality, detailed, anime style などの品質タグを含む具体的なプロンプト
+  - **【必須】選択したカメラアングルとショット距離をプロンプトの先頭に必ず含めてください**
+  - フォーマット: "from [選択したカメラアングル], [選択したショット距離], [シーンの内容]"
+  - 例: "from low angle, medium close-up shot, rooftop scene at sunset, male student leaning on fence"
+  - カメラアングルとショット距離を省略しないでください
+- cameraAngle: 会話の内容や雰囲気に最も適したカメラアングルを上記リストから1つ選択してください（必須）
+- shotDistance: シーンの雰囲気や強調したい要素に応じて適切なショット距離を上記リストから1つ選択してください（必須）
 - キャラクターの外見や特徴を反映させてください
 - 会話の雰囲気に合った視覚的な描写を心がけてください
 `.trim();
@@ -204,7 +261,12 @@ ${conversationSummary}
  */
 export async function parseScenePromptResponse(
   aiResponse: string
-): Promise<{ sceneDescription: string; imagePrompt: string }> {
+): Promise<{
+  sceneDescription: string;
+  imagePrompt: string;
+  cameraAngle?: string;
+  shotDistance?: string;
+}> {
   // Try to extract JSON block from markdown code fence
   const jsonMatch = aiResponse.match(/```json\s*\n([\s\S]*?)\n```/);
 
@@ -234,7 +296,9 @@ export async function parseScenePromptResponse(
 
     return {
       sceneDescription: parsed.sceneDescription,
-      imagePrompt: parsed.imagePrompt
+      imagePrompt: parsed.imagePrompt,
+      cameraAngle: parsed.cameraAngle,
+      shotDistance: parsed.shotDistance
     };
   } catch (error) {
     console.error('Failed to parse scene prompt response:', error);

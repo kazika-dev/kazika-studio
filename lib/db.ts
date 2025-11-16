@@ -625,6 +625,18 @@ export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
   return result.rows;
 }
 
+/**
+ * IDでworkflow outputを1つ取得
+ */
+export async function getWorkflowOutputById(id: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.workflow_outputs
+     WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 // =====================================================
 // キャラクターシート関連の関数
 // =====================================================
@@ -951,6 +963,54 @@ export async function deleteElevenLabsTag(id: number) {
     [id]
   );
   return result.rows.length > 0;
+}
+
+// =====================================================
+// Camera Angles / Shot Distances関連の関数
+// =====================================================
+
+/**
+ * 全てのカメラアングルを取得
+ */
+export async function getAllCameraAngles() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_angles ORDER BY id ASC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * 全てのショット距離を取得
+ */
+export async function getAllShotDistances() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_shot_distances ORDER BY id ASC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * ランダムにカメラアングルを1つ取得
+ */
+export async function getRandomCameraAngle() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_camera_angles ORDER BY RANDOM() LIMIT 1',
+    []
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * ランダムにショット距離を1つ取得
+ */
+export async function getRandomShotDistance() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_shot_distances ORDER BY RANDOM() LIMIT 1',
+    []
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
 }
 
 // =====================================================

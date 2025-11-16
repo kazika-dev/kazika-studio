@@ -19,12 +19,15 @@ import {
   MenuItem,
   Slider,
   Switch,
+  Stack,
+  Chip,
+  Checkbox,
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags' | 'outputSelector';
   name: string;
   label: string;
   placeholder?: string;
@@ -37,17 +40,23 @@ export interface FormFieldConfig {
   min?: number;
   max?: number;
   step?: number;
+  targetFieldName?: string; // タグ挿入先のフィールド名
+  defaultValue?: any; // デフォルト値（ワークフローノードの設定値）
 }
 
 interface DynamicFormFieldProps {
   config: FormFieldConfig;
   value: any;
   onChange: (value: any) => void;
+  allValues?: Record<string, any>; // 全フィールドの値（タグ挿入用）
+  onFieldChange?: (fieldName: string, value: any) => void; // 他フィールド更新用
 }
 
-export default function DynamicFormField({ config, value, onChange }: DynamicFormFieldProps) {
+export default function DynamicFormField({ config, value, onChange, allValues, onFieldChange }: DynamicFormFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  console.log('[DynamicFormField] Rendering:', config.type, config.name, 'value:', value);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -670,6 +679,514 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
             </Box>
           }
         />
+      </Box>
+    );
+  }
+
+  // Output画像選択
+  if (config.type === 'outputSelector') {
+    const [outputs, setOutputs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [page, setPage] = useState(0);
+    const itemsPerPage = 5;
+    const maxSelections = config.maxSelections || 4; // デフォルト4枚まで
+
+    useEffect(() => {
+      if (dialogOpen) {
+        loadOutputs();
+      }
+    }, [dialogOpen]);
+
+    const loadOutputs = async () => {
+      try {
+        setLoading(true);
+        console.log('[OutputSelector] Loading outputs from /api/outputs');
+        const response = await fetch('/api/outputs');
+        const data = await response.json();
+        console.log('[OutputSelector] Response:', data);
+
+        if (data.success) {
+          // 画像タイプのoutputのみをフィルタリング
+          // APIは content_url を返す（実際のテーブルスキーマに合わせて修正済み）
+          const imageOutputs = data.outputs.filter((output: any) =>
+            output.output_type === 'image' && output.content_url
+          );
+          console.log('[OutputSelector] Filtered image outputs:', imageOutputs.length, imageOutputs);
+          setOutputs(imageOutputs);
+        } else {
+          console.error('[OutputSelector] Failed to load outputs:', data.error);
+        }
+      } catch (error) {
+        console.error('[OutputSelector] Failed to load outputs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const getImageUrl = (output: any) => {
+      // 実際のテーブルスキーマに合わせて content_url をチェック
+      if (output.content_url) {
+        return output.content_url.startsWith('http')
+          ? output.content_url
+          : `/api/storage/${output.content_url}`;
+      }
+      return '';
+    };
+
+    // valueを配列として扱う（複数選択対応）
+    const selectedIds: number[] = Array.isArray(value) ? value : (value ? [value] : []);
+    const selectedOutputs = outputs.filter(o => selectedIds.includes(o.id));
+    const totalPages = Math.ceil(outputs.length / itemsPerPage);
+    const paginatedOutputs = outputs.slice(page * itemsPerPage, (page + 1) * itemsPerPage);
+
+    const handleToggle = (outputId: number) => {
+      const currentSelected = Array.isArray(value) ? [...value] : (value ? [value] : []);
+      const index = currentSelected.indexOf(outputId);
+
+      if (index > -1) {
+        // 既に選択されている場合は削除
+        currentSelected.splice(index, 1);
+        console.log('[OutputSelector] Removed outputId:', outputId, 'New selection:', currentSelected);
+        onChange(currentSelected);
+      } else {
+        // 選択されていない場合は追加（最大数チェック）
+        if (currentSelected.length < maxSelections) {
+          const newSelection = [...currentSelected, outputId];
+          console.log('[OutputSelector] Added outputId:', outputId, 'New selection:', newSelection);
+          onChange(newSelection);
+        } else {
+          console.log('[OutputSelector] Max selections reached:', maxSelections);
+        }
+      }
+    };
+
+    const handleRemove = (outputId: number) => {
+      const currentSelected = Array.isArray(value) ? [...value] : (value ? [value] : []);
+      const filtered = currentSelected.filter(id => id !== outputId);
+      onChange(filtered);
+    };
+
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          {config.label}
+        </Typography>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            {config.helperText}
+          </Typography>
+        )}
+
+        {/* 選択された画像のプレビュー（複数） */}
+        {selectedOutputs.length > 0 && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 1, mb: 1 }}>
+            {selectedOutputs.map((output) => (
+              <Paper key={output.id} variant="outlined" sx={{ p: 0.5, position: 'relative' }}>
+                <IconButton
+                  size="small"
+                  onClick={() => handleRemove(output.id)}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'background.paper',
+                    boxShadow: 1,
+                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                    width: 20,
+                    height: 20,
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+                <Box
+                  component="img"
+                  src={getImageUrl(output)}
+                  alt={`Selected output ${output.id}`}
+                  sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 1 }}
+                />
+                <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 0.5, fontSize: '0.65rem' }}>
+                  ID: {output.id}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+        )}
+
+        {/* 選択ボタン */}
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={() => setDialogOpen(true)}
+          disabled={selectedIds.length >= maxSelections}
+          sx={{
+            py: 1.5,
+            textTransform: 'none',
+            fontWeight: 500,
+          }}
+        >
+          {selectedOutputs.length > 0
+            ? `画像を変更 (${selectedIds.length}/${maxSelections})`
+            : `画像を選択 (最大${maxSelections}枚)`}
+        </Button>
+
+        {/* 選択ダイアログ */}
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            display: dialogOpen ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1400,
+          }}
+          onClick={() => setDialogOpen(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 700,
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ダイアログヘッダー */}
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>
+                    Output画像を選択
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {selectedIds.length}/{maxSelections}枚選択中
+                  </Typography>
+                </Box>
+                <IconButton size="small" onClick={() => setDialogOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* 画像リスト */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : outputs.length === 0 ? (
+                <Alert severity="info">生成された画像がありません</Alert>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
+                  {paginatedOutputs.map((output) => {
+                    const imageUrl = getImageUrl(output);
+                    const isSelected = selectedIds.includes(output.id);
+                    const isMaxReached = selectedIds.length >= maxSelections && !isSelected;
+
+                    return (
+                      <Card
+                        key={output.id}
+                        variant="outlined"
+                        sx={{
+                          cursor: isMaxReached ? 'not-allowed' : 'pointer',
+                          borderColor: isSelected ? 'primary.main' : 'divider',
+                          borderWidth: isSelected ? 2 : 1,
+                          transition: 'all 0.2s',
+                          opacity: isMaxReached ? 0.5 : 1,
+                          '&:hover': {
+                            borderColor: isMaxReached ? 'divider' : 'primary.main',
+                            boxShadow: isMaxReached ? 0 : 2,
+                          },
+                        }}
+                        onClick={() => !isMaxReached && handleToggle(output.id)}
+                      >
+                        {imageUrl && (
+                          <CardMedia
+                            component="img"
+                            height="150"
+                            image={imageUrl}
+                            alt={`Output ${output.id}`}
+                            sx={{ objectFit: 'cover' }}
+                          />
+                        )}
+                        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Checkbox
+                              checked={isSelected}
+                              disabled={isMaxReached}
+                              size="small"
+                              sx={{ p: 0 }}
+                            />
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="caption" color="text.secondary" noWrap>
+                                ID: {output.id}
+                              </Typography>
+                              {output.created_at && (
+                                <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                                  {new Date(output.created_at).toLocaleDateString()}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+
+            {/* ページング */}
+            {totalPages > 1 && (
+              <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Button
+                  size="small"
+                  disabled={page === 0}
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  前へ
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  {page + 1} / {totalPages} ページ ({outputs.length}件)
+                </Typography>
+                <Button
+                  size="small"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  次へ
+                </Button>
+              </Box>
+            )}
+          </Paper>
+        </Box>
+      </Box>
+    );
+  }
+
+  // タグ選択（ElevenLabsタグ）
+  if (config.type === 'tags') {
+    const [tags, setTags] = useState<any[]>([]);
+    const [filteredTags, setFilteredTags] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [dialogOpen, setDialogOpen] = useState(false);
+
+    useEffect(() => {
+      const loadTags = async () => {
+        try {
+          setLoading(true);
+          const response = await fetch('/api/eleven-labs-tags');
+          const data = await response.json();
+
+          if (data.success) {
+            setTags(data.tags);
+            setFilteredTags(data.tags);
+          } else {
+            console.error('Failed to load tags:', data.error);
+          }
+        } catch (error) {
+          console.error('Failed to load tags:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadTags();
+    }, []);
+
+    useEffect(() => {
+      if (searchQuery.trim() === '') {
+        setFilteredTags(tags);
+      } else {
+        const query = searchQuery.toLowerCase();
+        const filtered = tags.filter((tag) =>
+          tag.name.toLowerCase().includes(query) ||
+          tag.name_ja?.toLowerCase().includes(query) ||
+          tag.description?.toLowerCase().includes(query) ||
+          tag.description_ja?.toLowerCase().includes(query)
+        );
+        setFilteredTags(filtered);
+      }
+    }, [searchQuery, tags]);
+
+    const handleInsertTag = (tagName: string) => {
+      if (!config.targetFieldName || !onFieldChange || !allValues) {
+        console.error('targetFieldName, onFieldChange, or allValues not provided', {
+          targetFieldName: config.targetFieldName,
+          hasOnFieldChange: !!onFieldChange,
+          hasAllValues: !!allValues,
+        });
+        return;
+      }
+
+      // targetFieldNameに基づいて実際のフィールド名を探す
+      // 例: targetFieldName='text' の場合、UnifiedNodeSettingsでは 'text'、formページでは 'elevenlabs_text_xxx'
+      let actualFieldName = config.targetFieldName;
+
+      // allValuesから対応するフィールド名を検索
+      const fieldNames = Object.keys(allValues);
+      console.log('Available field names:', fieldNames);
+      console.log('Looking for field matching:', config.targetFieldName);
+
+      // まず完全一致を試す
+      if (fieldNames.includes(config.targetFieldName)) {
+        actualFieldName = config.targetFieldName;
+      } else {
+        // 次に部分一致を探す（formページ用）
+        const matchingField = fieldNames.find(name => name.includes(config.targetFieldName!));
+        if (matchingField) {
+          actualFieldName = matchingField;
+        }
+      }
+
+      console.log('Inserting tag:', tagName, 'into field:', actualFieldName);
+      console.log('Current text value:', allValues[actualFieldName]);
+
+      const currentText = String(allValues[actualFieldName] || '');
+      const newText = currentText + `[${tagName}]`;
+
+      console.log('New text value:', newText);
+
+      // 状態を更新
+      onFieldChange(actualFieldName, newText);
+
+      setDialogOpen(false);
+      setSearchQuery('');
+    };
+
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          {config.label}
+        </Typography>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            {config.helperText}
+          </Typography>
+        )}
+
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={() => setDialogOpen(true)}
+          sx={{
+            py: 1.5,
+            textTransform: 'none',
+            fontWeight: 500,
+          }}
+        >
+          タグを選択して挿入
+        </Button>
+
+        {/* タグ選択ダイアログ */}
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            display: dialogOpen ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1400,
+          }}
+          onClick={() => setDialogOpen(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 600,
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ダイアログヘッダー */}
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6" fontWeight={600}>
+                  タグを選択
+                </Typography>
+                <IconButton size="small" onClick={() => setDialogOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+
+              {/* 検索フィールド */}
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="タグを検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                variant="outlined"
+              />
+            </Box>
+
+            {/* タグリスト */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : filteredTags.length === 0 ? (
+                <Alert severity="info">
+                  {searchQuery ? '検索結果がありません' : 'タグがありません'}
+                </Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {filteredTags.map((tag) => (
+                    <Paper
+                      key={tag.id}
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                      onClick={() => handleInsertTag(tag.name)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {tag.name_ja || tag.name}
+                        </Typography>
+                        <Chip
+                          label={tag.name}
+                          size="small"
+                          sx={{
+                            fontSize: '0.7rem',
+                            height: 20,
+                            fontFamily: 'monospace',
+                          }}
+                        />
+                      </Box>
+                      {(tag.description_ja || tag.description) && (
+                        <Typography variant="caption" color="text.secondary">
+                          {tag.description_ja || tag.description}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Paper>
+        </Box>
       </Box>
     );
   }

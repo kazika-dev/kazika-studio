@@ -7,9 +7,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  RadioGroup,
   FormControlLabel,
-  Radio,
+  Checkbox,
   CircularProgress,
   Alert,
   Box,
@@ -26,7 +25,7 @@ interface Workflow {
 interface WorkflowSelectionDialogProps {
   open: boolean;
   onClose: () => void;
-  onSelect: (workflowId: number | null) => void;
+  onSelect: (workflowIds: number[]) => void;
 }
 
 export default function WorkflowSelectionDialog({
@@ -35,7 +34,7 @@ export default function WorkflowSelectionDialog({
   onSelect,
 }: WorkflowSelectionDialogProps) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,13 +69,21 @@ export default function WorkflowSelectionDialog({
   };
 
   const handleConfirm = () => {
-    onSelect(selectedWorkflowId);
+    onSelect(selectedWorkflowIds);
     onClose();
   };
 
   const handleCancel = () => {
-    setSelectedWorkflowId(null);
+    setSelectedWorkflowIds([]);
     onClose();
+  };
+
+  const handleToggleWorkflow = (workflowId: number) => {
+    setSelectedWorkflowIds((prev) =>
+      prev.includes(workflowId)
+        ? prev.filter((id) => id !== workflowId)
+        : [...prev, workflowId]
+    );
   };
 
   return (
@@ -84,10 +91,15 @@ export default function WorkflowSelectionDialog({
       <DialogTitle>ワークフローを選択</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          各ボードに追加するワークフローを選択してください。
+          各ボードに追加するワークフローを選択してください（複数選択可）。
           <br />
           選択しない場合、ワークフローは追加されません。
         </Typography>
+        {selectedWorkflowIds.length > 0 && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {selectedWorkflowIds.length} 個のワークフローを選択中
+          </Alert>
+        )}
         <Divider sx={{ mb: 2 }} />
 
         {loading ? (
@@ -103,20 +115,16 @@ export default function WorkflowSelectionDialog({
             先にワークフローを作成してください。
           </Alert>
         ) : (
-          <RadioGroup
-            value={selectedWorkflowId?.toString() || ''}
-            onChange={(e) => setSelectedWorkflowId(Number(e.target.value))}
-          >
-            <FormControlLabel
-              value=""
-              control={<Radio />}
-              label="ワークフローを追加しない"
-            />
+          <Box>
             {workflows.map((workflow) => (
               <FormControlLabel
                 key={workflow.id}
-                value={workflow.id.toString()}
-                control={<Radio />}
+                control={
+                  <Checkbox
+                    checked={selectedWorkflowIds.includes(workflow.id)}
+                    onChange={() => handleToggleWorkflow(workflow.id)}
+                  />
+                }
                 label={
                   <Box>
                     <Typography variant="body1" fontWeight={600}>
@@ -131,7 +139,7 @@ export default function WorkflowSelectionDialog({
                 }
               />
             ))}
-          </RadioGroup>
+          </Box>
         )}
       </DialogContent>
       <DialogActions>

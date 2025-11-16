@@ -58,8 +58,9 @@ export default function UnifiedNodeSettings({
     setDescription(node.data.config?.description || '');
 
     // フォームの初期値を設定
+    const currentTypeConfig = getNodeTypeConfig(nodeType);
     const initialValues: Record<string, any> = {};
-    typeConfig.fields.forEach((field) => {
+    currentTypeConfig.fields.forEach((field) => {
       // デフォルト値を設定
       let defaultValue = node.data.config?.[field.name];
 
@@ -75,9 +76,12 @@ export default function UnifiedNodeSettings({
             } else if (field.name === 'modelId') {
               defaultValue = 'eleven_turbo_v2_5';
             } else if (field.name === 'aspectRatio') {
-              defaultValue = '1:1';
+              // Seedream4の場合は4:3がデフォルト
+              defaultValue = nodeType === 'seedream4' ? '4:3' : '1:1';
             } else if (field.name === 'duration') {
               defaultValue = '5';
+            } else if (field.name === 'quality') {
+              defaultValue = 'basic';
             } else {
               defaultValue = field.options?.[0]?.value || '';
             }
@@ -96,18 +100,30 @@ export default function UnifiedNodeSettings({
           case 'characterSheets':
             defaultValue = [];
             break;
+          case 'outputSelector':
+            defaultValue = [];
+            break;
+          case 'tags':
+            // tagsフィールドは状態を持たないので、初期値を設定しない
+            defaultValue = undefined;
+            break;
           default:
             defaultValue = '';
         }
       }
 
-      initialValues[field.name] = defaultValue;
+      // tagsフィールドは状態を持たないので、initialValuesに追加しない
+      if (field.type !== 'tags') {
+        initialValues[field.name] = defaultValue;
+      }
     });
 
+    console.log('[UnifiedNodeSettings] Initializing formValues for node:', node.id, 'initialValues:', initialValues);
     setFormValues(initialValues);
-  }, [node, typeConfig.fields]);
+  }, [node.id, nodeType]); // nodeTypeが変わったら再初期化
 
   const handleFormValueChange = (fieldName: string, value: any) => {
+    console.log('[UnifiedNodeSettings] Field value changed:', fieldName, '=', value);
     setFormValues((prev) => ({
       ...prev,
       [fieldName]: value,
@@ -115,7 +131,7 @@ export default function UnifiedNodeSettings({
   };
 
   const handleSave = () => {
-    console.log('Saving node config:', {
+    console.log('[UnifiedNodeSettings] Saving node config:', {
       nodeId: node.id,
       nodeType,
       name,
@@ -131,6 +147,7 @@ export default function UnifiedNodeSettings({
       ...formValues,
     };
 
+    console.log('[UnifiedNodeSettings] Updated config:', updatedConfig);
     onUpdate(node.id, updatedConfig);
 
     setSaveSuccess(true);
@@ -262,14 +279,19 @@ export default function UnifiedNodeSettings({
                 {typeConfig.displayName} 設定
               </Typography>
 
-              {typeConfig.fields.map((field) => (
-                <DynamicFormField
-                  key={field.name}
-                  config={field}
-                  value={formValues[field.name]}
-                  onChange={(value) => handleFormValueChange(field.name, value)}
-                />
-              ))}
+              {typeConfig.fields.map((field) => {
+                console.log('[UnifiedNodeSettings] Rendering field:', field.name, 'type:', field.type, 'value:', formValues[field.name]);
+                return (
+                  <DynamicFormField
+                    key={field.name}
+                    config={field}
+                    value={formValues[field.name]}
+                    onChange={(value) => handleFormValueChange(field.name, value)}
+                    allValues={formValues}
+                    onFieldChange={handleFormValueChange}
+                  />
+                );
+              })}
             </>
           )}
 

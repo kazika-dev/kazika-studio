@@ -1,9 +1,9 @@
 'use client';
 
-import { memo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Paper, Box, Typography, IconButton, CircularProgress, Tooltip } from '@mui/material';
-import ImageSearchIcon from '@mui/icons-material/ImageSearch';
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -120,6 +120,7 @@ function Seedream4Node({ data, selected, id }: NodeProps<Seedream4NodeData>) {
       sx={{
         position: 'relative',
         minWidth: 280,
+        minHeight: 440,
         p: 2,
         border: selected ? '2px solid' : '1px solid',
         borderColor: selected ? '#ff9800' : 'divider',
@@ -132,17 +133,129 @@ function Seedream4Node({ data, selected, id }: NodeProps<Seedream4NodeData>) {
         },
       }}
     >
+      {/* プロンプト入力（必須） */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
+        id="prompt"
         style={{
-          width: 12,
-          height: 12,
-          backgroundColor: '#ff9800',
+          top: 40,
+          width: 10,
+          height: 10,
+          backgroundColor: '#4CAF50',
           border: '2px solid white',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
       />
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          left: -70,
+          top: 32,
+          fontSize: '0.65rem',
+          color: '#4CAF50',
+          fontWeight: 600,
+        }}
+      >
+        プロンプト
+      </Typography>
+
+      {/* キャラクターシート入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`character-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`character-${index}`}
+            style={{
+              top: 70 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#2196F3',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -100,
+              top: 62 + index * 30,
+              fontSize: '0.65rem',
+              color: '#2196F3',
+              fontWeight: 500,
+            }}
+          >
+            キャラシート{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
+
+      {/* 参照画像入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`image-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`image-${index}`}
+            style={{
+              top: 190 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#FF9800',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -60,
+              top: 182 + index * 30,
+              fontSize: '0.65rem',
+              color: '#FF9800',
+              fontWeight: 500,
+            }}
+          >
+            画像{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
+
+      {/* Output画像入力（最大4つ） */}
+      {[0, 1, 2, 3].map((index) => (
+        <React.Fragment key={`output-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`output-${index}`}
+            style={{
+              top: 310 + index * 30,
+              width: 10,
+              height: 10,
+              backgroundColor: '#9C27B0',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              position: 'absolute',
+              left: -80,
+              top: 302 + index * 30,
+              fontSize: '0.65rem',
+              color: '#9C27B0',
+              fontWeight: 500,
+            }}
+          >
+            Output{index + 1}
+          </Typography>
+        </React.Fragment>
+      ))}
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', mb: 1 }}>
         <Box
@@ -155,7 +268,7 @@ function Seedream4Node({ data, selected, id }: NodeProps<Seedream4NodeData>) {
             justifyContent: 'center',
           }}
         >
-          <ImageSearchIcon sx={{ fontSize: 20, color: '#ff9800' }} />
+          <VideoLibraryIcon sx={{ fontSize: 20, color: '#ff9800' }} />
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>

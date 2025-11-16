@@ -43,6 +43,30 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             rows: 6,
             helperText: '前のノードの結果を {{prev.response}} または {{ノード名.response}} で参照できます',
           },
+          {
+            type: 'characterSheets',
+            name: 'selectedCharacterSheetIds',
+            label: 'キャラクターシート',
+            required: false,
+            maxSelections: 4,
+            helperText: '画像認識に使用するキャラクターシート（最大4つ）',
+          },
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '画像認識の参照として使用する画像（最大4つ、5MB以下）',
+          },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
@@ -84,9 +108,22 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             maxSelections: 4,
             helperText: '画像生成に使用するキャラクターシート（最大4つ）',
           },
-          // referenceImagesは現時点では保存時にstoragePathに変換せず、
-          // {mimeType, data}形式のまま保持します（既存の実装に合わせる）
-          // 将来的にはstoragePathベースに統一することを検討
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '画像生成の参照として使用する画像（最大4つ、5MB以下）',
+          },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
@@ -130,6 +167,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             required: false,
             rows: 6,
             helperText: '前のノードの結果を参照可能です',
+          },
+          {
+            type: 'tags',
+            name: 'elevenLabsTags',
+            label: 'タグ挿入',
+            required: false,
+            targetFieldName: 'text',
+            helperText: 'クリックしてテキストフィールドにタグを挿入',
           },
         ],
       };
@@ -198,6 +243,82 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             required: false,
             helperText: 'この画像を他のノード（GeminiやNanobana）で参照できます。画像サイズは5MB以下にしてください。',
           },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
+        ],
+      };
+
+    case 'seedream4':
+      return {
+        displayName: 'Seedream4 動画生成',
+        color: '#ff9800',
+        fields: [
+          {
+            type: 'textarea',
+            name: 'prompt',
+            label: 'プロンプト',
+            placeholder: '動画生成用のプロンプトを入力してください...',
+            required: false,
+            rows: 6,
+            helperText: '前のノードの結果を参照可能です',
+          },
+          {
+            type: 'select',
+            name: 'aspectRatio',
+            label: 'アスペクト比',
+            required: false,
+            options: [
+              { label: '1:1 (正方形)', value: '1:1' },
+              { label: '4:3', value: '4:3' },
+              { label: '16:9 (横長)', value: '16:9' },
+              { label: '3:2', value: '3:2' },
+              { label: '21:9 (超横長)', value: '21:9' },
+              { label: '3:4 (縦長)', value: '3:4' },
+              { label: '9:16 (縦長)', value: '9:16' },
+              { label: '2:3', value: '2:3' },
+            ],
+            helperText: '生成する動画のアスペクト比を選択',
+          },
+          {
+            type: 'select',
+            name: 'quality',
+            label: '品質',
+            required: false,
+            options: [
+              { label: 'Basic（基本）', value: 'basic' },
+              { label: 'High（高品質）', value: 'high' },
+            ],
+          },
+          {
+            type: 'characterSheets',
+            name: 'selectedCharacterSheetIds',
+            label: 'キャラクターシート',
+            required: false,
+            maxSelections: 4,
+            helperText: '動画生成に使用するキャラクターシート（最大4つ）',
+          },
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '動画生成の参照として使用する画像（最大4つ、5MB以下）',
+          },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
@@ -263,11 +384,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `gemini_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -283,30 +408,20 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `nanobana_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' || field.type === 'outputSelector' ? [] : ''),
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
         }
       });
-
-      // 参照画像アップロード（最大4つ） - 特別な処理が必要なため個別に追加
-      const referenceImagesFieldName = `nanobana_referenceImages_${node.id}`;
-      if (!addedFieldNames.has(referenceImagesFieldName)) {
-        fields.push({
-          type: 'images',
-          name: referenceImagesFieldName,
-          label: `${nodeName} 参照画像`,
-          required: false,
-          maxImages: 4,
-          helperText: `${nodeName}で使用する参照画像（最大4つ）`,
-        });
-        addedFieldNames.add(referenceImagesFieldName);
-      }
     }
 
     // Higgsfieldノード - getNodeTypeConfig()から設定を取得
@@ -317,11 +432,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `higgsfield_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : '',
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);
@@ -329,21 +448,28 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
       });
     }
 
-    // Seedream4ノード - プロンプトのみ（まだgetNodeTypeConfigに定義がない場合）
+    // Seedream4ノード - getNodeTypeConfig()から設定を取得
     if (nodeType === 'seedream4') {
-      const fieldName = `seedream4_prompt_${node.id}`;
-      if (!addedFieldNames.has(fieldName)) {
-        fields.push({
-          type: 'textarea',
-          name: fieldName,
-          label: `${nodeName} プロンプト`,
-          placeholder: node.data.config?.prompt || '動画生成の指示を入力',
-          required: false,
-          rows: 4,
-          helperText: `${nodeName}で使用するプロンプト`,
-        });
-        addedFieldNames.add(fieldName);
-      }
+      const nodeConfig = getNodeTypeConfig('seedream4');
+
+      nodeConfig.fields.forEach((field) => {
+        const fieldName = `seedream4_${field.name}_${node.id}`;
+
+        if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
+          fields.push({
+            ...field,
+            name: fieldName,
+            label: `${nodeName} ${field.label}`,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : (field.type === 'images' || field.type === 'characterSheets' || field.type === 'outputSelector' ? [] : ''),
+            helperText: field.helperText,
+          });
+          addedFieldNames.add(fieldName);
+        }
+      });
     }
 
     // キャラクターシートノード
@@ -386,11 +512,15 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
         const fieldName = `elevenlabs_${field.name}_${node.id}`;
 
         if (!addedFieldNames.has(fieldName)) {
+          // ノードの設定値をデフォルト値として使用
+          const defaultValue = node.data.config?.[field.name];
+
           fields.push({
             ...field,
             name: fieldName,
             label: `${nodeName} ${field.label}`,
-            placeholder: node.data.config?.[field.name] || field.placeholder,
+            placeholder: field.placeholder,
+            defaultValue: defaultValue !== undefined ? defaultValue : '',
             helperText: field.helperText,
           });
           addedFieldNames.add(fieldName);

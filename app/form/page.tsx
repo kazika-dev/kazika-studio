@@ -99,14 +99,26 @@ function FormPageContent() {
       if (data.success) {
         setWorkflow(data.workflow);
 
-        // 初期値を設定
+        // 初期値を設定（ワークフローノードの設定値をデフォルト値として使用）
         const initialValues: Record<string, any> = {};
         if (data.workflow.form_config?.fields) {
           data.workflow.form_config.fields.forEach((field: FormFieldConfig) => {
-            if (field.type === 'images') {
+            // tagsフィールドは状態を持たないのでスキップ
+            if (field.type === 'tags') {
+              return;
+            }
+
+            // defaultValueが設定されている場合はそれを使用、なければデフォルト値
+            if (field.defaultValue !== undefined) {
+              initialValues[field.name] = field.defaultValue;
+            } else if (field.type === 'images' || field.type === 'characterSheets' || field.type === 'outputSelector') {
               initialValues[field.name] = [];
             } else if (field.type === 'image') {
               initialValues[field.name] = null;
+            } else if (field.type === 'switch') {
+              initialValues[field.name] = false;
+            } else if (field.type === 'slider') {
+              initialValues[field.name] = field.min || 0;
             } else {
               initialValues[field.name] = '';
             }
@@ -343,6 +355,8 @@ function FormPageContent() {
                   config={field}
                   value={formValues[field.name]}
                   onChange={(value) => handleFieldChange(field.name, value)}
+                  allValues={formValues}
+                  onFieldChange={handleFieldChange}
                 />
               ))}
             </Stack>

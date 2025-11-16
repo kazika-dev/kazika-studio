@@ -29,6 +29,7 @@ import Seedream4Node from './Seedream4Node';
 import CharacterSheetNode from './CharacterSheetNode';
 import RapidNode from './RapidNode';
 import ComfyUINode from './ComfyUINode';
+import { migrateNodeConfig } from '@/lib/workflow/migration';
 import PopcornNode from './PopcornNode';
 import QwenImageNode from './QwenImageNode';
 import NodeSettings from './NodeSettings';
@@ -137,7 +138,8 @@ export default function WorkflowEditor() {
           const workflowData = await workflowResponse.json();
 
           if (workflowData.success) {
-            setNodes(workflowData.workflow.nodes || []);
+            const migratedNodes = migrateNodeConfig(workflowData.workflow.nodes || []);
+            setNodes(migratedNodes);
             setEdges(workflowData.workflow.edges || []);
             setCurrentWorkflowId(workflowData.workflow.id);
             setCurrentWorkflowName(workflowData.workflow.name);
@@ -154,7 +156,8 @@ export default function WorkflowEditor() {
             const workflowData = await workflowResponse.json();
 
             if (workflowData.success) {
-              setNodes(workflowData.workflow.nodes || []);
+              const migratedNodes = migrateNodeConfig(workflowData.workflow.nodes || []);
+              setNodes(migratedNodes);
               setEdges(workflowData.workflow.edges || []);
               setCurrentWorkflowId(workflowData.workflow.id);
               setCurrentWorkflowName(workflowData.workflow.name);
