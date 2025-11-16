@@ -330,8 +330,111 @@ async function executeNode(
           inputData
         );
 
-        // 入力データから画像を抽出
-        const geminiImages = extractImagesFromInput(inputData);
+        // 入力データから画像を抽出（参照画像として使用）
+        const geminiImages: Array<{ mimeType: string; data: string }> = [];
+
+        // 1. キャラクターシート画像を取得（最大4枚）
+        const geminiCharacterSheetIds = node.data.config?.selectedCharacterSheetIds || [];
+        if (geminiCharacterSheetIds.length > 0) {
+          console.log(`Loading ${geminiCharacterSheetIds.length} character sheet(s) for Gemini:`, geminiCharacterSheetIds);
+
+          for (const csId of geminiCharacterSheetIds.slice(0, 4)) {
+            try {
+              // キャラクターシート情報をDBから取得
+              const { getCharacterSheetById } = await import('@/lib/db');
+              const characterSheet = await getCharacterSheetById(parseInt(csId));
+
+              if (characterSheet && characterSheet.image_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading character sheet image from GCP Storage:', characterSheet.image_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(characterSheet.image_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                geminiImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Character sheet ${csId} loaded: ${characterSheet.name}`);
+              } else {
+                console.warn(`✗ Character sheet ${csId} not found or has no image`);
+              }
+            } catch (error) {
+              console.error(`Failed to load character sheet ${csId}:`, error);
+              // エラーがあっても続行（他のキャラクターシートは読み込む）
+            }
+          }
+        }
+
+        // 2. 参照画像を追加（フォームからアップロードされた画像、最大4枚）
+        const geminiReferenceImagePaths = node.data.config?.referenceImagePaths || [];
+        if (geminiReferenceImagePaths.length > 0) {
+          console.log(`Loading ${geminiReferenceImagePaths.length} reference image(s) for Gemini`);
+
+          let geminiRemainingSlots = 4 - geminiImages.length;
+          for (const imagePath of geminiReferenceImagePaths.slice(0, geminiRemainingSlots)) {
+            try {
+              // GCP Storageから画像を取得
+              console.log('Loading reference image from GCP Storage:', imagePath);
+              const { getFileFromStorage } = await import('@/lib/gcp-storage');
+              const { data: imageBuffer, contentType } = await getFileFromStorage(imagePath);
+              const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+              geminiImages.push({
+                mimeType: contentType,
+                data: base64Data,
+              });
+
+              console.log(`✓ Reference image loaded: ${imagePath}`);
+            } catch (error) {
+              console.error(`Failed to load reference image ${imagePath}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 3. Output画像選択から画像を追加（最大4枚）
+        const geminiSelectedOutputIds = node.data.config?.selectedOutputIds || [];
+        if (geminiSelectedOutputIds.length > 0) {
+          console.log(`Loading ${geminiSelectedOutputIds.length} selected output image(s) for Gemini:`, geminiSelectedOutputIds);
+
+          let geminiRemainingSlots = 4 - geminiImages.length;
+          for (const outputId of geminiSelectedOutputIds.slice(0, geminiRemainingSlots)) {
+            try {
+              // workflow_outputsテーブルから画像を取得
+              const { getWorkflowOutputById } = await import('@/lib/db');
+              const output = await getWorkflowOutputById(parseInt(outputId));
+
+              if (output && output.content_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading output image from GCP Storage:', output.content_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(output.content_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                geminiImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Output image ${outputId} loaded`);
+              } else {
+                console.warn(`✗ Output ${outputId} not found or has no content_url`);
+              }
+            } catch (error) {
+              console.error(`Failed to load output image ${outputId}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 4. 前のノードから接続された画像を追加（最大4枚まで）
+        const geminiConnectedImages = extractImagesFromInput(inputData);
+        const geminiRemainingSlots = 4 - geminiImages.length;
+        if (geminiConnectedImages.length > 0 && geminiRemainingSlots > 0) {
+          geminiImages.push(...geminiConnectedImages.slice(0, geminiRemainingSlots));
+        }
 
         console.log('Gemini execution:', {
           nodeId: node.id,
@@ -342,7 +445,11 @@ async function executeNode(
           inputDataKeys: Object.keys(inputData),
           replacedPrompt: geminiPrompt,
           replacedPromptLength: geminiPrompt.length,
-          imageCount: geminiImages.length,
+          characterSheetCount: geminiCharacterSheetIds.length,
+          referenceImageCount: geminiReferenceImagePaths.length,
+          selectedOutputCount: geminiSelectedOutputIds.length,
+          connectedImageCount: geminiConnectedImages.length,
+          totalImageCount: geminiImages.length,
         });
 
         if (!node.data.config?.prompt || !node.data.config.prompt.trim()) {

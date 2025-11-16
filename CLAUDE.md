@@ -26,11 +26,18 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
   - `selectedOutputIds` (Output画像選択、最大4つ)
 - `/components/workflow/GeminiNode.tsx` に接続ハンドルを追加（プロンプト×1、キャラクターシート×4、参照画像×4）
 - ノードの `minHeight: 320` に設定し、全13個の接続ハンドル（プロンプト1 + キャラシート4 + 画像4 + Output画像4）が表示されるように調整
+- **`/lib/workflow/executor.ts` のGeminiケースに画像読み込み処理を追加**（326-453行目）
 
 **技術的詳細**:
 - **CLAUDE.mdの原則に従い、`getNodeTypeConfig()`で一元管理**
 - Nanobanaノードと同じパターンで実装し、コードの一貫性を確保
 - `UnifiedNodeSettings.tsx` の既存のデフォルト値ロジック（100-105行目）により、配列フィールドが自動的に `[]` で初期化される
+- **画像読み込み処理（executor.ts）**:
+  1. キャラクターシートIDから `character_sheets` テーブルを検索し、GCP Storageから画像を取得してbase64に変換
+  2. 参照画像パス (`referenceImagePaths`) からGCP Storageの画像を取得してbase64に変換
+  3. Output画像ID (`selectedOutputIds`) から `workflow_outputs` テーブルを検索し、GCP Storageから画像を取得してbase64に変換
+  4. 前のノードから接続された画像を追加（`extractImagesFromInput`）
+  5. 最大4枚までの制限を各段階で適用
 
 **接続ハンドル（左側）**:
 1. **プロンプト入力** (緑色) - ID: `prompt`
@@ -41,6 +48,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - `getNodeTypeConfig()` の定義により、**ワークフローノード設定と `/form` ページの両方に自動反映**
 - Geminiノードで画像認識が可能になり、キャラクターの表情分析、画像の説明生成などが実現可能に
 - `/form` ページでも自動的に3つのフィールドが表示される（一元管理の恩恵）
+- **Output画像選択で選んだ画像がbase64形式でGemini APIに正しく送信される**
 
 ### 2025-11-16: ワークフロー設定値を `/form` ページのデフォルト値として反映
 
