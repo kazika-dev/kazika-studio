@@ -214,6 +214,66 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
         ],
       };
 
+    case 'seedream4':
+      return {
+        displayName: 'Seedream4 動画生成',
+        color: '#ff9800',
+        fields: [
+          {
+            type: 'textarea',
+            name: 'prompt',
+            label: 'プロンプト',
+            placeholder: '動画生成用のプロンプトを入力してください...',
+            required: false,
+            rows: 6,
+            helperText: '前のノードの結果を参照可能です',
+          },
+          {
+            type: 'select',
+            name: 'aspectRatio',
+            label: 'アスペクト比',
+            required: false,
+            options: [
+              { label: '1:1 (正方形)', value: '1:1' },
+              { label: '4:3', value: '4:3' },
+              { label: '16:9 (横長)', value: '16:9' },
+              { label: '3:2', value: '3:2' },
+              { label: '21:9 (超横長)', value: '21:9' },
+              { label: '3:4 (縦長)', value: '3:4' },
+              { label: '9:16 (縦長)', value: '9:16' },
+              { label: '2:3', value: '2:3' },
+            ],
+            helperText: '生成する動画のアスペクト比を選択',
+          },
+          {
+            type: 'select',
+            name: 'quality',
+            label: '品質',
+            required: false,
+            options: [
+              { label: 'Basic（基本）', value: 'basic' },
+              { label: 'High（高品質）', value: 'high' },
+            ],
+          },
+          {
+            type: 'characterSheets',
+            name: 'selectedCharacterSheetIds',
+            label: 'キャラクターシート',
+            required: false,
+            maxSelections: 4,
+            helperText: '動画生成に使用するキャラクターシート（最大4つ）',
+          },
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '動画生成の参照として使用する画像（最大4つ、5MB以下）',
+          },
+        ],
+      };
+
     default:
       return {
         displayName: nodeType,
@@ -328,21 +388,24 @@ export function extractFormFieldsFromNodes(nodes: Node[]): FormFieldConfig[] {
       });
     }
 
-    // Seedream4ノード - プロンプトのみ（まだgetNodeTypeConfigに定義がない場合）
+    // Seedream4ノード - getNodeTypeConfig()から設定を取得
     if (nodeType === 'seedream4') {
-      const fieldName = `seedream4_prompt_${node.id}`;
-      if (!addedFieldNames.has(fieldName)) {
-        fields.push({
-          type: 'textarea',
-          name: fieldName,
-          label: `${nodeName} プロンプト`,
-          placeholder: node.data.config?.prompt || '動画生成の指示を入力',
-          required: false,
-          rows: 4,
-          helperText: `${nodeName}で使用するプロンプト`,
-        });
-        addedFieldNames.add(fieldName);
-      }
+      const nodeConfig = getNodeTypeConfig('seedream4');
+
+      nodeConfig.fields.forEach((field) => {
+        const fieldName = `seedream4_${field.name}_${node.id}`;
+
+        if (!addedFieldNames.has(fieldName)) {
+          fields.push({
+            ...field,
+            name: fieldName,
+            label: `${nodeName} ${field.label}`,
+            placeholder: node.data.config?.[field.name] || field.placeholder,
+            helperText: field.helperText,
+          });
+          addedFieldNames.add(fieldName);
+        }
+      });
     }
 
     // キャラクターシートノード

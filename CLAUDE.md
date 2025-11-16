@@ -14,6 +14,39 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
+
+**目的**: Seedream4ノードにキャラクターシート4枚と参照画像4枚までの登録機能を追加し、ワークフローエディタでの接続を可視化
+
+**変更内容**:
+- `/lib/workflow/formConfigGenerator.ts` に `seedream4` ケースを追加し、一元管理を実装
+- `/components/workflow/Seedream4NodeSettings.tsx` を `UnifiedNodeSettings` を使用するように簡素化（約380行 → 約27行、93%削減）
+- `/components/workflow/Seedream4Node.tsx` に接続ハンドルを追加（プロンプト×1、キャラクターシート×4、参照画像×4）
+- `/components/workflow/UnifiedNodeSettings.tsx` にSeedream4のデフォルト値を追加
+
+**技術的詳細**:
+- Nanobanaノードと同じパターンで実装し、コードの一貫性を確保
+- アイコンを `ImageSearchIcon` → `VideoLibraryIcon` に変更（動画生成であることを明示）
+- ノードの `minHeight: 320` に設定し、全9個の接続ハンドルが表示されるように調整
+
+**接続ハンドル（左側）**:
+1. **プロンプト入力** (緑色) - ID: `prompt`
+2. **キャラクターシート1〜4** (青色) - ID: `character-0` 〜 `character-3`
+3. **参照画像1〜4** (オレンジ色) - ID: `image-0` 〜 `image-3`
+
+**フォーム設定フィールド**:
+- プロンプト（textarea）
+- アスペクト比（select、デフォルト: 4:3）
+- 品質（select、Basic/High）
+- キャラクターシート選択（最大4つ）
+- 参照画像アップロード（最大4つ、各5MB以下）
+
+**影響範囲**:
+- `getNodeTypeConfig()` の定義により、ワークフローノード設定と `/form` ページの両方に自動反映
+- Seedream4ノードで一元管理の原則が徹底され、保守性が向上
+
+---
+
 ### 2025-01-16: ノード設定の完全な一元化（`getNodeTypeConfig()` → `/form` への自動反映）
 
 **目的**: `getNodeTypeConfig()` と `extractFormFieldsFromNodes()` の重複を解消し、1箇所の修正で「ワークフローノード設定」と「`/form` ページ」の両方に反映されるようにする
@@ -54,8 +87,9 @@ if (nodeType === 'elevenlabs') {
 **一元化したノード**:
 - ✅ `elevenlabs` - 音声ID、モデル（v3含む）、テキスト
 - ✅ `gemini` - モデル、プロンプト
-- ✅ `nanobana` - アスペクト比、プロンプト、キャラクターシート（参照画像は個別処理）
+- ✅ `nanobana` - アスペクト比、プロンプト、キャラクターシート、参照画像
 - ✅ `higgsfield` - プロンプト、ネガティブプロンプト、動画の長さ、CFG Scale、プロンプト自動強化
+- ✅ `seedream4` - プロンプト、アスペクト比、品質、キャラクターシート、参照画像
 
 ### 2025-01-16: ワークフロー実行のAPI経由化とビルドエラー修正
 
