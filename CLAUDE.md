@@ -14,25 +14,34 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
-### 2025-11-16: Nanobanaノード設定にOutput画像選択フォームを追加
+### 2025-11-16: Nanobanaノード設定にOutput画像選択フォームを追加（複数選択対応）
 
 **目的**: Workflow Outputsテーブルから生成済み画像を選択できるようにし、既存の画像を再利用可能にする
 
 **変更内容**:
-- `/components/form/DynamicFormField.tsx` に `outputSelector` フィールドタイプを追加（132行追加）
-- `/api/outputs` から画像タイプのoutputを取得し、2カラムのグリッドレイアウトでサムネイル表示
-- Nanobanaノード設定に `selectedOutputId` フィールドを追加（`getNodeTypeConfig()` で一元管理）
-- `/components/workflow/UnifiedNodeSettings.tsx` で `outputSelector` のデフォルト値を設定
-- `/app/api/outputs/route.ts` をテーブルスキーマ (`output_url`, `output_data`) に合わせて修正
+- `/components/form/DynamicFormField.tsx` に `outputSelector` フィールドタイプを追加
+- `/api/outputs` から画像タイプのoutputを取得し、ポップアップダイアログで表示
+- Nanobanaノード設定に `selectedOutputIds` フィールドを追加（`getNodeTypeConfig()` で一元管理）
+- `/components/workflow/UnifiedNodeSettings.tsx` で `outputSelector` のデフォルト値を配列に設定
+- `/app/api/outputs/route.ts` を実際のテーブルスキーマ (`content_url`) に合わせて修正
 
 **技術的詳細**:
 - CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で1箇所定義することで、ワークフローノード設定と `/form` ページの両方で自動的に利用可能
-- ラジオボタンで画像を1つ選択し、選択されたoutputのIDを `selectedOutputId` として保存
-- デバッグログを追加して、フィールドのレンダリングとAPI呼び出しを追跡可能に
-- マイグレーションSQLで定義された実際のカラム名 (`output_url`, `output_data`) に合わせてAPIを修正
+- **複数選択対応**: Checkboxで最大4枚まで選択可能（`maxSelections: 4`）
+- ポップアップダイアログで5枚ずつページング表示（前へ/次へボタン）
+- 選択済み画像はグリッド形式でプレビュー表示（×ボタンで削除可能）
+- ダイアログを開いた時のみAPIを呼び出し（パフォーマンス向上）
+- 実際のテーブルスキーマ (`content_url`, `content_text`) に合わせてAPIを修正
+- 最大数に達した場合は、未選択の画像が半透明で無効化表示
+
+**UI/UX**:
+- ボタンテキスト: 「画像を選択 (最大4枚)」「画像を変更 (2/4)」など、状態に応じて変化
+- ダイアログヘッダーに「2/4枚選択中」のカウンター表示
+- 選択済み画像は80x80のサムネイルでグリッド表示、右上に削除ボタン
+- 画像カードをクリックでトグル選択、Checkboxで選択状態を視覚的に表示
 
 **影響範囲**:
-- Nanobanaノード設定画面に新しいフィールドが追加され、過去の生成画像を選択可能に
+- Nanobanaノード設定画面に新しいフィールドが追加され、過去の生成画像を最大4枚まで選択可能に
 - `/form` ページでも自動的に表示される（一元管理の恩恵）
 - `workflow_outputs` テーブルから画像データを正しく取得できるようになった
 
@@ -41,6 +50,9 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - `aaf7aa3` - "OutputSelectorでcontent_urlフィールドに対応"
 - `d79b997` - "workflow_outputsテーブルスキーマに合わせてAPI修正"
 - `8f638a3` - "workflow_outputs APIからstep_id/node_idを削除" (マイグレーション未適用のため)
+- `d45a0e8` - "実際のテーブルスキーマ(content_url)に合わせて修正"
+- `551ef4d` - "Output画像選択をポップアップ+ページング表示に変更" (5枚ずつページング)
+- (今回) - "Output画像選択を最大4枚の複数選択に対応"
 
 ### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
 
