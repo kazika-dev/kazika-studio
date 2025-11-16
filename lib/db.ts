@@ -625,6 +625,18 @@ export async function getWorkflowOutputsByWorkflowId(workflowId: number) {
   return result.rows;
 }
 
+/**
+ * IDでworkflow outputを1つ取得
+ */
+export async function getWorkflowOutputById(id: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.workflow_outputs
+     WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 // =====================================================
 // キャラクターシート関連の関数
 // =====================================================

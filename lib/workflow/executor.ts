@@ -483,7 +483,7 @@ async function executeNode(
         if (referenceImagePaths.length > 0) {
           console.log(`Loading ${referenceImagePaths.length} reference image(s) for Nanobana`);
 
-          const remainingSlots = 4 - nanobanaImages.length;
+          let remainingSlots = 4 - nanobanaImages.length;
           for (const imagePath of referenceImagePaths.slice(0, remainingSlots)) {
             try {
               // GCP Storageから画像を取得
@@ -505,7 +505,42 @@ async function executeNode(
           }
         }
 
-        // 3. 前のノードから接続された画像を追加（最大4枚まで）
+        // 3. Output画像選択から画像を追加（最大4枚）
+        const selectedOutputIds = node.data.config?.selectedOutputIds || [];
+        if (selectedOutputIds.length > 0) {
+          console.log(`Loading ${selectedOutputIds.length} selected output image(s) for Nanobana:`, selectedOutputIds);
+
+          let remainingSlots = 4 - nanobanaImages.length;
+          for (const outputId of selectedOutputIds.slice(0, remainingSlots)) {
+            try {
+              // workflow_outputsテーブルから画像を取得
+              const { getWorkflowOutputById } = await import('@/lib/db');
+              const output = await getWorkflowOutputById(parseInt(outputId));
+
+              if (output && output.content_url) {
+                // GCP Storageから画像を取得
+                console.log('Loading output image from GCP Storage:', output.content_url);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data: imageBuffer, contentType } = await getFileFromStorage(output.content_url);
+                const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+                nanobanaImages.push({
+                  mimeType: contentType,
+                  data: base64Data,
+                });
+
+                console.log(`✓ Output image ${outputId} loaded`);
+              } else {
+                console.warn(`✗ Output ${outputId} not found or has no content_url`);
+              }
+            } catch (error) {
+              console.error(`Failed to load output image ${outputId}:`, error);
+              // エラーがあっても続行（他の画像は読み込む）
+            }
+          }
+        }
+
+        // 4. 前のノードから接続された画像を追加（最大4枚まで）
         const connectedImages = extractImagesFromInput(inputData);
         const remainingSlots = 4 - nanobanaImages.length;
         if (connectedImages.length > 0 && remainingSlots > 0) {
