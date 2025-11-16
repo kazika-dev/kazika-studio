@@ -24,6 +24,8 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - Nanobanaノード設定に `selectedOutputIds` フィールドを追加（`getNodeTypeConfig()` で一元管理）
 - `/components/workflow/UnifiedNodeSettings.tsx` で `outputSelector` のデフォルト値を配列に設定
 - `/app/api/outputs/route.ts` を実際のテーブルスキーマ (`content_url`) に合わせて修正
+- `/lib/workflow/executor.ts` でselectedOutputIdsから画像を取得してNanobana APIに送信
+- `/lib/db.ts` に `getWorkflowOutputById` 関数を追加
 
 **技術的詳細**:
 - CLAUDE.mdの原則に従い、`getNodeTypeConfig()` で1箇所定義することで、ワークフローノード設定と `/form` ページの両方で自動的に利用可能
@@ -33,6 +35,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - ダイアログを開いた時のみAPIを呼び出し（パフォーマンス向上）
 - 実際のテーブルスキーマ (`content_url`, `content_text`) に合わせてAPIを修正
 - 最大数に達した場合は、未選択の画像が半透明で無効化表示
+- **Nanobana API連携**: selectedOutputIdsからworkflow_outputsテーブルを検索し、GCP Storageから画像を取得してbase64に変換、Nanobana APIに送信
 
 **UI/UX**:
 - ボタンテキスト: 「画像を選択 (最大4枚)」「画像を変更 (2/4)」など、状態に応じて変化
@@ -51,8 +54,9 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - `d79b997` - "workflow_outputsテーブルスキーマに合わせてAPI修正"
 - `8f638a3` - "workflow_outputs APIからstep_id/node_idを削除" (マイグレーション未適用のため)
 - `d45a0e8` - "実際のテーブルスキーマ(content_url)に合わせて修正"
-- `551ef4d` - "Output画像選択をポップアップ+ページング表示に変更" (5枚ずつページング)
-- `fac5ecf` - "Output画像選択を最大4枚の複数選択に対応"
+- `cdb9f50` - "Output画像選択をポップアップ+ページング表示に変更" (5枚ずつページング)
+- `6269479` - "Output画像選択を最大4枚の複数選択に対応"
+- `99a7790` - "selectedOutputIdsをNanobana APIに送信する処理を追加"
 
 ### 2025-01-16: Seedream4ノードの完全実装（キャラクターシート・参照画像対応）
 
