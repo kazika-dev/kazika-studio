@@ -505,8 +505,65 @@ async function executeNode(
           }
         }
 
-        // 入力データから画像を抽出（参照画像として使用、最大3枚）
-        const nanobanaImages = extractImagesFromInput(inputData).slice(0, 3);
+        // 入力データから画像を抽出（参照画像として使用）
+        const nanobanaImages = extractImagesFromInput(inputData);
+
+        // キャラクターシートの画像を追加
+        const characterSheets = node.data.config?.characterSheets;
+        if (characterSheets && Array.isArray(characterSheets) && characterSheets.length > 0) {
+          console.log(`Loading ${characterSheets.length} character sheet images for Nanobana node ${node.id}`);
+
+          for (const characterSheet of characterSheets) {
+            if (!characterSheet || !characterSheet.image_url) {
+              console.log('  Skipping invalid character sheet:', characterSheet);
+              continue;
+            }
+
+            try {
+              let base64Data: string;
+              let mimeType: string;
+
+              // サーバーサイドの場合は直接GCP Storageから取得
+              if (typeof window === 'undefined') {
+                console.log(`  Loading character sheet image from GCP Storage (server-side): ${characterSheet.name}`);
+                const { getFileFromStorage } = await import('@/lib/gcp-storage');
+                const { data, contentType } = await getFileFromStorage(characterSheet.image_url);
+                base64Data = Buffer.from(data).toString('base64');
+                mimeType = contentType;
+              } else {
+                // クライアントサイドの場合はストレージプロキシAPI経由
+                const imageUrl = characterSheet.image_url.startsWith('http')
+                  ? characterSheet.image_url
+                  : `${getApiUrl('')}/api/storage/${characterSheet.image_url}`;
+
+                console.log(`  Fetching character sheet image (client-side): ${characterSheet.name}`, imageUrl);
+
+                const imageResponse = await fetch(imageUrl);
+                if (!imageResponse.ok) {
+                  throw new Error(`Failed to fetch character sheet image: ${imageResponse.statusText}`);
+                }
+
+                const imageBlob = await imageResponse.blob();
+                const imageBuffer = await imageBlob.arrayBuffer();
+                base64Data = Buffer.from(imageBuffer).toString('base64');
+                mimeType = imageBlob.type || 'image/jpeg';
+              }
+
+              // 画像データを配列に追加
+              nanobanaImages.push({
+                mimeType,
+                data: base64Data,
+              });
+
+              console.log(`  ✓ Added character sheet image: ${characterSheet.name}`);
+            } catch (error) {
+              console.error(`  ✗ Failed to load character sheet image for ${characterSheet.name}:`, error);
+            }
+          }
+        }
+
+        // 最大3枚まで（Nanobana APIの制限）
+        const finalNanobanaImages = nanobanaImages.slice(0, 3);
 
         console.log('Nanobana execution:', {
           nodeId: node.id,
@@ -518,7 +575,8 @@ async function executeNode(
           inputTexts,
           finalPrompt: nanobanaPrompt,
           finalPromptLength: nanobanaPrompt.length,
-          imageCount: nanobanaImages.length,
+          characterSheetCount: characterSheets?.length || 0,
+          imageCount: finalNanobanaImages.length,
         });
 
         if (!nanobanaPrompt.trim()) {
@@ -529,7 +587,7 @@ async function executeNode(
         requestBody = {
           prompt: nanobanaPrompt,
           aspectRatio: node.data.config?.aspectRatio || '1:1',
-          referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
+          referenceImages: finalNanobanaImages.length > 0 ? finalNanobanaImages : undefined,
         };
 
         const nanobanaResponse = await fetch(getApiUrl('/api/nanobana'), {
