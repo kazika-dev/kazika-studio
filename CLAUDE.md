@@ -12,32 +12,32 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
-- **[会話生成機能の拡張](/docs/conversation-generation-enhancements.md)** - 感情タグ、カメラ情報、シーンプロンプトの統合
 
 ## 最近の主要な変更
 
 ### 2025-11-16: 会話生成機能に感情タグ、カメラ情報、シーンプロンプトを追加
 
-**目的**: 会話生成時にElevenLabs感情タグとカメラ情報を動的に取得し、シーンプロンプトを日本語と英語の両方で生成
+**目的**: 会話生成時に感情タグ（ElevenLabs用）とカメラアングル・ショット距離を自動設定し、各メッセージに日本語・英語のシーンプロンプトを生成して画像生成を容易にする
 
 **変更内容**:
-- `/lib/db.ts` にマスターデータ取得関数を追加（`getAllElevenLabsTags`, `getAllCameraAngles`, `getAllShotDistances`）
-- `/lib/conversation/prompt-builder.ts` をasync化し、データベースから最新のマスターデータを取得
-- `/types/conversation.ts` に `scene_prompt_ja`, `scene_prompt_en`, `emotionTag` フィールドを追加
-- `/app/api/conversations/generate/route.ts` で感情タグをメッセージテキストの先頭に付加、シーンプロンプトを専用カラムに保存
-- `/components/studio/conversation/ConversationViewer.tsx` でシーンプロンプトを専用カラムから表示
+- `/lib/db.ts` にカメラアングル・ショット距離・感情タグ取得関数を追加（`getAllCameraAngles`, `getAllShotDistances`, `getAllElevenLabsTags`, `getRandomCameraAngle`, `getRandomShotDistance`）
+- `/lib/conversation/prompt-builder.ts` の `buildConversationPrompt()` を**async化**し、データベースから最新の感情タグを自動取得してプロンプトに含める
+- `/lib/conversation/prompt-builder.ts` の `buildConversationPrompt()` にシーンプロンプト生成の指示を追加（日本語・英語の両方）
+- `/lib/conversation/prompt-builder.ts` の `buildScenePrompt()` を**async化**し、データベースから最新のカメラアングル・ショット距離を自動取得してプロンプトに含める
+- `/types/conversation.ts` の `GeneratedMessage` に `scenePromptJa`, `scenePromptEn` フィールドを追加
+- `/types/conversation.ts` の `ConversationMessage` に `scene_prompt_ja`, `scene_prompt_en` カラムを追加
+- `/app/api/conversations/generate/route.ts` でメッセージ保存時に `[emotionTag]` プレフィックスを自動追加（例: `[friendly] こんにちは！`）
+- `/app/api/conversations/generate/route.ts` でメッセージ保存時に `scene_prompt_ja`, `scene_prompt_en` をデータベースカラムに保存
+- `/app/api/conversations/generate/route.ts` でシーン生成時にカメラ情報を取得し、プロンプトと metadata に保存
 
 **技術的詳細**:
-- **データベース駆動アプローチ**: マスターデータ（感情タグ、カメラアングル、ショット距離）を生成のたびにデータベースから取得
-- **感情タグ機能**:
-  - `kazikastudio.eleven_labs_tags` テーブルから最新の感情タグを取得
-  - AIが会話内容に応じて適切な感情タグを選択
-  - メッセージテキストの先頭に `[感情タグ名]` を付加（例: `[emotional] こんにちは`）
-  - ElevenLabs音声生成で使用され、感情表現豊かな音声を生成
-- **カメラ情報機能**:
-  - `kazikastudio.m_camera_angles` (6種類) と `kazikastudio.m_shot_distances` (7種類) から取得
-  - シーン生成時に適切なカメラアングルとショット距離を選択
-  - 画像生成プロンプトに含めることで、一貫性のあるビジュアル表現を実現
+- **感情タグ機能（データベース駆動）**:
+  - `buildConversationPrompt()` が呼び出されるたびに `kazikastudio.eleven_labs_tags` テーブルから**最新の感情タグ**を取得
+  - マスターテーブルに新しい感情タグを追加すると、次回の会話生成から**自動的に反映**される
+  - AIが取得した感情タグのリストから、会話の文脈に応じて各メッセージに適切な感情タグを自動選択
+  - メッセージテキストに `[タグ名]` 形式でプレフィックスとして追加され、ElevenLabs音声生成時に使用される
+  - メタデータにも `emotionTag` として保存され、後から参照可能
+
 - **シーンプロンプト機能（日本語・英語）**:
   - AIが各メッセージごとに画像生成用のプロンプトを**日本語と英語の両方**で生成
   - **日本語プロンプト（`scenePromptJa`）**: 100-150文字程度で、場所・時間帯・キャラクターの配置・表情・雰囲気を詳細に描写
@@ -45,62 +45,62 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
   - `conversation_messages` テーブルの `scene_prompt_ja` と `scene_prompt_en` カラムに保存
   - metadataではなく専用カラムに保存することで、検索・フィルタリングが容易に
 
-**データベーステーブル**:
-```sql
--- 感情タグ（ElevenLabs用）
-kazikastudio.eleven_labs_tags
-  - id, name, description, description_ja, created_at
-
--- カメラアングル（6種類）
-kazikastudio.m_camera_angles
-  - id, name, description, created_at
-
--- ショット距離（7種類）
-kazikastudio.m_shot_distances
-  - id, name, description, created_at
-
--- 会話メッセージ（シーンプロンプトカラム追加）
-conversation_messages
-  - scene_prompt_ja: 日本語シーンプロンプト
-  - scene_prompt_en: 英語シーンプロンプト
-  - metadata.emotionTag: 感情タグ名
-```
-
-**AI生成出力例**:
-```json
-{
-  "messages": [
-    {
-      "speaker": "太郎",
-      "message": "驚いた！そんなことがあったんだ！",
-      "emotion": "surprised",
-      "emotionTag": "energetic",
-      "scene": "太郎が目を見開いて驚いた表情で立っている",
-      "scenePromptJa": "学校の廊下、昼下がり。太郎が驚いて目を見開き、両手を広げている。背景には教室のドアと窓から差し込む光。",
-      "scenePromptEn": "school hallway, afternoon, young boy with wide eyes, surprised expression, hands spread out, classroom door and window light in background, anime style, high quality, detailed, medium shot, eye level angle"
-    }
-  ]
-}
-```
+- **カメラ情報機能（データベース駆動）**:
+  - `buildScenePrompt()` が呼び出されるたびに `kazikastudio.m_camera_angles` と `kazikastudio.m_shot_distances` テーブルから**最新のカメラ情報**を取得
+  - マスターテーブルに新しいカメラアングルやショット距離を追加すると、次回のシーン生成から**自動的に反映**される
+  - **会話全体の最初のシーン**: AIが取得したカメラ情報のリストから、会話の内容に応じて適切なカメラアングルとショット距離を選択
+  - **メッセージグループごとのシーン**: ランダムなカメラアングルとショット距離を割り当てて、シーンにバリエーションを追加
+  - 選択されたカメラ情報は画像生成プロンプトに含まれ（例: "from low angle, medium close-up shot"）、metadata にも保存
 
 **データフロー**:
-1. **プロンプト生成時**: `buildConversationPrompt()` → データベースから最新の感情タグ、カメラアングル、ショット距離を取得 → AIプロンプトに含める
-2. **AI応答**: 会話内容と各メッセージの感情タグ、シーンプロンプト（日・英）を生成
-3. **データ保存**:
-   - メッセージテキスト = `[emotionTag] message`
-   - `scene_prompt_ja` カラム = 日本語プロンプト
-   - `scene_prompt_en` カラム = 英語プロンプト
-   - `metadata.emotionTag` = 感情タグ名
-4. **GUI表示**: ConversationViewer が専用カラムからシーンプロンプトを読み込んで表示（青枠=日本語、緑枠=英語）
+1. ユーザーが会話生成をリクエスト（キャラクター、シチュエーション、メッセージ数）
+2. `buildConversationPrompt()` が `kazikastudio.eleven_labs_tags` から**最新の感情タグリスト**を取得
+3. プロンプトに感情タグリストとシーンプロンプト生成指示を含めてGemini AIに送信
+4. Gemini AIが各メッセージに `emotionTag`, `scenePromptJa`, `scenePromptEn` を付けて会話を生成
+5. メッセージ保存時に：
+   - `[emotionTag]` をテキストの先頭に追加
+   - `scenePromptJa` を `conversation_messages.scene_prompt_ja` に保存
+   - `scenePromptEn` を `conversation_messages.scene_prompt_en` に保存
+6. `buildScenePrompt()` が `kazikastudio.m_camera_angles` と `kazikastudio.m_shot_distances` から**最新のカメラ情報**を取得
+7. プロンプトにカメラ情報リストを含めてGemini AIに送信
+8. 最初のシーンはAIがカメラ情報リストから適切なものを選択、その他のシーンはランダムに割り当て
+9. シーンプロンプトにカメラ情報を含めて保存
 
 **影響範囲**:
-- ✅ 会話生成時に最新のマスターデータを常に使用
-- ✅ ElevenLabs音声生成で感情タグを活用
-- ✅ シーン画像生成で日本語・英語の両プロンプトを使い分け可能
-- ✅ カメラアングル・ショット距離でビジュアル表現を制御
-- ✅ 専用カラムに保存することでクエリ効率が向上
+- 会話生成時に感情タグが自動的に設定され、ElevenLabs音声生成で感情表現が可能に
+- シーン生成時にカメラ情報が自動的に設定され、より映像的な画像生成プロンプトが作成される
+- **マスターテーブルの変更が即座に反映**: `/app/master` ページで感情タグやカメラ情報を追加・編集すると、次回の会話生成から自動的に利用可能になる
+- 既存の会話データには影響なし（後方互換性を維持）
+- `/docs/conversation-generation-enhancements.md` に詳細なドキュメントを追加
 
-**関連ドキュメント**: [conversation-generation-enhancements.md](/docs/conversation-generation-enhancements.md)
+**使用例**:
+```json
+// メッセージ生成例
+{
+  "speaker": "主人公",
+  "message": "実は最近、将来のことで悩んでいるんだ...",
+  "emotion": "sad",
+  "emotionTag": "serious",
+  "scene": "主人公は柵に寄りかかり、遠くを見つめながら話す",
+  "scenePromptJa": "夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。真剣な表情で将来について考えている。",
+  "scenePromptEn": "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, serious expression thinking about future, anime style, high quality, detailed, cinematic lighting"
+}
+
+// データベース保存
+{
+  "message_text": "[serious] 実は最近、将来のことで悩んでいるんだ...",
+  "scene_prompt_ja": "夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。真剣な表情で将来について考えている。",
+  "scene_prompt_en": "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, serious expression thinking about future, anime style, high quality, detailed, cinematic lighting"
+}
+
+// シーン生成例
+{
+  "sceneDescription": "夕暮れ時の学校の屋上。主人公は柵に寄りかかり...",
+  "imagePrompt": "rooftop scene at sunset, from low angle, medium close-up shot, anime style",
+  "cameraAngle": "ローアングル",
+  "shotDistance": "ミディアムクローズアップ"
+}
+```
 
 ---
 

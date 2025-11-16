@@ -10,6 +10,7 @@ import {
   parseScenePromptResponse
 
 } from '@/lib/conversation/prompt-builder';
+import { getAllCameraAngles, getAllShotDistances } from '@/lib/db'; // Still needed for random scene generation
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**
@@ -92,8 +93,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build prompt
-    const prompt = buildConversationPrompt({
+    // Build prompt (now async - fetches emotion tags from database)
+    const prompt = await buildConversationPrompt({
       characters: characters.map(c => ({
         id: c.id,
         name: c.name,
@@ -184,15 +185,21 @@ export async function POST(request: NextRequest) {
     // Save messages to database
     const messagesToInsert = parsed.messages.map((msg, idx) => {
       const character = characters.find(c => c.name === msg.speaker);
+      // Add emotion tag to message text if present
+      const emotionTagPrefix = msg.emotionTag ? `[${msg.emotionTag}] ` : '';
+      const messageTextWithTag = emotionTagPrefix + msg.message;
+
       return {
         conversation_id: conversation.id,
         character_id: character?.id || null,
         speaker_name: msg.speaker,
-        message_text: msg.message,
+        message_text: messageTextWithTag,
         sequence_order: idx,
+        scene_prompt_ja: msg.scenePromptJa || null,
+        scene_prompt_en: msg.scenePromptEn || null,
         metadata: {
           emotion: msg.emotion || 'neutral',
-          scene: msg.scene || ''
+          emotionTag: msg.emotionTag || 'neutral'
         }
       };
     });
@@ -220,6 +227,10 @@ export async function POST(request: NextRequest) {
     const scenesPerConversation = Math.max(1, Math.ceil(messages.length / 4)); // Aim for ~4 messages per scene
     const scenesToInsert = [];
 
+    // Fetch camera angles and shot distances from database for scene generation
+    const cameraAngles = await getAllCameraAngles();
+    const shotDistances = await getAllShotDistances();
+
     for (let i = 0; i < scenesPerConversation; i++) {
       const startIdx = Math.floor(i * messages.length / scenesPerConversation);
       const endIdx = Math.floor((i + 1) * messages.length / scenesPerConversation);
@@ -234,8 +245,15 @@ export async function POST(request: NextRequest) {
 
       const sceneDescription = `Scene ${i + 1}: ${sceneMessages[0].speaker_name}との会話 (${sceneMessages.length}メッセージ)`;
 
-      // Create image generation prompt based on the scene context
-      const imagePrompt = `${body.situation}の場面で、${sceneMessages.map(m => m.speaker_name).filter((v, i, a) => a.indexOf(v) === i).join('と')}が会話している様子。${sceneMessages[0].metadata?.emotion || 'neutral'}な雰囲気。`;
+      // Get random camera angle and shot distance for variety
+      const randomCameraAngle = cameraAngles[Math.floor(Math.random() * cameraAngles.length)];
+      const randomShotDistance = shotDistances[Math.floor(Math.random() * shotDistances.length)];
+
+      // Create image generation prompt based on the scene context with camera info
+      const cameraInfo = randomCameraAngle && randomShotDistance
+        ? `, ${randomCameraAngle.name}, ${randomShotDistance.name}`
+        : '';
+      const imagePrompt = `${body.situation}の場面で、${sceneMessages.map(m => m.speaker_name).filter((v, i, a) => a.indexOf(v) === i).join('と')}が会話している様子。${sceneMessages[0].metadata?.emotion || 'neutral'}な雰囲気${cameraInfo}。`;
 
       scenesToInsert.push({
         conversation_id: conversation.id,
@@ -246,7 +264,9 @@ export async function POST(request: NextRequest) {
           message_ids: sceneMessages.map(m => m.id),
           start_sequence: startIdx,
           end_sequence: endIdx - 1,
-          dialogue_preview: sceneDialogue.slice(0, 200)
+          dialogue_preview: sceneDialogue.slice(0, 200),
+          cameraAngle: randomCameraAngle?.name || null,
+          shotDistance: randomShotDistance?.name || null
         }
       });
     }
@@ -278,7 +298,8 @@ export async function POST(request: NextRequest) {
     console.log('Generating scene image prompt...');
     let sceneData = null;
     try {
-      const scenePrompt = buildScenePrompt(
+      // Build scene prompt (now async - fetches camera angles and shot distances from database)
+      const scenePrompt = await buildScenePrompt(
         body.situation,
         characters.map(c => ({
           name: c.name,
@@ -291,14 +312,18 @@ export async function POST(request: NextRequest) {
       const sceneAiResponse = sceneResult.response.text();
       const scenePromptData = await parseScenePromptResponse(sceneAiResponse);
 
-      // Save scene to database
+      // Save scene to database with camera info
       const { data: scene, error: sceneError } = await supabase
         .from('conversation_scenes')
         .insert({
           conversation_id: conversation.id,
           scene_number: 1,
           scene_description: scenePromptData.sceneDescription,
-          image_generation_prompt: scenePromptData.imagePrompt
+          image_generation_prompt: scenePromptData.imagePrompt,
+          metadata: {
+            cameraAngle: scenePromptData.cameraAngle || null,
+            shotDistance: scenePromptData.shotDistance || null
+          }
         })
         .select()
         .single();
