@@ -549,6 +549,32 @@ export default function NanobanaNodeSettings({ node, nodes, edges, onClose, onUp
             参照画像（最大4つ）
           </Typography>
 
+          {/* Incoming Images Info */}
+          {incomingImages.length > 0 && (
+            <Alert
+              severity={incomingImages.some(img => img.hasImage) ? "success" : "warning"}
+              sx={{ fontSize: '0.875rem', mb: 2 }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                接続されているノード:
+              </Typography>
+              {incomingImages.map((img, index) => (
+                <Typography
+                  key={index}
+                  variant="caption"
+                  sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                >
+                  • {img.nodeName} {img.hasImage ? '✓ 画像あり' : '⚠ 画像なし'}
+                </Typography>
+              ))}
+              {incomingImages.some(img => img.hasImage) && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
+                  これらのノードから画像が参照画像として自動的に使用されます（最大4枚）
+                </Typography>
+              )}
+            </Alert>
+          )}
+
           {connectedInputs.images.length === 0 ? (
             <Box>
               <Alert severity="info" sx={{ fontSize: '0.875rem', mb: 2 }}>
