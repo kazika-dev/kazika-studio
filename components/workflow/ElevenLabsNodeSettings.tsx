@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Node } from 'reactflow';
 import {
   Box,
@@ -100,9 +99,8 @@ export default function ElevenLabsNodeSettings({ node, onClose, onUpdate, onDele
   };
 
   return (
-    <Drawer
-      anchor="right"
-      open={true}
+    <UnifiedNodeSettings
+      node={node}
       onClose={onClose}
       slotProps={{
         backdrop: {
