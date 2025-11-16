@@ -256,20 +256,41 @@ function SortableMessage({
             >
               {message.message_text}
             </Typography>
-            {message.metadata?.scene && (
-              <Typography
-                variant="body2"
-                sx={{
-                  mt: 1,
-                  padding: 1,
-                  backgroundColor: 'action.hover',
-                  borderRadius: 1,
-                  fontStyle: 'italic',
-                  color: 'text.secondary'
-                }}
-              >
-                {message.metadata.scene}
-              </Typography>
+            {/* Scene Prompts */}
+            {(message.scene_prompt_ja || message.scene_prompt_en) && (
+              <Box sx={{ mt: 2 }}>
+                {message.scene_prompt_ja && (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      mb: 1,
+                      padding: 1,
+                      backgroundColor: 'action.hover',
+                      borderRadius: 1,
+                      fontStyle: 'italic',
+                      color: 'text.secondary',
+                      borderLeft: '3px solid #2196f3'
+                    }}
+                  >
+                    <strong>日本語プロンプト:</strong> {message.scene_prompt_ja}
+                  </Typography>
+                )}
+                {message.scene_prompt_en && (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      padding: 1,
+                      backgroundColor: 'action.hover',
+                      borderRadius: 1,
+                      fontStyle: 'italic',
+                      color: 'text.secondary',
+                      borderLeft: '3px solid #4caf50'
+                    }}
+                  >
+                    <strong>English Prompt:</strong> {message.scene_prompt_en}
+                  </Typography>
+                )}
+              </Box>
             )}
           </>
         )}

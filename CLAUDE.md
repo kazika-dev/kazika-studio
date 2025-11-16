@@ -12,8 +12,97 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
+- **[会話生成機能の拡張](/docs/conversation-generation-enhancements.md)** - 感情タグ、カメラ情報、シーンプロンプトの統合
 
 ## 最近の主要な変更
+
+### 2025-11-16: 会話生成機能に感情タグ、カメラ情報、シーンプロンプトを追加
+
+**目的**: 会話生成時にElevenLabs感情タグとカメラ情報を動的に取得し、シーンプロンプトを日本語と英語の両方で生成
+
+**変更内容**:
+- `/lib/db.ts` にマスターデータ取得関数を追加（`getAllElevenLabsTags`, `getAllCameraAngles`, `getAllShotDistances`）
+- `/lib/conversation/prompt-builder.ts` をasync化し、データベースから最新のマスターデータを取得
+- `/types/conversation.ts` に `scene_prompt_ja`, `scene_prompt_en`, `emotionTag` フィールドを追加
+- `/app/api/conversations/generate/route.ts` で感情タグをメッセージテキストの先頭に付加、シーンプロンプトを専用カラムに保存
+- `/components/studio/conversation/ConversationViewer.tsx` でシーンプロンプトを専用カラムから表示
+
+**技術的詳細**:
+- **データベース駆動アプローチ**: マスターデータ（感情タグ、カメラアングル、ショット距離）を生成のたびにデータベースから取得
+- **感情タグ機能**:
+  - `kazikastudio.eleven_labs_tags` テーブルから最新の感情タグを取得
+  - AIが会話内容に応じて適切な感情タグを選択
+  - メッセージテキストの先頭に `[感情タグ名]` を付加（例: `[emotional] こんにちは`）
+  - ElevenLabs音声生成で使用され、感情表現豊かな音声を生成
+- **カメラ情報機能**:
+  - `kazikastudio.m_camera_angles` (6種類) と `kazikastudio.m_shot_distances` (7種類) から取得
+  - シーン生成時に適切なカメラアングルとショット距離を選択
+  - 画像生成プロンプトに含めることで、一貫性のあるビジュアル表現を実現
+- **シーンプロンプト機能（日本語・英語）**:
+  - AIが各メッセージごとに画像生成用のプロンプトを**日本語と英語の両方**で生成
+  - **日本語プロンプト（`scenePromptJa`）**: 100-150文字程度で、場所・時間帯・キャラクターの配置・表情・雰囲気を詳細に描写
+  - **英語プロンプト（`scenePromptEn`）**: Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含む
+  - `conversation_messages` テーブルの `scene_prompt_ja` と `scene_prompt_en` カラムに保存
+  - metadataではなく専用カラムに保存することで、検索・フィルタリングが容易に
+
+**データベーステーブル**:
+```sql
+-- 感情タグ（ElevenLabs用）
+kazikastudio.eleven_labs_tags
+  - id, name, description, description_ja, created_at
+
+-- カメラアングル（6種類）
+kazikastudio.m_camera_angles
+  - id, name, description, created_at
+
+-- ショット距離（7種類）
+kazikastudio.m_shot_distances
+  - id, name, description, created_at
+
+-- 会話メッセージ（シーンプロンプトカラム追加）
+conversation_messages
+  - scene_prompt_ja: 日本語シーンプロンプト
+  - scene_prompt_en: 英語シーンプロンプト
+  - metadata.emotionTag: 感情タグ名
+```
+
+**AI生成出力例**:
+```json
+{
+  "messages": [
+    {
+      "speaker": "太郎",
+      "message": "驚いた！そんなことがあったんだ！",
+      "emotion": "surprised",
+      "emotionTag": "energetic",
+      "scene": "太郎が目を見開いて驚いた表情で立っている",
+      "scenePromptJa": "学校の廊下、昼下がり。太郎が驚いて目を見開き、両手を広げている。背景には教室のドアと窓から差し込む光。",
+      "scenePromptEn": "school hallway, afternoon, young boy with wide eyes, surprised expression, hands spread out, classroom door and window light in background, anime style, high quality, detailed, medium shot, eye level angle"
+    }
+  ]
+}
+```
+
+**データフロー**:
+1. **プロンプト生成時**: `buildConversationPrompt()` → データベースから最新の感情タグ、カメラアングル、ショット距離を取得 → AIプロンプトに含める
+2. **AI応答**: 会話内容と各メッセージの感情タグ、シーンプロンプト（日・英）を生成
+3. **データ保存**:
+   - メッセージテキスト = `[emotionTag] message`
+   - `scene_prompt_ja` カラム = 日本語プロンプト
+   - `scene_prompt_en` カラム = 英語プロンプト
+   - `metadata.emotionTag` = 感情タグ名
+4. **GUI表示**: ConversationViewer が専用カラムからシーンプロンプトを読み込んで表示（青枠=日本語、緑枠=英語）
+
+**影響範囲**:
+- ✅ 会話生成時に最新のマスターデータを常に使用
+- ✅ ElevenLabs音声生成で感情タグを活用
+- ✅ シーン画像生成で日本語・英語の両プロンプトを使い分け可能
+- ✅ カメラアングル・ショット距離でビジュアル表現を制御
+- ✅ 専用カラムに保存することでクエリ効率が向上
+
+**関連ドキュメント**: [conversation-generation-enhancements.md](/docs/conversation-generation-enhancements.md)
+
+---
 
 ### 2025-11-16: Seedream4ノードにOutput画像選択機能を追加
 
