@@ -243,6 +243,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             required: false,
             helperText: 'この画像を他のノード（GeminiやNanobana）で参照できます。画像サイズは5MB以下にしてください。',
           },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
