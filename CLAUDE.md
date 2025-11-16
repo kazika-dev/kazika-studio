@@ -24,15 +24,17 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - そのため、Output画像選択機能が正しく動作しない（`node.data.config.selectedOutputIds` が `undefined`）
 
 **変更内容**:
-- `/components/workflow/WorkflowEditor.tsx` に `migrateNodeConfig()` 関数を追加
-- ワークフロード込み時に自動的にマイグレーションを実行
+- `/lib/workflow/migration.ts` に共通のマイグレーション関数 `migrateNodeConfig()` を作成
+- `/app/api/workflows/execute-draft/route.ts` で実行前にマイグレーションを適用
+- `/components/workflow/WorkflowEditor.tsx` でワークフロード込み時にマイグレーションを適用
 - Nanobana/Geminiノードで `config.selectedOutputIds === undefined` の場合、`selectedOutputIds: []` を追加
 - デバッグログを追加して、マイグレーションの実行を確認可能に
 
 **技術的詳細**:
-- `loadWorkflow()` 内でノードを `setNodes()` する前に `migrateNodeConfig()` を呼び出す
+- マイグレーション関数を `/lib/workflow/migration.ts` で一元管理
+- **API側（`execute-draft/route.ts`）で実行前に自動的にマイグレーションを適用** ← これが重要！
+- WorkflowEditor では `loadWorkflow()` 内でノードを `setNodes()` する前に `migrateNodeConfig()` を呼び出す
 - URLパラメータからの読み込みと最新ワークフローの読み込み、両方に適用
-- `useCallback` でメモ化して、不要な再レンダリングを防止
 
 **影響範囲**:
 - 既存のワークフローを開いたときに、自動的に `selectedOutputIds: []` が追加される

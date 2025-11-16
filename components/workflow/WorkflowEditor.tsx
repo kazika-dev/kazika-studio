@@ -29,6 +29,7 @@ import Seedream4Node from './Seedream4Node';
 import CharacterSheetNode from './CharacterSheetNode';
 import RapidNode from './RapidNode';
 import ComfyUINode from './ComfyUINode';
+import { migrateNodeConfig } from '@/lib/workflow/migration';
 import PopcornNode from './PopcornNode';
 import QwenImageNode from './QwenImageNode';
 import NodeSettings from './NodeSettings';
@@ -124,31 +125,6 @@ export default function WorkflowEditor() {
   const [currentWorkflowName, setCurrentWorkflowName] = useState<string | undefined>(undefined);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // ノード設定のマイグレーション処理（後方互換性のため）
-  const migrateNodeConfig = useCallback((nodes: Node[]) => {
-    return nodes.map((node) => {
-      const nodeType = node.data.type;
-      const config = node.data.config || {};
-
-      // nanobana, gemini ノードに selectedOutputIds フィールドを追加
-      if ((nodeType === 'nanobana' || nodeType === 'gemini') && config.selectedOutputIds === undefined) {
-        console.log(`[Migration] Adding selectedOutputIds to ${nodeType} node:`, node.id);
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            config: {
-              ...config,
-              selectedOutputIds: [],
-            },
-          },
-        };
-      }
-
-      return node;
-    });
-  }, []);
-
   // 初回ロード時にURLパラメータまたは最新のワークフローを自動読み込み
   useEffect(() => {
     const loadWorkflow = async () => {
@@ -202,7 +178,7 @@ export default function WorkflowEditor() {
     if (isInitialLoad) {
       loadWorkflow();
     }
-  }, [isInitialLoad, searchParams, setNodes, setEdges, migrateNodeConfig]);
+  }, [isInitialLoad, searchParams, setNodes, setEdges]);
 
   // ノード更新イベントのリスナー
   useEffect(() => {
