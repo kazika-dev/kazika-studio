@@ -14,7 +14,7 @@ import {
   AppBar,
   Toolbar
 } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight } from '@mui/icons-material';
 
 interface ImageEditorModalProps {
   open: boolean;
@@ -23,21 +23,23 @@ interface ImageEditorModalProps {
   onSave: (imageData: { mimeType: string; data: string }) => void;
 }
 
-type DrawingMode = 'pen' | 'circle' | 'square' | 'erase';
+type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase';
 
 interface DrawingPath {
   mode: DrawingMode;
   color: string;
   lineWidth: number;
+  opacity: number;
   points: { x: number; y: number }[];
 }
 
 export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: ImageEditorModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingMode, setDrawingMode] = useState<DrawingMode>('pen');
-  const [color, setColor] = useState('#FF0000');
-  const [lineWidth, setLineWidth] = useState(5);
+  const [drawingMode, setDrawingMode] = useState<DrawingMode>('marker');
+  const [color, setColor] = useState('#FFFF00');
+  const [lineWidth, setLineWidth] = useState(30);
+  const [opacity, setOpacity] = useState(0.5);
   const [history, setHistory] = useState<DrawingPath[]>([]);
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -86,18 +88,27 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
   const drawPath = (ctx: CanvasRenderingContext2D, path: DrawingPath) => {
     if (path.points.length === 0) return;
 
-    ctx.strokeStyle = path.color;
     ctx.lineWidth = path.lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     if (path.mode === 'erase') {
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = path.color;
     } else {
       ctx.globalCompositeOperation = 'source-over';
+      // 半透明カラーを設定
+      const hexToRgba = (hex: string, alpha: number) => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      };
+      ctx.strokeStyle = hexToRgba(path.color, path.opacity);
+      ctx.fillStyle = hexToRgba(path.color, path.opacity);
     }
 
-    if (path.mode === 'pen' || path.mode === 'erase') {
+    if (path.mode === 'pen' || path.mode === 'marker' || path.mode === 'erase') {
       // フリーハンド描画
       ctx.beginPath();
       ctx.moveTo(path.points[0].x, path.points[0].y);
@@ -139,6 +150,7 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
       mode: drawingMode,
       color: drawingMode === 'erase' ? '#FFFFFF' : color,
       lineWidth,
+      opacity,
       points: [{ x, y }],
     });
   };
@@ -235,16 +247,19 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
             size="small"
             sx={{ mr: 2 }}
           >
-            <ToggleButton value="pen">
+            <ToggleButton value="pen" title="ペン">
               <Edit />
             </ToggleButton>
-            <ToggleButton value="circle">
+            <ToggleButton value="marker" title="マーカー">
+              <Highlight />
+            </ToggleButton>
+            <ToggleButton value="circle" title="円">
               <Circle />
             </ToggleButton>
-            <ToggleButton value="square">
+            <ToggleButton value="square" title="四角">
               <Square />
             </ToggleButton>
-            <ToggleButton value="erase">
+            <ToggleButton value="erase" title="消しゴム">
               <Delete />
             </ToggleButton>
           </ToggleButtonGroup>
@@ -273,9 +288,23 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
               value={lineWidth}
               onChange={(_, value) => setLineWidth(value as number)}
               min={1}
-              max={20}
+              max={80}
               size="small"
             />
+            <Typography variant="caption" sx={{ minWidth: 30 }}>{lineWidth}</Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 150, mr: 2 }}>
+            <Typography variant="body2">透明度:</Typography>
+            <Slider
+              value={opacity}
+              onChange={(_, value) => setOpacity(value as number)}
+              min={0.1}
+              max={1}
+              step={0.1}
+              size="small"
+            />
+            <Typography variant="caption" sx={{ minWidth: 30 }}>{Math.round(opacity * 100)}%</Typography>
           </Box>
 
           <Box sx={{ marginLeft: 'auto', display: 'flex', gap: 1 }}>
