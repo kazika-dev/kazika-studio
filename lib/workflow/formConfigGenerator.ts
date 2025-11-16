@@ -43,6 +43,30 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             rows: 6,
             helperText: '前のノードの結果を {{prev.response}} または {{ノード名.response}} で参照できます',
           },
+          {
+            type: 'characterSheets',
+            name: 'selectedCharacterSheetIds',
+            label: 'キャラクターシート',
+            required: false,
+            maxSelections: 4,
+            helperText: '画像認識に使用するキャラクターシート（最大4つ）',
+          },
+          {
+            type: 'images',
+            name: 'referenceImages',
+            label: '参照画像',
+            required: false,
+            maxImages: 4,
+            helperText: '画像認識の参照として使用する画像（最大4つ、5MB以下）',
+          },
+          {
+            type: 'outputSelector',
+            name: 'selectedOutputIds',
+            label: 'Output画像選択',
+            required: false,
+            maxSelections: 4,
+            helperText: '以前に生成された画像から最大4枚まで選択できます',
+          },
         ],
       };
 
