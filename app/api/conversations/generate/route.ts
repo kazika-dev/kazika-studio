@@ -200,13 +200,13 @@ export async function POST(request: NextRequest) {
         }
       }
       // 優先順位2: speakerIdがない場合は名前でマッチング
-      if (!character) {
+      if (!character && msg.speaker) {
         // 完全一致を試みる
         character = characters.find(c => c.name === msg.speaker);
         // 完全一致しない場合、部分一致を試みる
         if (!character) {
           character = characters.find(c =>
-            c.name.includes(msg.speaker) || msg.speaker.includes(c.name)
+            c.name.includes(msg.speaker!) || msg.speaker!.includes(c.name)
           );
         }
         // それでも見つからない場合、トリムして比較
@@ -221,6 +221,10 @@ export async function POST(request: NextRequest) {
       if (!character) {
         console.warn(`[Message ${idx}] Character not found for speakerId:${msg.speakerId}, speaker:"${msg.speaker}". Available characters:`, characters.map(c => ({ id: c.id, name: c.name })));
       }
+
+      // Determine speaker_name: use speaker if provided, otherwise use character name
+      const speakerName = msg.speaker || character?.name || 'Unknown';
+
       // Add emotion tag to message text if present
       const emotionTagPrefix = msg.emotionTag ? `[${msg.emotionTag}] ` : '';
       const messageTextWithTag = emotionTagPrefix + msg.message;
@@ -228,7 +232,7 @@ export async function POST(request: NextRequest) {
       return {
         conversation_id: conversation.id,
         character_id: character?.id || null,
-        speaker_name: msg.speaker,
+        speaker_name: speakerName,
         message_text: messageTextWithTag,
         sequence_order: idx,
         scene_prompt_ja: msg.scenePromptJa || null,

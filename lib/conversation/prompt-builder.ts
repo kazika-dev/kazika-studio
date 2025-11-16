@@ -83,9 +83,9 @@ ${previousMessagesSection}
 
 ## 重要な注意事項
 - 各キャラクターの性格と話し方の特徴を必ず反映してください
-- speakerフィールドには必ずキャラクター名のいずれかを使用してください
-- **speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
-- **speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
+- **【必須】speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
+- **【オプション】speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
+  - speakerIdが正しく設定されていれば、speakerフィールドは省略可能です
 - 自然な会話の流れを作ってください
 - 感情(emotion)は会話の文脈に合わせて適切に設定してください
 - **emotionTag（感情タグ）は、メッセージの音声化に使用されます。以下の利用可能な感情タグから適切なものを選んでください：**
@@ -141,8 +141,10 @@ export async function parseAIResponse(
 
     // Validate each message
     for (const msg of parsed.messages) {
-      if (!msg.speaker || typeof msg.speaker !== 'string') {
-        throw new Error('Invalid message: missing or invalid speaker');
+      // Either speaker or speakerId must be present
+      if ((!msg.speaker || typeof msg.speaker !== 'string') &&
+          (msg.speakerId === undefined || msg.speakerId === null)) {
+        throw new Error('Invalid message: missing or invalid speaker/speakerId');
       }
       if (!msg.message || typeof msg.message !== 'string') {
         throw new Error('Invalid message: missing or invalid message text');
