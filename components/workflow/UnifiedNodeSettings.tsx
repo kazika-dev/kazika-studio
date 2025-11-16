@@ -268,6 +268,8 @@ export default function UnifiedNodeSettings({
                   config={field}
                   value={formValues[field.name]}
                   onChange={(value) => handleFormValueChange(field.name, value)}
+                  allValues={formValues}
+                  onFieldChange={handleFormValueChange}
                 />
               ))}
             </>

@@ -343,6 +343,8 @@ function FormPageContent() {
                   config={field}
                   value={formValues[field.name]}
                   onChange={(value) => handleFieldChange(field.name, value)}
+                  allValues={formValues}
+                  onFieldChange={handleFieldChange}
                 />
               ))}
             </Stack>

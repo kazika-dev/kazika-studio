@@ -24,7 +24,7 @@ import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags';
   name: string;
   label: string;
   placeholder?: string;
@@ -37,15 +37,18 @@ export interface FormFieldConfig {
   min?: number;
   max?: number;
   step?: number;
+  targetFieldName?: string; // タグ挿入先のフィールド名
 }
 
 interface DynamicFormFieldProps {
   config: FormFieldConfig;
   value: any;
   onChange: (value: any) => void;
+  allValues?: Record<string, any>; // 全フィールドの値（タグ挿入用）
+  onFieldChange?: (fieldName: string, value: any) => void; // 他フィールド更新用
 }
 
-export default function DynamicFormField({ config, value, onChange }: DynamicFormFieldProps) {
+export default function DynamicFormField({ config, value, onChange, allValues, onFieldChange }: DynamicFormFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -670,6 +673,84 @@ export default function DynamicFormField({ config, value, onChange }: DynamicFor
             </Box>
           }
         />
+      </Box>
+    );
+  }
+
+  // タグ選択（ElevenLabsタグ）
+  if (config.type === 'tags') {
+    const [tags, setTags] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const loadTags = async () => {
+        try {
+          setLoading(true);
+          const response = await fetch('/api/eleven-labs-tags');
+          const data = await response.json();
+
+          if (data.success) {
+            setTags(data.tags);
+          } else {
+            console.error('Failed to load tags:', data.error);
+          }
+        } catch (error) {
+          console.error('Failed to load tags:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadTags();
+    }, []);
+
+    const handleInsertTag = (tagName: string) => {
+      if (!config.targetFieldName || !onFieldChange || !allValues) {
+        console.error('targetFieldName, onFieldChange, or allValues not provided');
+        return;
+      }
+
+      const currentText = allValues[config.targetFieldName] || '';
+      const newText = currentText + `[${tagName}]`;
+      onFieldChange(config.targetFieldName, newText);
+    };
+
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          {config.label}
+        </Typography>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            {config.helperText}
+          </Typography>
+        )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : tags.length === 0 ? (
+          <Alert severity="info">タグがありません</Alert>
+        ) : (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {tags.map((tag) => (
+              <Button
+                key={tag.id}
+                variant="outlined"
+                size="small"
+                onClick={() => handleInsertTag(tag.name)}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  fontSize: '0.875rem',
+                }}
+              >
+                {tag.name_ja || tag.name}
+              </Button>
+            ))}
+          </Box>
+        )}
       </Box>
     );
   }

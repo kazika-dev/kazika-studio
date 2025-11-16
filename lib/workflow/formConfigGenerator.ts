@@ -131,6 +131,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             rows: 6,
             helperText: '前のノードの結果を参照可能です',
           },
+          {
+            type: 'tags',
+            name: 'elevenLabsTags',
+            label: 'タグ挿入',
+            required: false,
+            targetFieldName: 'text',
+            helperText: 'クリックしてテキストフィールドにタグを挿入',
+          },
         ],
       };
 
