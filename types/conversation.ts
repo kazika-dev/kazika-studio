@@ -1,8 +1,32 @@
 // Conversation types for the character conversation system
 
+// Story types
+export interface Story {
+  id: number;
+  user_id: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, any>;
+}
+
+export interface StoryScene {
+  id: number;
+  story_id: number;
+  title: string;
+  description: string | null;
+  sequence_order: number;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, any>;
+}
+
 export interface Conversation {
   id: number;
-  studio_id: number;
+  studio_id: number | null;
+  story_scene_id: number | null;
   title: string;
   description: string | null;
   created_at: string;
@@ -74,6 +98,7 @@ export interface CharacterSheet {
 
 export interface GenerateConversationRequest {
   studioId?: number;
+  storySceneId?: number;
   title: string;
   characterIds: number[];
   situation: string;
@@ -196,4 +221,62 @@ export interface GeneratedMessage {
 
 export interface ConversationGenerationAIResponse {
   messages: GeneratedMessage[];
+}
+
+// Story API types
+export interface CreateStoryRequest {
+  title: string;
+  description?: string;
+  thumbnail_url?: string;
+}
+
+export interface CreateStoryResponse {
+  success: boolean;
+  data?: {
+    story: Story;
+  };
+  error?: string;
+}
+
+export interface ListStoriesResponse {
+  success: boolean;
+  data?: {
+    stories: Array<Story & {
+      sceneCount?: number;
+      conversationCount?: number;
+    }>;
+  };
+  error?: string;
+}
+
+export interface CreateStorySceneRequest {
+  title: string;
+  description?: string;
+  sequence_order?: number;
+}
+
+export interface CreateStorySceneResponse {
+  success: boolean;
+  data?: {
+    scene: StoryScene;
+  };
+  error?: string;
+}
+
+export interface ListStoryScenesResponse {
+  success: boolean;
+  data?: {
+    scenes: Array<StoryScene & {
+      conversationCount?: number;
+    }>;
+  };
+  error?: string;
+}
+
+export interface StoryTreeNode {
+  story: Story;
+  scenes: Array<{
+    scene: StoryScene;
+    conversations: Conversation[];
+  }>;
 }

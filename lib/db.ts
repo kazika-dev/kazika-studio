@@ -1371,3 +1371,275 @@ export async function getRandomSoundEffectByCategory(category: string) {
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }
+
+// =====================================================
+// ストーリー・シーン関連の関数
+// =====================================================
+
+/**
+ * ユーザーの全ストーリーを取得
+ */
+export async function getStoriesByUserId(userId: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.stories WHERE user_id = $1 ORDER BY updated_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * ストーリーIDでストーリーを取得
+ */
+export async function getStoryById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.stories WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * ストーリーを作成
+ */
+export async function createStory(data: {
+  user_id: string;
+  title: string;
+  description?: string;
+  thumbnail_url?: string;
+  metadata?: any;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.stories (user_id, title, description, thumbnail_url, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.title,
+      data.description || null,
+      data.thumbnail_url || null,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ストーリーを更新
+ */
+export async function updateStory(id: number, data: {
+  title?: string;
+  description?: string;
+  thumbnail_url?: string;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.title !== undefined) {
+    updates.push(`title = $${paramIndex++}`);
+    values.push(data.title);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.thumbnail_url !== undefined) {
+    updates.push(`thumbnail_url = $${paramIndex++}`);
+    values.push(data.thumbnail_url);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.stories
+     SET ${updates.join(', ')}, updated_at = now()
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+/**
+ * ストーリーを削除
+ */
+export async function deleteStory(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.stories WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows[0];
+}
+
+/**
+ * ストーリーIDでシーンを取得
+ */
+export async function getScenesByStoryId(storyId: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.story_scenes WHERE story_id = $1 ORDER BY sequence_order ASC',
+    [storyId]
+  );
+  return result.rows;
+}
+
+/**
+ * シーンIDでシーンを取得
+ */
+export async function getSceneById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.story_scenes WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * シーンを作成
+ */
+export async function createStoryScene(data: {
+  story_id: number;
+  title: string;
+  description?: string;
+  sequence_order?: number;
+  metadata?: any;
+}) {
+  // sequence_orderが指定されていない場合は、最後に追加
+  let sequenceOrder = data.sequence_order;
+  if (sequenceOrder === undefined) {
+    const maxOrderResult = await query(
+      'SELECT COALESCE(MAX(sequence_order), 0) as max_order FROM kazikastudio.story_scenes WHERE story_id = $1',
+      [data.story_id]
+    );
+    sequenceOrder = (maxOrderResult.rows[0].max_order || 0) + 1;
+  }
+
+  const result = await query(
+    `INSERT INTO kazikastudio.story_scenes (story_id, title, description, sequence_order, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      data.story_id,
+      data.title,
+      data.description || null,
+      sequenceOrder,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * シーンを更新
+ */
+export async function updateStoryScene(id: number, data: {
+  title?: string;
+  description?: string;
+  sequence_order?: number;
+  metadata?: any;
+}) {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.title !== undefined) {
+    updates.push(`title = $${paramIndex++}`);
+    values.push(data.title);
+  }
+  if (data.description !== undefined) {
+    updates.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.sequence_order !== undefined) {
+    updates.push(`sequence_order = $${paramIndex++}`);
+    values.push(data.sequence_order);
+  }
+  if (data.metadata !== undefined) {
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (updates.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.story_scenes
+     SET ${updates.join(', ')}, updated_at = now()
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+  return result.rows[0];
+}
+
+/**
+ * シーンを削除
+ */
+export async function deleteStoryScene(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.story_scenes WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows[0];
+}
+
+/**
+ * シーンIDで会話を取得
+ */
+export async function getConversationsBySceneId(sceneId: number) {
+  const result = await query(
+    `SELECT c.*,
+            COUNT(DISTINCT cm.id) as message_count,
+            COUNT(DISTINCT cs.id) as scene_count
+     FROM kazikastudio.conversations c
+     LEFT JOIN kazikastudio.conversation_messages cm ON cm.conversation_id = c.id
+     LEFT JOIN kazikastudio.conversation_scenes cs ON cs.conversation_id = c.id
+     WHERE c.story_scene_id = $1
+     GROUP BY c.id
+     ORDER BY c.updated_at DESC`,
+    [sceneId]
+  );
+  return result.rows;
+}
+
+/**
+ * ユーザーの全ストーリーとシーン・会話の階層構造を取得
+ */
+export async function getStoriesTreeByUserId(userId: string) {
+  // 全ストーリーを取得
+  const stories = await getStoriesByUserId(userId);
+
+  const tree = await Promise.all(
+    stories.map(async (story) => {
+      // ストーリーごとのシーンを取得
+      const scenes = await getScenesByStoryId(story.id);
+
+      // 各シーンの会話を取得
+      const scenesWithConversations = await Promise.all(
+        scenes.map(async (scene) => {
+          const conversations = await getConversationsBySceneId(scene.id);
+          return {
+            scene,
+            conversations,
+          };
+        })
+      );
+
+      return {
+        story,
+        scenes: scenesWithConversations,
+      };
+    })
+  );
+
+  return tree;
+}

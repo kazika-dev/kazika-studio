@@ -16,14 +16,17 @@ import AddIcon from '@mui/icons-material/Add';
 import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
 import ConversationViewer from '@/components/studio/conversation/ConversationViewer';
-import ConversationList from '@/components/studio/conversation/ConversationList';
 import ConversationGeneratorDialogStandalone from '@/components/studio/conversation/ConversationGeneratorDialogStandalone';
+import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
+import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
+import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
+import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import type {
   Conversation,
   ConversationMessageWithCharacter,
   GetConversationResponse,
-  ListConversationsResponse
+  StoryTreeNode,
 } from '@/types/conversation';
 
 interface ConversationWithCount extends Conversation {
@@ -44,7 +47,7 @@ interface Character {
 export default function ConversationsPage() {
   const router = useRouter();
 
-  const [conversations, setConversations] = useState<ConversationWithCount[]>([]);
+  const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithCount | null>(null);
   const [messages, setMessages] = useState<ConversationMessageWithCharacter[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -52,27 +55,31 @@ export default function ConversationsPage() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [creatingStudio, setCreatingStudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [generatorDialogOpen, setGeneratorDialogOpen] = useState(false);
+  const [storyDialogOpen, setStoryDialogOpen] = useState(false);
+  const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
+  const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
+  const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
   useEffect(() => {
-    loadConversations();
+    loadStoryTree();
     loadAllCharacters();
   }, []);
 
-  const loadConversations = async () => {
+  const loadStoryTree = async () => {
     try {
-      const response = await fetch('/api/conversations');
-      const result: ListConversationsResponse = await response.json();
+      const response = await fetch('/api/stories/tree');
+      const result = await response.json();
 
       if (result.success && result.data) {
-        setConversations(result.data.conversations);
+        setStoryTree(result.data.tree);
       } else {
-        setError(result.error || '会話一覧の読み込みに失敗しました');
+        setError(result.error || 'ストーリーツリーの読み込みに失敗しました');
       }
     } catch (error) {
-      console.error('Failed to load conversations:', error);
-      setError('会話一覧の読み込みに失敗しました');
+      console.error('Failed to load story tree:', error);
+      setError('ストーリーツリーの読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
@@ -129,7 +136,7 @@ export default function ConversationsPage() {
       const result = await response.json();
 
       if (result.success) {
-        await loadConversations();
+        await loadStoryTree();
         if (selectedConversation?.id === conversationId) {
           setSelectedConversation(null);
           setMessages([]);
@@ -189,7 +196,6 @@ export default function ConversationsPage() {
         throw new Error(result.error || 'Failed to reorder messages');
       }
 
-      // Update local state
       setMessages(reorderedMessages);
     } catch (error) {
       console.error('Failed to reorder messages:', error);
@@ -209,7 +215,6 @@ export default function ConversationsPage() {
         throw new Error(result.error || 'Failed to delete message');
       }
 
-      // Update local state - remove the message
       setMessages(prev => prev.filter(msg => msg.id !== messageId));
     } catch (error) {
       console.error('Failed to delete message:', error);
@@ -218,9 +223,7 @@ export default function ConversationsPage() {
   };
 
   const handleConversationGenerated = async (conversationId: number) => {
-    // Reload conversations list
-    await loadConversations();
-    // Load the newly generated conversation
+    await loadStoryTree();
     await loadConversation(conversationId);
   };
 
@@ -249,7 +252,6 @@ export default function ConversationsPage() {
           ? `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードと${result.data.workflowStepCount || 0}個のワークフローステップが作成されました。`
           : `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードが作成されました。`;
         alert(message);
-        // Redirect to the studio page
         router.push(`/studios/${result.data.studioId}`);
       } else {
         throw new Error(result.error || 'Failed to create studio');
@@ -259,6 +261,54 @@ export default function ConversationsPage() {
       alert('スタジオの作成に失敗しました');
     } finally {
       setCreatingStudio(false);
+    }
+  };
+
+  const handleCreateScene = (storyId: number) => {
+    setSelectedStoryId(storyId);
+    setSceneDialogOpen(true);
+  };
+
+  const handleCreateConversation = (sceneId: number) => {
+    setSelectedSceneId(sceneId);
+    setConversationDialogOpen(true);
+  };
+
+  const handleDeleteStory = async (storyId: number) => {
+    try {
+      const response = await fetch(`/api/stories/${storyId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadStoryTree();
+      } else {
+        alert(`削除に失敗しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete story:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
+  const handleDeleteScene = async (sceneId: number) => {
+    try {
+      const response = await fetch(`/api/scenes/${sceneId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadStoryTree();
+      } else {
+        alert(`削除に失敗しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete scene:', error);
+      alert('削除に失敗しました');
     }
   };
 
@@ -279,19 +329,11 @@ export default function ConversationsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 2 }}>
           <ChatIcon sx={{ fontSize: 32 }} />
           <Box sx={{ flex: 1 }}>
-            <Typography variant="h4">全ての会話</Typography>
+            <Typography variant="h4">ストーリー・シーン・会話</Typography>
             <Typography variant="body2" color="text.secondary">
-              全てのスタジオの会話を表示
+              ストーリーごとにシーンと会話を管理
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setGeneratorDialogOpen(true)}
-            sx={{ mr: 1 }}
-          >
-            新しい会話を生成
-          </Button>
           <Button
             variant="outlined"
             onClick={() => router.push('/studios')}
@@ -310,79 +352,24 @@ export default function ConversationsPage() {
 
       {/* Content */}
       <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* Conversation List (Left Sidebar) */}
+        {/* Story Tree (Left Sidebar) */}
         <Box sx={{ width: { xs: '100%', md: '33%' } }}>
           <Paper elevation={2} sx={{ padding: 2, height: 'calc(100vh - 250px)', overflow: 'auto' }}>
             <Typography variant="h6" gutterBottom>
-              会話一覧
+              ストーリー階層
             </Typography>
             <Divider sx={{ mb: 2 }} />
-            {conversations.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-                会話がありません
-              </Typography>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {conversations.map((conv) => (
-                  <Box
-                    key={conv.id}
-                    onClick={() => handleSelectConversation(conv.id)}
-                    sx={{
-                      padding: 2,
-                      borderRadius: 1,
-                      cursor: 'pointer',
-                      backgroundColor: selectedConversation?.id === conv.id ? 'action.selected' : 'transparent',
-                      '&:hover': {
-                        backgroundColor: 'action.hover'
-                      }
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                        {conv.title}
-                      </Typography>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('この会話を削除しますか？')) {
-                            handleDeleteConversation(conv.id);
-                          }
-                        }}
-                        sx={{ minWidth: 'auto', padding: '2px 8px' }}
-                      >
-                        削除
-                      </Button>
-                    </Box>
-                    {conv.studios && (
-                      <Chip
-                        label={conv.studios.name}
-                        size="small"
-                        sx={{ mb: 1 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/studios/${conv.studios?.id}`);
-                        }}
-                      />
-                    )}
-                    {conv.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem', mb: 1 }}>
-                        {conv.description}
-                      </Typography>
-                    )}
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        {conv.messageCount || 0} メッセージ
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {conv.sceneCount || 0} シーン
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            )}
+            <StoryTreeView
+              tree={storyTree}
+              selectedConversationId={selectedConversation?.id || null}
+              onSelectConversation={handleSelectConversation}
+              onCreateStory={() => setStoryDialogOpen(true)}
+              onCreateScene={handleCreateScene}
+              onCreateConversation={handleCreateConversation}
+              onDeleteStory={handleDeleteStory}
+              onDeleteScene={handleDeleteScene}
+              onDeleteConversation={handleDeleteConversation}
+            />
           </Paper>
         </Box>
 
@@ -443,7 +430,7 @@ export default function ConversationsPage() {
                 <ChatIcon sx={{ fontSize: 80, opacity: 0.3 }} />
                 <Typography variant="h6">会話を選択してください</Typography>
                 <Typography variant="body2">
-                  左側のリストから会話を選択してください
+                  左側のツリーから会話を選択してください
                 </Typography>
               </Box>
             )}
@@ -451,14 +438,37 @@ export default function ConversationsPage() {
         </Box>
       </Box>
 
-      {/* Generator Dialog */}
-      <ConversationGeneratorDialogStandalone
-        open={generatorDialogOpen}
-        onClose={() => setGeneratorDialogOpen(false)}
+      {/* Dialogs */}
+      <StoryCreationDialog
+        open={storyDialogOpen}
+        onClose={() => setStoryDialogOpen(false)}
+        onCreated={async () => {
+          await loadStoryTree();
+        }}
+      />
+
+      <SceneCreationDialog
+        open={sceneDialogOpen}
+        storyId={selectedStoryId}
+        onClose={() => {
+          setSceneDialogOpen(false);
+          setSelectedStoryId(null);
+        }}
+        onCreated={async () => {
+          await loadStoryTree();
+        }}
+      />
+
+      <ConversationGeneratorDialogWithScene
+        open={conversationDialogOpen}
+        sceneId={selectedSceneId}
+        onClose={() => {
+          setConversationDialogOpen(false);
+          setSelectedSceneId(null);
+        }}
         onGenerated={handleConversationGenerated}
       />
 
-      {/* Workflow Selection Dialog */}
       <WorkflowSelectionDialog
         open={workflowSelectionDialogOpen}
         onClose={() => setWorkflowSelectionDialogOpen(false)}

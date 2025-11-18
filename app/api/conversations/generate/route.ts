@@ -54,8 +54,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // studioId is now optional
+    // studioId and storySceneId are now optional (at least one should be provided)
     const studioId = body.studioId;
+    const storySceneId = body.storySceneId;
+
+    // Validate that at least one of studioId or storySceneId is provided
+    if (!studioId && !storySceneId) {
+      return NextResponse.json(
+        { success: false, error: 'Either studioId or storySceneId must be provided' },
+        { status: 400 }
+      );
+    }
 
     // If studioId is provided, verify studio ownership
     if (studioId) {
@@ -75,6 +84,33 @@ export async function POST(request: NextRequest) {
       if (studio.user_id !== user.id) {
         return NextResponse.json(
           { success: false, error: 'Unauthorized: Studio does not belong to user' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // If storySceneId is provided, verify scene ownership via story
+    if (storySceneId) {
+      const { data: scene, error: sceneError } = await supabase
+        .from('story_scenes')
+        .select(`
+          id,
+          story:stories(id, user_id)
+        `)
+        .eq('id', storySceneId)
+        .single();
+
+      if (sceneError || !scene) {
+        return NextResponse.json(
+          { success: false, error: 'Scene not found' },
+          { status: 404 }
+        );
+      }
+
+      const story = Array.isArray(scene.story) ? scene.story[0] : scene.story;
+      if (!story || story.user_id !== user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized: Scene does not belong to user' },
           { status: 403 }
         );
       }
@@ -151,12 +187,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Create conversation in database
-    console.log('[Generate Conversation] Creating conversation with studioId:', studioId || 'null', 'userId:', user.id);
+    console.log('[Generate Conversation] Creating conversation with studioId:', studioId || 'null', 'storySceneId:', storySceneId || 'null', 'userId:', user.id);
     const conversationData: {
       user_id: string;
       title: string;
       description: string;
       studio_id?: number;
+      story_scene_id?: number;
     } = {
       user_id: user.id,
       title: body.title,
@@ -166,6 +203,11 @@ export async function POST(request: NextRequest) {
     // Only add studio_id if provided
     if (studioId) {
       conversationData.studio_id = studioId;
+    }
+
+    // Only add story_scene_id if provided
+    if (storySceneId) {
+      conversationData.story_scene_id = storySceneId;
     }
 
     const { data: conversation, error: convError } = await supabase

@@ -15,6 +15,81 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-18: ストーリー・シーン階層構造による会話管理機能を追加
+
+**目的**: `/conversations` ページに大きなストーリー（大カテゴリ）の中にシーンごとの会話を作成できる階層構造を追加し、より体系的な会話管理を実現する
+
+**変更内容**:
+- **データベースマイグレーション** (`supabase/migrations/20251118000001_create_stories_and_scenes.sql`):
+  - `kazikastudio.stories` テーブルを作成（ストーリー全体を管理）
+  - `kazikastudio.story_scenes` テーブルを作成（ストーリー内のシーンを管理、`sequence_order` で順序管理）
+  - `kazikastudio.conversations` テーブルに `story_scene_id` カラムを追加（NULL許可、既存データとの互換性維持）
+  - `conversations.studio_id` を NULL 許可に変更（ストーリー機能と共存）
+  - RLS ポリシーを更新し、`studio_id` と `story_scene_id` の両方に対応
+
+- **型定義** (`/types/conversation.ts`):
+  - `Story`, `StoryScene`, `StoryTreeNode` インターフェースを追加
+  - `Conversation` に `story_scene_id` フィールドを追加（`studio_id` と両方 NULL 許可）
+  - `GenerateConversationRequest` に `storySceneId` フィールドを追加
+  - Story/Scene 用の API Request/Response 型を追加
+
+- **データベース関数** (`/lib/db.ts`):
+  - `getStoriesByUserId()`, `getStoryById()`, `createStory()`, `updateStory()`, `deleteStory()`
+  - `getScenesByStoryId()`, `getSceneById()`, `createStoryScene()`, `updateStoryScene()`, `deleteStoryScene()`
+  - `getConversationsBySceneId()` - シーン内の会話一覧を取得
+  - `getStoriesTreeByUserId()` - ユーザーの全ストーリー・シーン・会話の階層構造を取得
+
+- **API エンドポイント**:
+  - `/api/stories` - ストーリーの作成・一覧取得
+  - `/api/stories/[id]` - ストーリーの取得・更新・削除
+  - `/api/stories/[id]/scenes` - シーンの作成・一覧取得
+  - `/api/scenes/[id]` - シーンの取得・更新・削除
+  - `/api/stories/tree` - ストーリー階層構造の一括取得
+  - `/api/conversations/generate` - `storySceneId` パラメータに対応
+
+- **UI コンポーネント**:
+  - `StoryCreationDialog.tsx` - ストーリー作成ダイアログ
+  - `SceneCreationDialog.tsx` - シーン作成ダイアログ
+  - `StoryTreeView.tsx` - ストーリー・シーン・会話のツリー表示コンポーネント
+  - `ConversationGeneratorDialogWithScene.tsx` - シーン内での会話生成ダイアログ
+  - `/app/conversations/page.tsx` を完全リニューアル（階層構造表示）
+
+**UI 構造**:
+```
+/conversations ページ
+├── 左サイドバー: ストーリーツリー表示
+│   ├── 📚 ストーリーA
+│   │   ├── 🎬 シーン1
+│   │   │   ├── 💬 会話1
+│   │   │   └── 💬 会話2
+│   │   └── 🎬 シーン2
+│   │       └── 💬 会話3
+│   └── 📚 ストーリーB
+│       └── ...
+└── 右側: 会話表示エリア（選択した会話のメッセージを表示）
+```
+
+**データフロー**:
+1. ユーザーが「新しいストーリー」を作成 → `POST /api/stories`
+2. ストーリー内に「シーンを追加」 → `POST /api/stories/[id]/scenes`
+3. シーン内で「会話を追加」をクリック → `ConversationGeneratorDialogWithScene` が開く
+4. 会話生成時に `storySceneId` を含めて送信 → `POST /api/conversations/generate`
+5. `conversations` テーブルに `story_scene_id` 付きで保存
+6. `/api/stories/tree` で階層構造を取得してツリー表示
+
+**技術的詳細**:
+- **後方互換性を完全維持**: `conversations.studio_id` と `conversations.story_scene_id` の両方を NULL 許可にし、既存のスタジオベースの会話も引き続き動作
+- **RLS ポリシーの OR 条件**: `studio_id` と `story_scene_id` のどちらかで所有権チェックを行う
+- **Cascade 削除**: ストーリーを削除すると、関連するシーン・会話も自動削除される（`ON DELETE CASCADE`）
+- **sequence_order 自動採番**: シーン作成時に `sequence_order` が省略された場合、自動的に最後に追加される
+
+**影響範囲**:
+- `/conversations` ページが階層構造表示に完全移行
+- 既存のスタジオベースの会話は影響を受けず、引き続き `/studios/[id]/conversation` で利用可能
+- 会話生成APIが `studioId` と `storySceneId` の両方に対応（少なくとも一方が必須）
+
+---
+
 ### 2025-11-16: 会話生成機能に感情タグ、カメラ情報、シーンプロンプトを追加
 
 **目的**: 会話生成時に感情タグ（ElevenLabs用）とカメラアングル・ショット距離を自動設定し、各メッセージに日本語・英語のシーンプロンプトを生成して画像生成を容易にする
