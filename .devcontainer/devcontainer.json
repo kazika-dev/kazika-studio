@@ -1,10 +1,7 @@
 {
   "name": "kazika-studio",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
-  "runArgs": [
-    "--env-file",
-    ".env.shared"
-  ],
+ 
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts",
