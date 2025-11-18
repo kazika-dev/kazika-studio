@@ -32,7 +32,13 @@ export async function PATCH(
         *,
         conversation:conversations(
           id,
-          studio:studios(user_id)
+          studio_id,
+          story_scene_id,
+          studio:studios(user_id),
+          story_scene:story_scenes(
+            id,
+            story:stories(user_id)
+          )
         )
       `)
       .eq('id', id)
@@ -45,7 +51,15 @@ export async function PATCH(
       );
     }
 
-    if (message.conversation.studio.user_id !== user.id) {
+    // Check ownership through either studio or story path
+    let isOwner = false;
+    if (message.conversation.studio_id && message.conversation.studio) {
+      isOwner = message.conversation.studio.user_id === user.id;
+    } else if (message.conversation.story_scene_id && message.conversation.story_scene) {
+      isOwner = message.conversation.story_scene.story.user_id === user.id;
+    }
+
+    if (!isOwner) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Message does not belong to user' },
         { status: 403 }
@@ -139,7 +153,13 @@ export async function DELETE(
         *,
         conversation:conversations(
           id,
-          studio:studios(user_id)
+          studio_id,
+          story_scene_id,
+          studio:studios(user_id),
+          story_scene:story_scenes(
+            id,
+            story:stories(user_id)
+          )
         )
       `)
       .eq('id', id)
@@ -152,7 +172,15 @@ export async function DELETE(
       );
     }
 
-    if (message.conversation.studio.user_id !== user.id) {
+    // Check ownership through either studio or story path
+    let isOwner = false;
+    if (message.conversation.studio_id && message.conversation.studio) {
+      isOwner = message.conversation.studio.user_id === user.id;
+    } else if (message.conversation.story_scene_id && message.conversation.story_scene) {
+      isOwner = message.conversation.story_scene.story.user_id === user.id;
+    }
+
+    if (!isOwner) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Message does not belong to user' },
         { status: 403 }
