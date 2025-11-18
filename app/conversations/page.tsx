@@ -234,7 +234,13 @@ export default function ConversationsPage() {
         // Update the message with new emotion tag
         setMessages(prev =>
           prev.map(msg =>
-            msg.id === messageId ? result.data.message : msg
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  message_text: result.data.message.message_text,
+                  metadata: result.data.message.metadata,
+                }
+              : msg
           )
         );
       } else {
