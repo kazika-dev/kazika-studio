@@ -392,6 +392,16 @@ export default function ConversationViewer({
     setLocalMessages(messages);
   }, [messages]);
 
+  // Update edit text when editing message changes
+  useEffect(() => {
+    if (editingMessageId !== null) {
+      const editingMessage = messages.find(m => m.id === editingMessageId);
+      if (editingMessage && editingMessage.message_text !== editText) {
+        setEditText(editingMessage.message_text);
+      }
+    }
+  }, [messages, editingMessageId]);
+
   const handleEditClick = (message: ConversationMessageWithCharacter) => {
     setEditingMessageId(message.id);
     setEditText(message.message_text);
