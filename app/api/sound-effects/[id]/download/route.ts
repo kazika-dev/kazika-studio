@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSoundEffectById } from '@/lib/db';
-import { downloadFileFromGCS } from '@/lib/storage';
+import { getFileFromStorage } from '@/lib/gcp-storage';
 
 // GET /api/sound-effects/[id]/download - 音声ファイルダウンロード
 export async function GET(
@@ -21,25 +21,16 @@ export async function GET(
     }
 
     // GCP Storageからファイルをダウンロード
-    const audioBuffer = await downloadFileFromGCS(soundEffect.file_name);
+    const { data: audioBuffer, contentType } = await getFileFromStorage(soundEffect.file_name);
 
-    // MIME typeを推測（拡張子から）
-    const ext = soundEffect.file_name.split('.').pop()?.toLowerCase();
-    const mimeTypeMap: Record<string, string> = {
-      mp3: 'audio/mpeg',
-      wav: 'audio/wav',
-      ogg: 'audio/ogg',
-      m4a: 'audio/mp4',
-      aac: 'audio/aac',
-      flac: 'audio/flac',
-    };
-    const mimeType = mimeTypeMap[ext || 'mp3'] || 'audio/mpeg';
+    // 拡張子を取得
+    const ext = soundEffect.file_name.split('.').pop()?.toLowerCase() || 'mp3';
 
     // 音声ファイルを返す
     return new NextResponse(audioBuffer, {
       headers: {
-        'Content-Type': mimeType,
-        'Content-Disposition': `inline; filename="${soundEffect.name}.${ext || 'mp3'}"`,
+        'Content-Type': contentType,
+        'Content-Disposition': `inline; filename="${soundEffect.name}.${ext}"`,
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });

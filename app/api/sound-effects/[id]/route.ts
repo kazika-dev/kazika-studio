@@ -4,7 +4,7 @@ import {
   updateSoundEffect,
   deleteSoundEffect,
 } from '@/lib/db';
-import { uploadFileToGCS, deleteFileFromGCS } from '@/lib/storage';
+import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
 
 // PUT /api/sound-effects/[id] - 効果音更新
 export async function PUT(
@@ -50,17 +50,26 @@ export async function PUT(
       if (audioFile) {
         // 既存ファイルを削除
         try {
-          await deleteFileFromGCS(existingSoundEffect.file_name);
+          await deleteImageFromStorage(existingSoundEffect.file_name);
         } catch (error) {
           console.error('Failed to delete old file:', error);
         }
 
         // 新しいファイルをアップロード
         const buffer = Buffer.from(await audioFile.arrayBuffer());
-        const fileName = `audio/sound-effects/${Date.now()}-${audioFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        await uploadFileToGCS(buffer, fileName, audioFile.type);
+        const base64Data = buffer.toString('base64');
+        const timestamp = Date.now();
+        const sanitizedFileName = audioFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `${timestamp}-${sanitizedFileName}`;
 
-        updateData.file_name = fileName;
+        const filePath = await uploadImageToStorage(
+          base64Data,
+          audioFile.type,
+          fileName,
+          'audio/sound-effects'
+        );
+
+        updateData.file_name = filePath;
         updateData.file_size_bytes = buffer.length;
         updateData.duration_seconds = null; // TODO: メタデータから取得
       }
@@ -116,7 +125,7 @@ export async function DELETE(
 
     // GCP Storageからファイルを削除
     try {
-      await deleteFileFromGCS(existingSoundEffect.file_name);
+      await deleteImageFromStorage(existingSoundEffect.file_name);
     } catch (error) {
       console.error('Failed to delete file from GCS:', error);
       // ファイル削除に失敗してもデータベースからは削除する

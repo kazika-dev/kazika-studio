@@ -4,7 +4,7 @@ import {
   getSoundEffectsByCategory,
   createSoundEffect,
 } from '@/lib/db';
-import { uploadFileToGCS } from '@/lib/storage';
+import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 // GET /api/sound-effects - 効果音一覧取得
 export async function GET(request: NextRequest) {
@@ -56,15 +56,24 @@ export async function POST(request: NextRequest) {
 
     // ファイルをGCP Storageにアップロード
     const buffer = Buffer.from(await audioFile.arrayBuffer());
-    const fileName = `audio/sound-effects/${Date.now()}-${audioFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const base64Data = buffer.toString('base64');
+    const timestamp = Date.now();
+    const sanitizedFileName = audioFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `${timestamp}-${sanitizedFileName}`;
 
-    await uploadFileToGCS(buffer, fileName, audioFile.type);
+    // audio/sound-effectsフォルダにアップロード
+    const filePath = await uploadImageToStorage(
+      base64Data,
+      audioFile.type,
+      fileName,
+      'audio/sound-effects'
+    );
 
     // データベースに登録
     const soundEffect = await createSoundEffect({
       name,
       description: description || '',
-      file_name: fileName,
+      file_name: filePath,
       duration_seconds: null, // TODO: 音声ファイルのメタデータから取得
       file_size_bytes: buffer.length,
       category: category || '効果音',
