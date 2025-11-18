@@ -18,7 +18,7 @@ import {
   ZoomOutMap as ZoomOutMapIcon,
   Label as LabelIcon,
   ArrowBack as ArrowBackIcon,
-
+  VolumeUp as VolumeUpIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -65,7 +65,14 @@ const masterTables: MasterTable[] = [
     description: 'ショット距離のマスタデータ（クローズアップ、ロングショットなど）',
     icon: <ZoomOutMapIcon />,
     color: '#ed6c02',
-
+  },
+  {
+    id: 'm_sound_effects',
+    name: 'm_sound_effects',
+    displayName: '効果音',
+    description: '効果音のマスタデータ（GCP Storageに保存された音声ファイル）',
+    icon: <VolumeUpIcon />,
+    color: '#d32f2f',
   },
 ];
 

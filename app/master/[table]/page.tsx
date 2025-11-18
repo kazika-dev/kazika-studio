@@ -3,6 +3,7 @@
 
 import { use } from 'react';
 import MasterTableManager from '@/components/master/MasterTableManager';
+import SoundEffectsManager from '@/components/master/SoundEffectsManager';
 
 interface TableConfig {
   displayName: string;
@@ -32,6 +33,11 @@ const TABLE_CONFIGS: Record<string, TableConfig> = {
     description: 'ショット距離のマスタデータを管理します（クローズアップ、ロングショットなど）。',
     showJapaneseFields: true,
   },
+  'm_sound_effects': {
+    displayName: '効果音',
+    description: '効果音のマスタデータを管理します（GCP Storageに保存された音声ファイル）。',
+    showJapaneseFields: false,
+  },
 };
 
 export default function MasterTablePage({
@@ -45,14 +51,17 @@ export default function MasterTablePage({
   const config = TABLE_CONFIGS[table];
 
   if (!config) {
-
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>テーブルが見つかりません</h1>
         <p>指定されたテーブル「{table}」は存在しません。</p>
       </div>
     );
+  }
 
+  // 効果音テーブルは専用コンポーネントを使用
+  if (table === 'm_sound_effects') {
+    return <SoundEffectsManager />;
   }
 
   return (
@@ -60,9 +69,7 @@ export default function MasterTablePage({
       tableName={table}
       displayName={config.displayName}
       description={config.description}
-
       showJapaneseFields={config.showJapaneseFields}
-
     />
   );
 }

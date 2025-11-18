@@ -1185,3 +1185,189 @@ export async function getComfyUIQueueItemByPromptId(promptId: string) {
 
   return result.rows[0];
 }
+
+// =====================================================
+// 効果音マスター関連の関数
+// =====================================================
+
+/**
+ * 全ての効果音を取得
+ */
+export async function getAllSoundEffects() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects ORDER BY category ASC, name ASC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * 効果音をIDで取得
+ */
+export async function getSoundEffectById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 効果音をファイル名で取得
+ */
+export async function getSoundEffectByFileName(fileName: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects WHERE file_name = $1',
+    [fileName]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * カテゴリで効果音を検索
+ */
+export async function getSoundEffectsByCategory(category: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects WHERE category = $1 ORDER BY name ASC',
+    [category]
+  );
+  return result.rows;
+}
+
+/**
+ * タグで効果音を検索
+ */
+export async function getSoundEffectsByTag(tag: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects WHERE $1 = ANY(tags) ORDER BY name ASC',
+    [tag]
+  );
+  return result.rows;
+}
+
+/**
+ * 効果音を作成
+ */
+export async function createSoundEffect(data: {
+  name: string;
+  description?: string;
+  file_name: string;
+  duration_seconds?: number;
+  file_size_bytes?: number;
+  category?: string;
+  tags?: string[];
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_sound_effects
+     (name, description, file_name, duration_seconds, file_size_bytes, category, tags)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [
+      data.name,
+      data.description || '',
+      data.file_name,
+      data.duration_seconds || null,
+      data.file_size_bytes || null,
+      data.category || '',
+      data.tags || [],
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * 効果音を更新
+ */
+export async function updateSoundEffect(
+  id: number,
+  data: {
+    name?: string;
+    description?: string;
+    file_name?: string;
+    duration_seconds?: number;
+    file_size_bytes?: number;
+    category?: string;
+    tags?: string[];
+  }
+) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    fields.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    fields.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.file_name !== undefined) {
+    fields.push(`file_name = $${paramIndex++}`);
+    values.push(data.file_name);
+  }
+  if (data.duration_seconds !== undefined) {
+    fields.push(`duration_seconds = $${paramIndex++}`);
+    values.push(data.duration_seconds);
+  }
+  if (data.file_size_bytes !== undefined) {
+    fields.push(`file_size_bytes = $${paramIndex++}`);
+    values.push(data.file_size_bytes);
+  }
+  if (data.category !== undefined) {
+    fields.push(`category = $${paramIndex++}`);
+    values.push(data.category);
+  }
+  if (data.tags !== undefined) {
+    fields.push(`tags = $${paramIndex++}`);
+    values.push(data.tags);
+  }
+
+  if (fields.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.m_sound_effects
+     SET ${fields.join(', ')}
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 効果音を削除
+ */
+export async function deleteSoundEffect(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.m_sound_effects WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * ランダムに効果音を1つ取得
+ */
+export async function getRandomSoundEffect() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects ORDER BY RANDOM() LIMIT 1',
+    []
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * カテゴリからランダムに効果音を取得
+ */
+export async function getRandomSoundEffectByCategory(category: string) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_sound_effects WHERE category = $1 ORDER BY RANDOM() LIMIT 1',
+    [category]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
