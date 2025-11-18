@@ -8,7 +8,7 @@ import { getStoryById, updateStory, deleteStory } from '@/lib/db';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -24,7 +24,8 @@ export async function GET(
       );
     }
 
-    const storyId = parseInt(params.id);
+    const { id } = await params;
+    const storyId = parseInt(id);
     const story = await getStoryById(storyId);
 
     if (!story) {
@@ -61,7 +62,7 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -77,7 +78,8 @@ export async function PATCH(
       );
     }
 
-    const storyId = parseInt(params.id);
+    const { id } = await params;
+    const storyId = parseInt(id);
     const story = await getStoryById(storyId);
 
     if (!story) {
@@ -117,7 +119,7 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -133,7 +135,8 @@ export async function DELETE(
       );
     }
 
-    const storyId = parseInt(params.id);
+    const { id } = await params;
+    const storyId = parseInt(id);
     const story = await getStoryById(storyId);
 
     if (!story) {

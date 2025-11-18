@@ -8,7 +8,7 @@ import { getSceneById, updateStoryScene, deleteStoryScene, getStoryById } from '
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -24,7 +24,8 @@ export async function GET(
       );
     }
 
-    const sceneId = parseInt(params.id);
+    const { id } = await params;
+    const sceneId = parseInt(id);
     const scene = await getSceneById(sceneId);
 
     if (!scene) {
@@ -62,7 +63,7 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -78,7 +79,8 @@ export async function PATCH(
       );
     }
 
-    const sceneId = parseInt(params.id);
+    const { id } = await params;
+    const sceneId = parseInt(id);
     const scene = await getSceneById(sceneId);
 
     if (!scene) {
@@ -119,7 +121,7 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -135,7 +137,8 @@ export async function DELETE(
       );
     }
 
-    const sceneId = parseInt(params.id);
+    const { id } = await params;
+    const sceneId = parseInt(id);
     const scene = await getSceneById(sceneId);
 
     if (!scene) {
