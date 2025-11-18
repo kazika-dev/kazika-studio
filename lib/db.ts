@@ -1598,11 +1598,9 @@ export async function deleteStoryScene(id: number) {
 export async function getConversationsBySceneId(sceneId: number) {
   const result = await query(
     `SELECT c.*,
-            COUNT(DISTINCT cm.id) as message_count,
-            COUNT(DISTINCT cs.id) as scene_count
+            COUNT(DISTINCT cm.id) as message_count
      FROM kazikastudio.conversations c
      LEFT JOIN kazikastudio.conversation_messages cm ON cm.conversation_id = c.id
-     LEFT JOIN kazikastudio.conversation_scenes cs ON cs.conversation_id = c.id
      WHERE c.story_scene_id = $1
      GROUP BY c.id
      ORDER BY c.updated_at DESC`,
