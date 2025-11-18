@@ -296,3 +296,108 @@ export async function parseScenePromptResponse(
     throw new Error(`Failed to parse scene prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+/**
+ * Build a prompt to re-analyze emotion tags for a single message
+ */
+export async function buildEmotionTagReanalysisPrompt(
+  messageText: string,
+  speakerName: string,
+  context?: {
+    previousMessages?: Array<{ speaker: string; message: string }>;
+    situation?: string;
+  }
+): Promise<string> {
+  // Fetch latest emotion tags from database
+  const emotionTags = await getAllElevenLabsTags();
+
+  const emotionTagsSection = emotionTags && emotionTags.length > 0
+    ? emotionTags.map(tag => `  - ${tag.name}: ${tag.description || tag.description_ja || ''}`).join('\n')
+    : `  - emotional: 感情を込めた音声（感動的なシーンや重要な告白など）
+  - calm: 落ち着いた優しい音声（穏やかな会話や慰めのシーンなど）
+  - energetic: 元気で活気のある音声（楽しい会話や興奮しているシーンなど）
+  - professional: ビジネス的で正式な音声（真面目な会話や報告など）
+  - friendly: 親しみやすい音声（カジュアルな友人との会話など）
+  - serious: 真剣で権威のある音声（重要な決断や厳粛なシーンなど）`;
+
+  const previousMessagesSection = context?.previousMessages && context.previousMessages.length > 0
+    ? `\n## これまでの会話の流れ\n${context.previousMessages.map(m => `${m.speaker}: ${m.message}`).join('\n')}\n`
+    : '';
+
+  const situationSection = context?.situation
+    ? `\n## シチュエーション\n${context.situation}\n`
+    : '';
+
+  return `
+あなたは会話の感情分析の専門家です。以下のメッセージに最も適したElevenLabs音声感情タグを選択してください。
+${situationSection}${previousMessagesSection}
+## 分析対象のメッセージ
+話者: ${speakerName}
+メッセージ: ${messageText}
+
+## 利用可能な感情タグ（ElevenLabs用）
+${emotionTagsSection}
+
+## タスク
+上記のメッセージ内容と会話の文脈から、最も適切な感情タグを**1つだけ**選択してください。
+
+## 出力形式
+以下のJSON形式で出力してください：
+
+\`\`\`json
+{
+  "emotionTag": "選択した感情タグ名",
+  "reason": "この感情タグを選んだ理由（簡潔に）"
+}
+\`\`\`
+
+## 要件
+- emotionTagは上記リストの中から**必ず1つ**選択してください
+- reasonは日本語で50文字程度の簡潔な説明にしてください
+- メッセージの内容、トーン、話者の感情を総合的に判断してください
+`.trim();
+}
+
+/**
+ * Parse AI response for emotion tag reanalysis
+ */
+export async function parseEmotionTagReanalysisResponse(
+  aiResponse: string
+): Promise<{
+  emotionTag: string;
+  reason: string;
+}> {
+  // Try to extract JSON block from markdown code fence
+  const jsonMatch = aiResponse.match(/```json\s*\n([\s\S]*?)\n```/);
+
+  let jsonText: string;
+  if (jsonMatch) {
+    jsonText = jsonMatch[1];
+  } else {
+    // Try to find JSON without code fence
+    const directJsonMatch = aiResponse.match(/\{[\s\S]*"emotionTag"[\s\S]*\}/);
+    if (directJsonMatch) {
+      jsonText = directJsonMatch[0];
+    } else {
+      throw new Error('AI response does not contain valid JSON for emotion tag analysis');
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    // Validate response structure
+    if (!parsed.emotionTag || typeof parsed.emotionTag !== 'string') {
+      throw new Error('Invalid response format: missing or invalid emotionTag');
+    }
+
+    return {
+      emotionTag: parsed.emotionTag,
+      reason: parsed.reason || 'No reason provided'
+    };
+  } catch (error) {
+    console.error('Failed to parse emotion tag reanalysis response:', error);
+    console.error('AI Response:', aiResponse);
+    throw new Error(`Failed to parse emotion tag response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

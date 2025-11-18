@@ -15,6 +15,89 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-18: 会話メッセージの感情タグ再分析機能を追加
+
+**目的**: メッセージを編集した後、会話の文脈から適切なElevenLabs感情タグを再分析して自動的に付け直す機能を追加
+
+**変更内容**:
+- **プロンプトビルダー関数** (`/lib/conversation/prompt-builder.ts`):
+  - `buildEmotionTagReanalysisPrompt()` - 感情タグ再分析用のAIプロンプトを生成
+    - 前の3メッセージをコンテキストとして含める
+    - データベースから最新の感情タグリストを取得
+    - シチュエーション情報を含める（オプション）
+  - `parseEmotionTagReanalysisResponse()` - AIのJSON応答をパースして感情タグと理由を抽出
+
+- **API エンドポイント**:
+  - `/api/conversations/messages/[id]/reanalyze-emotion` - 単一メッセージの感情タグを再分析
+    - 所有権チェック（conversation → studio/story → user）
+    - 前の3メッセージをコンテキストとして取得
+    - Gemini AI (gemini-2.0-flash-exp) で感情を分析
+    - メッセージテキストの `[emotionTag]` プレフィックスを更新
+    - メタデータに `emotionTag`, `emotionTagReason`, `emotionTagUpdatedAt` を保存
+
+  - `/api/conversations/[id]/reanalyze-emotions` - 会話内の全メッセージを一括再分析
+    - メッセージを順次処理（レート制限回避のため500ms間隔）
+    - 各メッセージに前の3メッセージをコンテキストとして提供
+    - 更新成功数とエラー情報を返す
+
+- **UI コンポーネント** (`/components/studio/conversation/ConversationViewer.tsx`):
+  - 感情タグ再分析ボタンを追加（`AutoFixHighIcon`）
+  - `onReanalyzeEmotion` プロップを追加
+  - `reanalyzingId` 状態でどのメッセージを分析中かトラッキング
+  - メッセージ編集中に再分析ボタンを表示
+  - 保存中または分析中はボタンを無効化
+
+- **ページ統合** (`/app/conversations/page.tsx`):
+  - `handleReanalyzeEmotion` ハンドラーを実装
+  - APIエンドポイントを呼び出し
+  - 成功時にメッセージの状態を更新
+
+**技術的詳細**:
+- **コンテキスト認識**: 前の3メッセージと会話の状況説明を使って文脈に応じた感情分析を実現
+- **既存タグの削除**: 分析前にメッセージテキストから `[タグ]` を削除し、AI判断にバイアスがかからないようにする
+- **データベース駆動**: `kazikastudio.eleven_labs_tags` テーブルから最新の感情タグリストを動的に取得
+- **レート制限対策**: 一括再分析では500ms間隔でAPIを呼び出し
+- **エラーハンドリング**: 一部のメッセージが失敗しても残りを処理し、エラー情報を返す
+
+**データフロー**:
+1. ユーザーがメッセージ編集中に「感情タグを再分析」ボタンをクリック
+2. `POST /api/conversations/messages/[id]/reanalyze-emotion` を呼び出し
+3. APIが前の3メッセージと会話の状況説明を取得
+4. `buildEmotionTagReanalysisPrompt()` で分析用プロンプトを生成
+5. Gemini AI が JSON 形式で `{ emotionTag, reason }` を返す
+6. メッセージテキストを `[新しいタグ] メッセージ本文` に更新
+7. メタデータに分析結果を保存
+8. UIに更新されたメッセージを表示
+
+**使用例**:
+```typescript
+// API呼び出し例
+POST /api/conversations/messages/123/reanalyze-emotion
+
+// レスポンス例
+{
+  "success": true,
+  "data": {
+    "message": {
+      "id": 123,
+      "message_text": "[serious] 実は最近、将来のことで悩んでいるんだ...",
+      "metadata": {
+        "emotionTag": "serious",
+        "emotionTagReason": "前のメッセージで楽しい会話をしていたが、急に真剣な話題に切り替わったため",
+        "emotionTagUpdatedAt": "2025-11-18T12:34:56Z"
+      }
+    }
+  }
+}
+```
+
+**影響範囲**:
+- メッセージ編集後に感情タグが不適切になった場合、簡単に再分析可能に
+- 会話全体の感情タグを一括で見直すことも可能
+- ElevenLabs音声生成時の感情表現の品質向上に貢献
+
+---
+
 ### 2025-11-18: ストーリー・シーン階層構造による会話管理機能を追加
 
 **目的**: `/conversations` ページに大きなストーリー（大カテゴリ）の中にシーンごとの会話を作成できる階層構造を追加し、より体系的な会話管理を実現する

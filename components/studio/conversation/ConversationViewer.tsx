@@ -19,6 +19,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import {
   DndContext,
@@ -50,6 +51,7 @@ interface ConversationViewerProps {
   onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number }) => Promise<void>;
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
+  onReanalyzeEmotion?: (messageId: number) => Promise<void>;
   readonly?: boolean;
 }
 
@@ -60,11 +62,13 @@ interface SortableMessageProps {
   editCharacterId: number | null;
   characters?: Character[];
   saving: boolean;
+  reanalyzing: boolean;
   readonly?: boolean;
   onEditClick: (message: ConversationMessageWithCharacter) => void;
   onSave: (messageId: number) => void;
   onCancel: () => void;
   onDelete: (messageId: number) => void;
+  onReanalyzeEmotion: (messageId: number) => void;
   onTextChange: (text: string) => void;
   onCharacterChange: (characterId: number) => void;
 }
@@ -76,11 +80,13 @@ function SortableMessage({
   editCharacterId,
   characters,
   saving,
+  reanalyzing,
   readonly,
   onEditClick,
   onSave,
   onCancel,
   onDelete,
+  onReanalyzeEmotion,
   onTextChange,
   onCharacterChange
 }: SortableMessageProps) {
@@ -326,20 +332,32 @@ function SortableMessage({
               </IconButton>
             </Tooltip>
           </Box>
-          <Tooltip title="削除">
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => {
-                if (confirm('このメッセージを削除しますか？')) {
-                  onDelete(message.id);
-                }
-              }}
-              disabled={saving}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="感情タグを再分析">
+              <IconButton
+                size="small"
+                color="secondary"
+                onClick={() => onReanalyzeEmotion(message.id)}
+                disabled={saving || reanalyzing}
+              >
+                <AutoFixHighIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="削除">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => {
+                  if (confirm('このメッセージを削除しますか？')) {
+                    onDelete(message.id);
+                  }
+                }}
+                disabled={saving || reanalyzing}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
       )}
     </Paper>
@@ -352,6 +370,7 @@ export default function ConversationViewer({
   onUpdateMessage,
   onReorderMessages,
   onDeleteMessage,
+  onReanalyzeEmotion,
   readonly = false
 }: ConversationViewerProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -359,6 +378,7 @@ export default function ConversationViewer({
   const [editText, setEditText] = useState('');
   const [editCharacterId, setEditCharacterId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reanalyzingId, setReanalyzingId] = useState<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -441,6 +461,20 @@ export default function ConversationViewer({
       alert('メッセージの更新に失敗しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReanalyzeEmotion = async (messageId: number) => {
+    if (!onReanalyzeEmotion) return;
+
+    setReanalyzingId(messageId);
+    try {
+      await onReanalyzeEmotion(messageId);
+    } catch (error) {
+      console.error('Failed to reanalyze emotion:', error);
+      alert('感情タグの再分析に失敗しました');
+    } finally {
+      setReanalyzingId(null);
     }
   };
 
@@ -530,11 +564,13 @@ export default function ConversationViewer({
               editCharacterId={editCharacterId}
               characters={characters}
               saving={saving}
+              reanalyzing={reanalyzingId === message.id}
               readonly={readonly}
               onEditClick={handleEditClick}
               onSave={handleSaveEdit}
               onCancel={handleCancelEdit}
               onDelete={handleDeleteMessage}
+              onReanalyzeEmotion={handleReanalyzeEmotion}
               onTextChange={setEditText}
               onCharacterChange={setEditCharacterId}
             />

@@ -222,6 +222,30 @@ export default function ConversationsPage() {
     }
   };
 
+  const handleReanalyzeEmotion = async (messageId: number) => {
+    try {
+      const response = await fetch(`/api/conversations/messages/${messageId}/reanalyze-emotion`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Update the message with new emotion tag
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? result.data.message : msg
+          )
+        );
+      } else {
+        throw new Error(result.error || 'Failed to reanalyze emotion');
+      }
+    } catch (error) {
+      console.error('Failed to reanalyze emotion:', error);
+      throw error;
+    }
+  };
+
   const handleConversationGenerated = async (conversationId: number) => {
     await loadStoryTree();
     await loadConversation(conversationId);
@@ -413,6 +437,7 @@ export default function ConversationsPage() {
                   onUpdateMessage={handleUpdateMessage}
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}
+                  onReanalyzeEmotion={handleReanalyzeEmotion}
                 />
               </>
             ) : (
