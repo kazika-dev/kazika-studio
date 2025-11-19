@@ -262,7 +262,7 @@ export default function ConversationsPage() {
     setWorkflowSelectionDialogOpen(true);
   };
 
-  const handleWorkflowSelected = async (workflowId: number | null) => {
+  const handleWorkflowSelected = async (workflowIds: number[]) => {
     if (!selectedConversation) return;
 
     setCreatingStudio(true);
@@ -271,15 +271,15 @@ export default function ConversationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workflowId: workflowId,
+          workflowIds: workflowIds,
         }),
       });
 
       const result = await response.json();
 
       if (result.success && result.data) {
-        const message = workflowId
-          ? `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードと${result.data.workflowStepCount || 0}個のワークフローステップが作成されました。`
+        const message = workflowIds.length > 0
+          ? `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードと${result.data.workflowStepCount || 0}個のワークフローステップ（${workflowIds.length}種類のワークフロー）が作成されました。`
           : `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードが作成されました。`;
         alert(message);
         router.push(`/studios/${result.data.studioId}`);

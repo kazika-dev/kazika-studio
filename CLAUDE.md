@@ -12,6 +12,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
+- **[会話からスタジオ作成時のワークフロー設定自動化](/docs/conversation-to-studio-workflow.md)** - 会話データからワークフローノード設定を自動生成
 
 ## 最近の主要な変更
 
@@ -170,6 +171,96 @@ POST /api/conversations/messages/123/reanalyze-emotion
 - `/conversations` ページが階層構造表示に完全移行
 - 既存のスタジオベースの会話は影響を受けず、引き続き `/studios/[id]/conversation` で利用可能
 - 会話生成APIが `studioId` と `storySceneId` の両方に対応（少なくとも一方が必須）
+
+---
+
+### 2025-11-16: nodeOverrides適用順序の修正（scene_prompt_en がNanobanaに正しく設定されるように）
+
+**目的**: スタジオのワークフローステップ実行時に、`input_config.nodeOverrides` の設定が他の入力処理で上書きされないようにする
+
+**問題**:
+- `/app/api/studios/steps/[id]/execute/route.ts` の `applyInputsToNodes()` で、`nodeOverrides` を関数の最初に適用していたため、その後の処理（`inputs.prompt`, `inputs.workflowInputs`）で上書きされる可能性があった
+- 特に Nanobana ノードの `prompt` が `scene_prompt_en` で設定されても、後続の処理で空になる問題があった
+
+**修正内容**:
+- `applyInputsToNodes()` で `nodeOverrides` の適用を**関数の最後**に移動（789-807行目）
+- これにより、`nodeOverrides` の値が最優先で適用され、他の処理で上書きされないことを保証
+
+**技術的詳細**:
+```typescript
+// Before: nodeOverrides を最初に適用 → 後続の処理で上書きされる可能性
+async function applyInputsToNodes(nodes, inputs, workflow, step) {
+  // 1. nodeOverrides を適用
+  // 2. inputs.prompt で上書き
+  // 3. inputs.workflowInputs で追加/上書き
+}
+
+// After: nodeOverrides を最後に適用 → 確実に反映される
+async function applyInputsToNodes(nodes, inputs, workflow, step) {
+  // 1. inputs.prompt を適用
+  // 2. inputs.workflowInputs を適用
+  // 3. nodeOverrides を適用（最優先）← ここで確定
+}
+```
+
+**影響範囲**:
+- 会話からスタジオを作成した場合、`scene_prompt_en` が Nanobana ノードに**確実に**設定される
+- その他の `nodeOverrides` の設定（`voiceId`, `aspectRatio`, `selectedCharacterSheetIds` など）も確実に反映される
+- `/docs/conversation-to-studio-workflow.md` に詳細を追記
+
+---
+
+### 2025-11-16: 会話からスタジオ作成時のワークフロー設定自動化
+
+**目的**: 会話データからスタジオを作成する際、ワークフローノード（ElevenLabs、Nanobana）の設定を会話データから自動的に生成し、手作業を削減する
+
+**変更内容**:
+- `/app/api/conversations/[id]/create-studio/route.ts` でNanobanaノードの `nodeOverrides` 生成を追加
+- ElevenLabsノードに `modelId` の設定を追加（デフォルト: `eleven_turbo_v2_5`）
+- Nanobanaノードに以下の設定を自動生成：
+  - `prompt`: `scene_prompt_en` → `scene_prompt_ja` → `metadata.scene` の優先順位で自動設定
+  - `aspectRatio`: ワークフローノードの既存設定を継承（デフォルト: `16:9`）
+  - `selectedCharacterSheetIds`: `character_id` からキャラクター画像を自動設定
+
+**技術的詳細**:
+- **データフロー**:
+  1. 会話生成時に `conversation_messages` テーブルに保存された `scene_prompt_en`, `scene_prompt_ja`, `character_id` を取得
+  2. スタジオ作成時に `studio_board_workflow_steps.input_config.nodeOverrides` に設定を格納
+  3. ワークフロー実行時（`/api/workflows/execute`）に `nodeOverrides` が `node.data.config` にマージされる
+- **CLAUDE.mdの原則との整合性**:
+  - `nodeOverrides` は `node.data.config` にマージされるため、既存のノード設定システムと完全に互換性がある
+  - `getNodeTypeConfig()` で定義されたフィールドがそのまま使用される
+- **後方互換性**:
+  - `nodeOverrides` が存在しない場合は、ワークフローノードの既存設定がそのまま使用される
+
+**使用例**:
+```typescript
+// 会話メッセージ
+{
+  "message_text": "[friendly] こんにちは！",
+  "scene_prompt_en": "school rooftop at daytime, anime style...",
+  "character_id": 1
+}
+
+// 生成される nodeOverrides
+{
+  "elevenlabs-1": {
+    "text": "[friendly] こんにちは！",
+    "voiceId": "ja-JP-Wavenet-A",
+    "modelId": "eleven_turbo_v2_5"
+  },
+  "nanobana-1": {
+    "prompt": "school rooftop at daytime, anime style...",
+    "aspectRatio": "16:9",
+    "selectedCharacterSheetIds": [1]
+  }
+}
+```
+
+**影響範囲**:
+- 会話からスタジオを作成した時点で、すべてのノード設定が自動的に完了
+- ユーザーは `/form` ページで個別にカスタマイズ可能（`nodeOverrides` は上書きされる）
+- `/docs/conversation-to-studio-workflow.md` に詳細なドキュメントを追加
 
 ---
 

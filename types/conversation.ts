@@ -210,7 +210,8 @@ export interface ConversationPromptInput {
 }
 
 export interface GeneratedMessage {
-  speaker: string;
+  speakerId?: number;
+  speaker?: string;
   message: string;
   emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
   emotionTag?: 'emotional' | 'calm' | 'energetic' | 'professional' | 'friendly' | 'serious';
