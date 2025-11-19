@@ -26,8 +26,8 @@ export async function GET(
     // 拡張子を取得
     const ext = soundEffect.file_name.split('.').pop()?.toLowerCase() || 'mp3';
 
-    // 音声ファイルを返す
-    return new NextResponse(audioBuffer, {
+    // 音声ファイルを返す (Buffer を Uint8Array に変換)
+    return new NextResponse(new Uint8Array(audioBuffer), {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `inline; filename="${soundEffect.name}.${ext}"`,
