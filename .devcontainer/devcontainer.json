@@ -18,12 +18,13 @@
     }
   },
 
-  "postCreateCommand": "npm install && npm install -g @anthropic-ai/claude-code",
 
+"postCreateCommand": "sudo mkdir -p /home/node/.ssh && sudo chown -R node:node /home/node/.ssh && chmod 700 /home/node/.ssh && npm install && npm install -g @anthropic-ai/claude-code"
+,
   "remoteUser": "node",
 
   "mounts": [
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/node/.ssh,readonly,type=bind,consistency=cached"
+    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume"
   ],
 
   "forwardPorts": [3000]
