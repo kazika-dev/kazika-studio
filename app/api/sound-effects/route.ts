@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       name,
       description: description || '',
       file_name: filePath,
-      duration_seconds: null, // TODO: 音声ファイルのメタデータから取得
+      duration_seconds: undefined, // TODO: 音声ファイルのメタデータから取得
       file_size_bytes: buffer.length,
       category: category || '効果音',
       tags,
