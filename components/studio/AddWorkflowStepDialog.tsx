@@ -455,7 +455,7 @@ export default function AddWorkflowStepDialog({
                       )}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-                      会話から生成されたノード設定を確認できます
+                      会話から生成されたノード設定を編集できます
                     </Typography>
                     <Stack spacing={2}>
                       {Object.entries(nodeOverrides).map(([nodeId, config]: [string, any]) => (
@@ -463,25 +463,145 @@ export default function AddWorkflowStepDialog({
                           <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                             ノードID: {nodeId}
                           </Typography>
-                          {config.text && (
-                            <Box sx={{ mb: 1 }}>
-                              <Typography variant="caption" fontWeight={600}>テキスト:</Typography>
-                              <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
-                                {config.text}
-                              </Typography>
+
+                          {/* テキスト（ElevenLabsノード用） */}
+                          {config.text !== undefined && (
+                            <Box sx={{ mb: 2 }}>
+                              <TextField
+                                label="テキスト"
+                                fullWidth
+                                multiline
+                                rows={3}
+                                value={config.text || ''}
+                                onChange={(e) => {
+                                  setNodeOverrides(prev => ({
+                                    ...prev,
+                                    [nodeId]: {
+                                      ...prev[nodeId],
+                                      text: e.target.value,
+                                    }
+                                  }));
+                                }}
+                                variant="outlined"
+                                size="small"
+                              />
                             </Box>
                           )}
-                          {config.voiceId && (
+
+                          {/* 音声ID（ElevenLabsノード用） */}
+                          {config.voiceId !== undefined && (
+                            <Box sx={{ mb: 2 }}>
+                              <TextField
+                                label="音声ID"
+                                fullWidth
+                                value={config.voiceId || ''}
+                                onChange={(e) => {
+                                  setNodeOverrides(prev => ({
+                                    ...prev,
+                                    [nodeId]: {
+                                      ...prev[nodeId],
+                                      voiceId: e.target.value,
+                                    }
+                                  }));
+                                }}
+                                variant="outlined"
+                                size="small"
+                                helperText="ElevenLabsの音声ID（例: JBFqnCBsd6RMkjVDRZzb）"
+                              />
+                            </Box>
+                          )}
+
+                          {/* モデルID（ElevenLabsノード用） */}
+                          {config.modelId !== undefined && (
+                            <Box sx={{ mb: 2 }}>
+                              <TextField
+                                label="モデルID"
+                                fullWidth
+                                value={config.modelId || ''}
+                                onChange={(e) => {
+                                  setNodeOverrides(prev => ({
+                                    ...prev,
+                                    [nodeId]: {
+                                      ...prev[nodeId],
+                                      modelId: e.target.value,
+                                    }
+                                  }));
+                                }}
+                                variant="outlined"
+                                size="small"
+                                helperText="ElevenLabsのモデルID（例: eleven_turbo_v2_5）"
+                              />
+                            </Box>
+                          )}
+
+                          {/* プロンプト（Nanobanaノード用） */}
+                          {config.prompt !== undefined && (
+                            <Box sx={{ mb: 2 }}>
+                              <TextField
+                                label="プロンプト"
+                                fullWidth
+                                multiline
+                                rows={4}
+                                value={config.prompt || ''}
+                                onChange={(e) => {
+                                  setNodeOverrides(prev => ({
+                                    ...prev,
+                                    [nodeId]: {
+                                      ...prev[nodeId],
+                                      prompt: e.target.value,
+                                    }
+                                  }));
+                                }}
+                                variant="outlined"
+                                size="small"
+                                helperText="Nanobana画像生成用のプロンプト"
+                              />
+                            </Box>
+                          )}
+
+                          {/* アスペクト比（Nanobanaノード用） */}
+                          {config.aspectRatio !== undefined && (
+                            <Box sx={{ mb: 2 }}>
+                              <FormControl fullWidth size="small">
+                                <InputLabel>アスペクト比</InputLabel>
+                                <Select
+                                  value={config.aspectRatio || '16:9'}
+                                  onChange={(e) => {
+                                    setNodeOverrides(prev => ({
+                                      ...prev,
+                                      [nodeId]: {
+                                        ...prev[nodeId],
+                                        aspectRatio: e.target.value,
+                                      }
+                                    }));
+                                  }}
+                                  label="アスペクト比"
+                                >
+                                  <MenuItem value="16:9">16:9（横長）</MenuItem>
+                                  <MenuItem value="9:16">9:16（縦長）</MenuItem>
+                                  <MenuItem value="4:3">4:3</MenuItem>
+                                  <MenuItem value="3:4">3:4</MenuItem>
+                                  <MenuItem value="1:1">1:1（正方形）</MenuItem>
+                                </Select>
+                              </FormControl>
+                            </Box>
+                          )}
+
+                          {/* キャラクターシートID（Nanobanaノード用） */}
+                          {config.selectedCharacterSheetIds !== undefined && (
                             <Box>
-                              <Typography variant="caption" fontWeight={600}>音声ID:</Typography>
-                              <Typography variant="body2" sx={{ mt: 0.5, fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                                {config.voiceId}
+                              <Typography variant="caption" fontWeight={600} display="block" gutterBottom>
+                                キャラクターシートID:
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {config.selectedCharacterSheetIds?.join(', ') || 'なし'}
                               </Typography>
                             </Box>
                           )}
                         </Paper>
                       ))}
                     </Stack>
+                    <Divider sx={{ my: 3 }} />
                   </Box>
                 )}
 
