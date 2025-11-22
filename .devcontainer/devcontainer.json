@@ -19,11 +19,12 @@
   },
 
 
- "postCreateCommand": "sudo mkdir -p /home/node/.ssh && sudo chown -R node:node /home/node/.ssh && chmod 700 /home/node/.ssh && ssh-keyscan github.com >> /home/node/.ssh/known_hosts && chmod 644 /home/node/.ssh/known_hosts && npm install && npm install -g @anthropic-ai/claude-code",
+ "postCreateCommand": "sudo mkdir -p /home/node/.ssh /home/node/.config/vibe-kanban && sudo chown -R node:node /home/node/.ssh /home/node/.config/vibe-kanban && chmod 700 /home/node/.ssh && chmod 755 /home/node/.config/vibe-kanban && ssh-keyscan github.com >> /home/node/.ssh/known_hosts && chmod 644 /home/node/.ssh/known_hosts && npm install && npm install -g @anthropic-ai/claude-code",
 "remoteUser": "node",
 
   "mounts": [
-    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume"
+    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume",
+    "source=kazika-studio-vibe-kanban,target=/home/node/.config/vibe-kanban,type=volume"
   ],
 
   "forwardPorts": [3000]
