@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
@@ -52,6 +52,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const [imageLoaded, setImageLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const [imageHistory, setImageHistory] = useState<HTMLImageElement[]>([]);  // 画像の履歴（Undo用）
   const router = useRouter();
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [pendingTextPosition, setPendingTextPosition] = useState<{ x: number; y: number } | null>(null);
@@ -61,6 +62,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const [selection, setSelection] = useState<SelectionArea | null>(null);
   const [isCreatingSelection, setIsCreatingSelection] = useState(false);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  const [redrawTrigger, setRedrawTrigger] = useState(0);  // Canvas再描画のトリガー
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -82,6 +84,15 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     };
     img.src = imageUrl;
   }, [imageUrl]);
+
+  // redrawTriggerが変更されたときにCanvasを再描画
+  useEffect(() => {
+    if (redrawTrigger > 0) {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      redrawCanvas();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [redrawTrigger]);
 
   // テキストの境界ボックスを計算
   const getTextBoundingBox = (path: DrawingPath, ctx: CanvasRenderingContext2D) => {
@@ -237,6 +248,18 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     ctx.globalCompositeOperation = 'source-over';
   };
 
+  // 画像の履歴に追加
+  const saveImageToHistory = () => {
+    if (imageRef.current) {
+      const newHistory = [...imageHistory, imageRef.current];
+      // 履歴は最大20個まで
+      if (newHistory.length > 20) {
+        newHistory.shift();
+      }
+      setImageHistory(newHistory);
+    }
+  };
+
   // 選択範囲内かチェック
   const isInsideSelection = (x: number, y: number) => {
     if (!selection) return false;
@@ -272,6 +295,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       if (selection && isInsideSelection(x, y)) {
         // 移動開始時に元の位置を白で塗りつぶす前に、現在の画像状態を保存
         if (selection.originalX !== undefined && selection.originalY !== undefined && ctx && imageRef.current) {
+          // Undo用に履歴を保存
+          saveImageToHistory();
+
           // キャンセル用に現在の画像を保存
           const savedImage = new Image();
           savedImage.src = imageRef.current.src;
@@ -487,6 +513,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !selection) return;
 
+    // Undo用に履歴を保存
+    saveImageToHistory();
+
     // 選択範囲を白で塗りつぶす
     const x = Math.min(selection.startX, selection.endX);
     const y = Math.min(selection.startY, selection.endY);
@@ -496,6 +525,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(x, y, width, height);
 
+    // 選択範囲をクリア（再描画の前に）
+    setSelection(null);
+
     // 画像参照を更新
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
@@ -506,13 +538,18 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
+
+        // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        // すべてのパスを再描画
+        history.forEach(path => {
+          drawPath(ctx, path);
+        });
       };
       img.src = tempCanvas.toDataURL();
     }
-
-    // 選択範囲をクリア
-    setSelection(null);
-    redrawCanvas();
   };
 
   // 選択範囲を確定（画像に貼り付け）
@@ -521,11 +558,19 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !selection || !selection.imageData) return;
 
+    // Undo用に履歴を保存（移動していない場合のみ）
+    if (!selection.savedImageBeforeMove) {
+      saveImageToHistory();
+    }
+
     const x = Math.min(selection.startX, selection.endX);
     const y = Math.min(selection.startY, selection.endY);
 
     // 現在の位置に画像データを描画
     ctx.putImageData(selection.imageData, x, y);
+
+    // 選択範囲をクリア（再描画の前に）
+    setSelection(null);
 
     // 画像参照を更新
     const tempCanvas = document.createElement('canvas');
@@ -537,13 +582,18 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
+
+        // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        // すべてのパスを再描画
+        history.forEach(path => {
+          drawPath(ctx, path);
+        });
       };
       img.src = tempCanvas.toDataURL();
     }
-
-    // 選択範囲をクリア
-    setSelection(null);
-    redrawCanvas();
   };
 
   // 選択をキャンセル
@@ -552,26 +602,27 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !selection) return;
 
+    // 移動開始前の画像を取得（setSelection前に）
+    const savedImage = selection.savedImageBeforeMove;
+
+    // 選択範囲をクリア（再描画の前に）
+    setSelection(null);
+
     // 移動開始前の画像が保存されている場合は復元
-    if (selection.savedImageBeforeMove) {
-      selection.savedImageBeforeMove.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(selection.savedImageBeforeMove!, 0, 0);
-        imageRef.current = selection.savedImageBeforeMove!;
-        setSelection(null);
-        redrawCanvas();
-      };
-      // 画像が既にロード済みの場合
-      if (selection.savedImageBeforeMove.complete) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(selection.savedImageBeforeMove, 0, 0);
-        imageRef.current = selection.savedImageBeforeMove;
-      }
+    if (savedImage) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(savedImage, 0, 0);
+      imageRef.current = savedImage;
     }
 
-    // 選択範囲をクリア
-    setSelection(null);
-    redrawCanvas();
+    // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(imageRef.current, 0, 0);
+
+    // すべてのパスを再描画
+    history.forEach(path => {
+      drawPath(ctx, path);
+    });
   };
 
   // キーボードイベントを処理
@@ -597,6 +648,38 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
 
   // 元に戻す
   const handleUndo = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    // 画像履歴がある場合は、画像を復元
+    if (imageHistory.length > 0) {
+      const previousImage = imageHistory[imageHistory.length - 1];
+      const newImageHistory = imageHistory.slice(0, -1);
+      setImageHistory(newImageHistory);
+
+      // 選択範囲をクリア
+      setSelection(null);
+
+      // 画像を復元
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(previousImage, 0, 0);
+      imageRef.current = previousImage;
+
+      // 即座に再描画
+      redrawCanvas();
+
+      // さらに次のフレームでも再描画（確実に反映させるため）
+      requestAnimationFrame(() => {
+        redrawCanvas();
+      });
+
+      // redrawTriggerも更新（念のため）
+      setRedrawTrigger(prev => prev + 1);
+      return;
+    }
+
+    // 描画履歴がある場合は、パスを削除
     if (history.length === 0) return;
     const newHistory = history.slice(0, -1);
     setHistory(newHistory);
@@ -764,7 +847,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
               variant="outlined"
               startIcon={<Undo />}
               onClick={handleUndo}
-              disabled={history.length === 0}
+              disabled={history.length === 0 && imageHistory.length === 0}
             >
               元に戻す
             </Button>

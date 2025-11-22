@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build prompt (now async - fetches emotion tags from database)
+    // Build prompt (now async - fetches emotion tags from database and uses template)
     const prompt = await buildConversationPrompt({
       characters: characters.map(c => ({
         id: c.id,
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       messageCount: body.messageCount,
       tone: body.tone,
       previousMessages: body.previousMessages
-    });
+    }, body.promptTemplateId);
 
     // Generate conversation using Gemini
     const apiKey = process.env.GEMINI_API_KEY;

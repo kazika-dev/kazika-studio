@@ -104,6 +104,7 @@ export interface GenerateConversationRequest {
   situation: string;
   messageCount: number;
   tone?: 'casual' | 'formal' | 'dramatic' | 'humorous';
+  promptTemplateId?: number;
   previousMessages?: Array<{
     speaker: string;
     message: string;
@@ -139,7 +140,6 @@ export interface ConversationMessageWithCharacter extends ConversationMessage {
     name: string;
     image_url: string | null;
   } | null;
-  scene_characters?: ConversationMessageCharacterWithDetails[];  // シーンに登場するキャラクター
 }
 
 export interface RegenerateMessageRequest {
@@ -322,65 +322,46 @@ export interface StoryTreeNode {
   }>;
 }
 
-// Story Scene Characters types
-export interface StorySceneCharacter {
+// Conversation Prompt Template types
+export interface ConversationPromptTemplate {
   id: number;
-  story_scene_id: number;
-  character_sheet_id: number;
-  display_order: number;
-  is_main_character: boolean;
+  name: string;
+  description: string | null;
+  template_text: string;
+  is_default: boolean;
+  user_id: string | null;
   created_at: string;
+  updated_at: string;
   metadata: Record<string, any>;
 }
 
-export interface StorySceneCharacterWithDetails extends StorySceneCharacter {
-  character_id: number;
-  character_name: string;
-  image_url: string | null;
-  description: string | null;
-  personality: string | null;
-  speaking_style: string | null;
-  sample_dialogues: Array<{
-    situation: string;
-    line: string;
-  }>;
+export interface CreatePromptTemplateRequest {
+  name: string;
+  description?: string;
+  templateText: string;
+  isDefault?: boolean;
 }
 
-export interface StorySceneWithCharacters extends StoryScene {
-  characters?: StorySceneCharacterWithDetails[];
+export interface UpdatePromptTemplateRequest {
+  name?: string;
+  description?: string;
+  templateText?: string;
+  isDefault?: boolean;
 }
 
-// API Request/Response for Scene Characters
-export interface AddCharacterToSceneRequest {
-  characterId: number;
-  displayOrder?: number;
-  isMainCharacter?: boolean;
-}
-
-export interface AddCharacterToSceneResponse {
+export interface ListPromptTemplatesResponse {
   success: boolean;
   data?: {
-    sceneCharacter: StorySceneCharacter;
+    templates: ConversationPromptTemplate[];
   };
   error?: string;
 }
 
-export interface ListSceneCharactersResponse {
+export interface GetPromptTemplateResponse {
   success: boolean;
   data?: {
-    characters: StorySceneCharacterWithDetails[];
+    template: ConversationPromptTemplate;
   };
   error?: string;
 }
 
-export interface UpdateSceneCharacterOrderRequest {
-  characterOrders: Array<{
-    characterId: number;
-    displayOrder: number;
-  }>;
-}
-
-export interface UpdateSceneMainCharacterRequest {
-  characterId: number;
-  isMainCharacter: boolean;
-}

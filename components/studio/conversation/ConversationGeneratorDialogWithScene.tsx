@@ -21,7 +21,7 @@ import {
   Stack
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import type { GenerateConversationRequest } from '@/types/conversation';
+import type { GenerateConversationRequest, ConversationPromptTemplate } from '@/types/conversation';
 
 interface Character {
   id: number;
@@ -52,14 +52,34 @@ export default function ConversationGeneratorDialogWithScene({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Prompt templates
+  const [templates, setTemplates] = useState<ConversationPromptTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>(undefined);
+
   useEffect(() => {
     if (open) {
       loadCharacters();
-      if (sceneId) {
-        loadSceneCharacters();
-      }
+      loadTemplates();
     }
   }, [open, sceneId]);
+
+  const loadTemplates = async () => {
+    try {
+      const response = await fetch('/api/conversation-prompt-templates');
+      const result = await response.json();
+
+      if (result.success && result.data?.templates) {
+        setTemplates(result.data.templates);
+        // Select default template if available
+        const defaultTemplate = result.data.templates.find((t: ConversationPromptTemplate) => t.is_default);
+        if (defaultTemplate) {
+          setSelectedTemplateId(defaultTemplate.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+    }
+  };
 
   const loadCharacters = async () => {
     setLoadingCharacters(true);
@@ -78,25 +98,6 @@ export default function ConversationGeneratorDialogWithScene({
       setError('キャラクターの読み込みに失敗しました');
     } finally {
       setLoadingCharacters(false);
-    }
-  };
-
-  const loadSceneCharacters = async () => {
-    if (!sceneId) return;
-
-    try {
-      const response = await fetch(`/api/scenes/${sceneId}/characters`);
-      const result = await response.json();
-
-      if (result.success && result.data?.characters) {
-        // シーンに登録されたキャラクターIDを自動選択
-        const sceneCharacterIds = result.data.characters.map((c: any) => c.character_sheet_id);
-        setSelectedCharacters(sceneCharacterIds);
-        console.log('[ConversationGenerator] Auto-selected scene characters:', sceneCharacterIds);
-      }
-    } catch (error) {
-      console.error('Failed to load scene characters:', error);
-      // エラーは無視して続行（シーンキャラクターは必須ではない）
     }
   };
 
@@ -132,6 +133,7 @@ export default function ConversationGeneratorDialogWithScene({
         situation: situation.trim(),
         messageCount,
         tone,
+        promptTemplateId: selectedTemplateId,
       };
 
       const response = await fetch('/api/conversations/generate', {
@@ -244,6 +246,22 @@ export default function ConversationGeneratorDialogWithScene({
               <MenuItem value="formal">フォーマル</MenuItem>
               <MenuItem value="dramatic">ドラマティック</MenuItem>
               <MenuItem value="humorous">ユーモラス</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* プロンプトテンプレート選択 */}
+          <FormControl fullWidth>
+            <InputLabel>プロンプトテンプレート</InputLabel>
+            <Select
+              value={selectedTemplateId || ''}
+              onChange={(e) => setSelectedTemplateId(e.target.value ? Number(e.target.value) : undefined)}
+              label="プロンプトテンプレート"
+            >
+              {templates.map((template) => (
+                <MenuItem key={template.id} value={template.id}>
+                  {template.name} {template.is_default && '(デフォルト)'}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 

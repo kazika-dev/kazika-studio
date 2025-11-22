@@ -26,7 +26,6 @@ interface StoryTreeViewProps {
   onCreateStory: () => void;
   onCreateScene: (storyId: number) => void;
   onCreateConversation: (sceneId: number) => void;
-  onEditScene?: (sceneId: number) => void;
   onDeleteStory: (storyId: number) => void;
   onDeleteScene: (sceneId: number) => void;
   onDeleteConversation: (conversationId: number) => void;
@@ -39,7 +38,6 @@ export default function StoryTreeView({
   onCreateStory,
   onCreateScene,
   onCreateConversation,
-  onEditScene,
   onDeleteStory,
   onDeleteScene,
   onDeleteConversation,
@@ -258,18 +256,6 @@ export default function StoryTreeView({
         anchorEl={sceneMenuAnchor?.anchor}
         onClose={() => setSceneMenuAnchor(null)}
       >
-        {onEditScene && (
-          <MenuItem
-            onClick={() => {
-              if (sceneMenuAnchor) {
-                onEditScene(sceneMenuAnchor.sceneId);
-              }
-              setSceneMenuAnchor(null);
-            }}
-          >
-            キャラクター管理
-          </MenuItem>
-        )}
         <MenuItem
           onClick={() => {
             if (sceneMenuAnchor && confirm('このシーンを削除しますか？')) {

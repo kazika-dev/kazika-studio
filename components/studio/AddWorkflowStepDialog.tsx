@@ -28,6 +28,9 @@ import {
   Stack,
   Chip,
   Paper,
+  Avatar,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
@@ -35,7 +38,16 @@ import ImageIcon from '@mui/icons-material/Image';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import AudiotrackIcon from '@mui/icons-material/Audiotrack';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DynamicFormField, { FormFieldConfig } from '@/components/form/DynamicFormField';
+
+interface CharacterSheet {
+  id: number;
+  name: string;
+  image_url: string | null;
+  description: string | null;
+}
 
 interface Workflow {
   id: number;
@@ -91,15 +103,15 @@ export default function AddWorkflowStepDialog({
   // 動的フォームの値
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
-  // ノード設定の上書き
-  const [nodeOverrides, setNodeOverrides] = useState<Record<string, any>>({});
-
   // 入力設定（従来の設定も維持）
   const [usePrompt, setUsePrompt] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [usePreviousImage, setUsePreviousImage] = useState(false);
   const [usePreviousVideo, setUsePreviousVideo] = useState(false);
   const [usePreviousAudio, setUsePreviousAudio] = useState(false);
+
+  // キャラクターシート関連
+  const [characterSheets, setCharacterSheets] = useState<CharacterSheet[]>([]);
   const [usePreviousText, setUsePreviousText] = useState(false);
 
   // ワークフロー一覧を読み込む
@@ -140,10 +152,24 @@ export default function AddWorkflowStepDialog({
     }
   }, []);
 
+  // キャラクターシートを読み込む
+  const loadCharacterSheets = async () => {
+    try {
+      const response = await fetch('/api/character-sheets');
+      const result = await response.json();
+      if (result.success && result.data?.characterSheets) {
+        setCharacterSheets(result.data.characterSheets);
+      }
+    } catch (error) {
+      console.error('Failed to load character sheets:', error);
+    }
+  };
+
   // ダイアログが開いたときの初期化
   useEffect(() => {
     if (open) {
       loadWorkflows();
+      loadCharacterSheets();
       // 編集モードの場合、初期値を設定
       if (isEditMode && editStep) {
         console.log('Setting edit mode initial values:', {
@@ -159,14 +185,6 @@ export default function AddWorkflowStepDialog({
           console.log('No workflowInputs to restore');
           setFormValues({});
         }
-        // ノード設定の上書きを復元
-        if (editStep.input_config?.nodeOverrides) {
-          console.log('Restoring nodeOverrides:', editStep.input_config.nodeOverrides);
-          setNodeOverrides(editStep.input_config.nodeOverrides);
-        } else {
-          console.log('No nodeOverrides to restore');
-          setNodeOverrides({});
-        }
         // その他の入力設定も復元
         setUsePrompt(editStep.input_config?.usePrompt || false);
         setPrompt(editStep.input_config?.prompt || '');
@@ -179,7 +197,6 @@ export default function AddWorkflowStepDialog({
         console.log('New step mode - resetting values');
         setSelectedWorkflowId(null);
         setFormValues({});
-        setNodeOverrides({});
         setUsePrompt(false);
         setPrompt('');
         setUsePreviousImage(false);
@@ -290,12 +307,6 @@ export default function AddWorkflowStepDialog({
       usePreviousText: hasPreviousSteps ? usePreviousText : false,
       // 入力されたフィールドのみを追加
       workflowInputs: Object.keys(filledFormValues).length > 0 ? filledFormValues : undefined,
-      // ノード設定の上書き（存在する場合）
-      nodeOverrides: Object.keys(nodeOverrides).length > 0 ? nodeOverrides : undefined,
-      // メタデータを保持（編集時）
-      character_id: editStep?.input_config?.character_id,
-      character_name: editStep?.input_config?.character_name,
-      has_custom_voice: editStep?.input_config?.has_custom_voice,
     };
 
     const stepData = {
@@ -320,7 +331,6 @@ export default function AddWorkflowStepDialog({
       setSelectedWorkflowId(null);
       setSelectedWorkflow(null);
       setFormValues({});
-      setNodeOverrides({});
       setUsePrompt(false);
       setPrompt('');
       setUsePreviousImage(false);
@@ -337,7 +347,6 @@ export default function AddWorkflowStepDialog({
       setSelectedWorkflowId(null);
       setSelectedWorkflow(null);
       setFormValues({});
-      setNodeOverrides({});
       setUsePrompt(false);
       setPrompt('');
       setUsePreviousImage(false);
@@ -435,170 +444,6 @@ export default function AddWorkflowStepDialog({
                           value={formValues[field.name]}
                           onChange={(value) => handleFieldChange(field.name, value)}
                         />
-                      ))}
-                    </Stack>
-                    <Divider sx={{ my: 3 }} />
-                  </Box>
-                )}
-
-                {/* ノード設定の上書き */}
-                {Object.keys(nodeOverrides).length > 0 && (
-                  <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                      ノード設定
-                      {editStep?.input_config?.character_name && (
-                        <Chip
-                          label={editStep.input_config.character_name}
-                          size="small"
-                          sx={{ ml: 1 }}
-                        />
-                      )}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-                      会話から生成されたノード設定を編集できます
-                    </Typography>
-                    <Stack spacing={2}>
-                      {Object.entries(nodeOverrides).map(([nodeId, config]: [string, any]) => (
-                        <Paper key={nodeId} variant="outlined" sx={{ p: 2 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                            ノードID: {nodeId}
-                          </Typography>
-
-                          {/* テキスト（ElevenLabsノード用） */}
-                          {config.text !== undefined && (
-                            <Box sx={{ mb: 2 }}>
-                              <TextField
-                                label="テキスト"
-                                fullWidth
-                                multiline
-                                rows={3}
-                                value={config.text || ''}
-                                onChange={(e) => {
-                                  setNodeOverrides(prev => ({
-                                    ...prev,
-                                    [nodeId]: {
-                                      ...prev[nodeId],
-                                      text: e.target.value,
-                                    }
-                                  }));
-                                }}
-                                variant="outlined"
-                                size="small"
-                              />
-                            </Box>
-                          )}
-
-                          {/* 音声ID（ElevenLabsノード用） */}
-                          {config.voiceId !== undefined && (
-                            <Box sx={{ mb: 2 }}>
-                              <TextField
-                                label="音声ID"
-                                fullWidth
-                                value={config.voiceId || ''}
-                                onChange={(e) => {
-                                  setNodeOverrides(prev => ({
-                                    ...prev,
-                                    [nodeId]: {
-                                      ...prev[nodeId],
-                                      voiceId: e.target.value,
-                                    }
-                                  }));
-                                }}
-                                variant="outlined"
-                                size="small"
-                                helperText="ElevenLabsの音声ID（例: JBFqnCBsd6RMkjVDRZzb）"
-                              />
-                            </Box>
-                          )}
-
-                          {/* モデルID（ElevenLabsノード用） */}
-                          {config.modelId !== undefined && (
-                            <Box sx={{ mb: 2 }}>
-                              <TextField
-                                label="モデルID"
-                                fullWidth
-                                value={config.modelId || ''}
-                                onChange={(e) => {
-                                  setNodeOverrides(prev => ({
-                                    ...prev,
-                                    [nodeId]: {
-                                      ...prev[nodeId],
-                                      modelId: e.target.value,
-                                    }
-                                  }));
-                                }}
-                                variant="outlined"
-                                size="small"
-                                helperText="ElevenLabsのモデルID（例: eleven_turbo_v2_5）"
-                              />
-                            </Box>
-                          )}
-
-                          {/* プロンプト（Nanobanaノード用） */}
-                          {config.prompt !== undefined && (
-                            <Box sx={{ mb: 2 }}>
-                              <TextField
-                                label="プロンプト"
-                                fullWidth
-                                multiline
-                                rows={4}
-                                value={config.prompt || ''}
-                                onChange={(e) => {
-                                  setNodeOverrides(prev => ({
-                                    ...prev,
-                                    [nodeId]: {
-                                      ...prev[nodeId],
-                                      prompt: e.target.value,
-                                    }
-                                  }));
-                                }}
-                                variant="outlined"
-                                size="small"
-                                helperText="Nanobana画像生成用のプロンプト"
-                              />
-                            </Box>
-                          )}
-
-                          {/* アスペクト比（Nanobanaノード用） */}
-                          {config.aspectRatio !== undefined && (
-                            <Box sx={{ mb: 2 }}>
-                              <FormControl fullWidth size="small">
-                                <InputLabel>アスペクト比</InputLabel>
-                                <Select
-                                  value={config.aspectRatio || '16:9'}
-                                  onChange={(e) => {
-                                    setNodeOverrides(prev => ({
-                                      ...prev,
-                                      [nodeId]: {
-                                        ...prev[nodeId],
-                                        aspectRatio: e.target.value,
-                                      }
-                                    }));
-                                  }}
-                                  label="アスペクト比"
-                                >
-                                  <MenuItem value="16:9">16:9（横長）</MenuItem>
-                                  <MenuItem value="9:16">9:16（縦長）</MenuItem>
-                                  <MenuItem value="4:3">4:3</MenuItem>
-                                  <MenuItem value="3:4">3:4</MenuItem>
-                                  <MenuItem value="1:1">1:1（正方形）</MenuItem>
-                                </Select>
-                              </FormControl>
-                            </Box>
-                          )}
-
-                          {/* キャラクターシートID（Nanobanaノード用） */}
-                          {config.selectedCharacterSheetIds !== undefined && (
-                            <Box>
-                              <Typography variant="caption" fontWeight={600} display="block" gutterBottom>
-                                キャラクターシートID:
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {config.selectedCharacterSheetIds?.join(', ') || 'なし'}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Paper>
                       ))}
                     </Stack>
                     <Divider sx={{ my: 3 }} />

@@ -3,15 +3,42 @@ import type {
   ConversationGenerationAIResponse,
   GeneratedMessage
 } from '@/types/conversation';
-import { getAllElevenLabsTags, getAllCameraAngles, getAllShotDistances } from '@/lib/db';
+import {
+  getAllElevenLabsTags,
+  getAllCameraAngles,
+  getAllShotDistances,
+  getConversationPromptTemplateById,
+  getDefaultConversationPromptTemplate
+} from '@/lib/db';
 
 /**
- * Build a conversation generation prompt for the AI model
- * Fetches the latest emotion tags from database
+ * Build a conversation generation prompt for the AI model using a template
+ * Fetches the latest emotion tags from database and applies template variables
  */
-export async function buildConversationPrompt(input: ConversationPromptInput): Promise<string> {
+export async function buildConversationPrompt(
+  input: ConversationPromptInput,
+  templateId?: number
+): Promise<string> {
+  // Fetch template (use provided templateId or get default)
+  let template;
+  if (templateId) {
+    template = await getConversationPromptTemplateById(templateId);
+    if (!template) {
+      console.warn(`Template with ID ${templateId} not found, falling back to default`);
+      template = await getDefaultConversationPromptTemplate();
+    }
+  } else {
+    template = await getDefaultConversationPromptTemplate();
+  }
+
+  if (!template) {
+    throw new Error('No conversation prompt template found');
+  }
+
   // Fetch latest emotion tags from database
   const emotionTags = await getAllElevenLabsTags();
+
+  // Build template variables
   const charactersSection = input.characters
     .map(
       (char, idx) => `
@@ -49,74 +76,21 @@ ${input.previousMessages.map((m) => `${m.speaker}: ${m.message}`).join('\n')}
   - friendly: 親しみやすい音声（カジュアルな友人との会話など）
   - serious: 真剣で権威のある音声（重要な決断や厳粛なシーンなど）`;
 
-  return `
-あなたはキャラクター間の自然な会話を生成するAIです。
-以下の情報に基づいて、キャラクターらしい会話を生成してください。
+  const characterIdsList = input.characters.map(c => c.id).join(', ');
+  const characterNamesList = input.characters.map(c => `"${c.name}"`).join(', ');
 
-## キャラクター情報
-${charactersSection}
+  // Replace template variables
+  let prompt = template.template_text;
+  prompt = prompt.replace(/\{\{charactersSection\}\}/g, charactersSection);
+  prompt = prompt.replace(/\{\{situation\}\}/g, input.situation);
+  prompt = prompt.replace(/\{\{toneDescription\}\}/g, toneDescription);
+  prompt = prompt.replace(/\{\{messageCount\}\}/g, input.messageCount.toString());
+  prompt = prompt.replace(/\{\{previousMessagesSection\}\}/g, previousMessagesSection);
+  prompt = prompt.replace(/\{\{emotionTagsSection\}\}/g, emotionTagsSection);
+  prompt = prompt.replace(/\{\{characterIdsList\}\}/g, characterIdsList);
+  prompt = prompt.replace(/\{\{characterNamesList\}\}/g, characterNamesList);
 
-## 会話設定
-- シチュエーション: ${input.situation}
-- 会話の雰囲気: ${toneDescription}
-- 生成するメッセージ数: ${input.messageCount}
-${previousMessagesSection}
-
-## 出力形式
-以下のJSON形式で会話を生成してください。各キャラクターの性格と話し方を必ず反映させてください。
-
-\`\`\`json
-{
-  "characterIds": [このシーンに登場する全てのキャラクターIDの配列（数値、上記のキャラクター情報のIDを使用）],
-  "messages": [
-    {
-      "speakerId": キャラクターID（数値、上記のキャラクター情報のIDを使用）,
-      "message": "セリフ内容",
-      "emotion": "happy|sad|angry|neutral|surprised|excited|confused",
-      "emotionTag": "感情を表すタグ（下記の利用可能な感情タグから1つ選択）",
-      "scene": "このメッセージが発せられた具体的な場面の描写（キャラクターの表情、動作、周囲の状況など）",
-      "scenePromptJa": "シーンを画像生成するための日本語プロンプト（100-150文字程度、視覚的な要素を詳細に描写）",
-      "scenePromptEn": "シーンを画像生成するための英語プロンプト（Stable Diffusion/DALL-E形式、high quality, detailed, anime styleなどの品質タグを含む）",
-      "sceneCharacterIds": [このメッセージのシーンに登場するキャラクターIDの配列（数値）]
-    }
-  ]
-}
-\`\`\`
-
-## 重要な注意事項
-- 各キャラクターの性格と話し方の特徴を必ず反映してください
-- **【必須】characterIdsフィールドには、このシーンに登場する全てのキャラクターIDを配列で記載してください（例: [${input.characters.map(c => c.id).join(', ')}]）**
-  - 会話に登場したキャラクターを全て含めてください
-  - 登場しなかったキャラクターは含めないでください
-- **【必須】speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
-- **【オプション】speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
-  - speakerIdが正しく設定されていれば、speakerフィールドは省略可能です
-- 自然な会話の流れを作ってください
-- 感情(emotion)は会話の文脈に合わせて適切に設定してください
-- **emotionTag（感情タグ）は、メッセージの音声化に使用されます。以下の利用可能な感情タグから適切なものを選んでください：**
-${emotionTagsSection}
-- **scene（場面）フィールドには、そのメッセージが発せられた時の具体的な場面を描写してください**
-  - キャラクターの表情や仕草（笑顔、驚いた顔、俯く、手を振る、など）
-  - 体の動き（近づく、振り向く、立ち上がる、など）
-  - 周囲の状況や雰囲気（静かな図書室、夕日が差し込む教室、など）
-  - 視覚的にイメージできる具体的な描写を心がけてください
-- **scenePromptJa（日本語シーンプロンプト）には、このメッセージのシーンを画像生成するための日本語プロンプトを記述してください**
-  - 100-150文字程度で、場所、時間帯、キャラクターの配置、表情、周囲の雰囲気などを含める
-  - 視覚的な要素を詳細に描写する
-  - 例: 「夕暮れ時の学校の屋上。主人公が柵に寄りかかり、遠くを見つめている。オレンジ色の空が背景に広がり、穏やかな風が吹いている。」
-- **scenePromptEn（英語シーンプロンプト）には、画像生成AIに渡す英語プロンプトを記述してください**
-  - Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含める
-  - シーンの視覚的な要素を英語で具体的に記述
-  - 例: "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, anime style, high quality, detailed, cinematic lighting"
-- **【必須】sceneCharacterIds（シーンキャラクターID）には、このメッセージのシーンに登場する全てのキャラクターIDを配列で記載してください**
-  - 話者（speakerId）だけでなく、シーンに映り込む全てのキャラクターを含めてください
-  - 例: 話者が「ミオ」で、背景に「カジカ」と「メスガキ」も映っている場合 → sceneCharacterIds: [12, 13, 14]
-  - シーンプロンプト（scenePromptJa/En）に記載されているキャラクターを全て含めてください
-  - 最大4人まで登録可能（画像生成の制約）
-- メッセージ数は正確に${input.messageCount}個生成してください
-
-自然で魅力的な会話を生成してください。
-`.trim();
+  return prompt.trim();
 }
 
 /**

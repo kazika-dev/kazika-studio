@@ -21,7 +21,6 @@ import ConversationGeneratorDialogWithScene from '@/components/studio/conversati
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
-import SceneCharacterSelector from '@/components/studio/conversation/SceneCharacterSelector';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import type {
   Conversation,
@@ -58,10 +57,8 @@ export default function ConversationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
-  const [sceneEditDialogOpen, setSceneEditDialogOpen] = useState(false);
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
-  const [editingSceneId, setEditingSceneId] = useState<number | null>(null);
   const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
@@ -342,11 +339,6 @@ export default function ConversationsPage() {
     setConversationDialogOpen(true);
   };
 
-  const handleEditScene = (sceneId: number) => {
-    setEditingSceneId(sceneId);
-    setSceneEditDialogOpen(true);
-  };
-
   const handleDeleteStory = async (storyId: number) => {
     try {
       const response = await fetch(`/api/stories/${storyId}`, {
@@ -439,7 +431,6 @@ export default function ConversationsPage() {
               onCreateStory={() => setStoryDialogOpen(true)}
               onCreateScene={handleCreateScene}
               onCreateConversation={handleCreateConversation}
-              onEditScene={handleEditScene}
               onDeleteStory={handleDeleteStory}
               onDeleteScene={handleDeleteScene}
               onDeleteConversation={handleDeleteConversation}
@@ -551,53 +542,6 @@ export default function ConversationsPage() {
         onSelect={handleWorkflowSelected}
       />
 
-      {/* Scene Character Selector Dialog */}
-      {editingSceneId && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: sceneEditDialogOpen ? 'flex' : 'none',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1300,
-          }}
-          onClick={() => {
-            setSceneEditDialogOpen(false);
-            setEditingSceneId(null);
-          }}
-        >
-          <Paper
-            sx={{ maxWidth: 600, width: '90%', maxHeight: '80vh', overflow: 'auto', p: 3 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Typography variant="h6" gutterBottom>
-              シーンのキャラクター管理
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <SceneCharacterSelector
-              sceneId={editingSceneId}
-              onUpdate={() => {
-                // キャラクター更新時の処理（必要に応じて）
-              }}
-            />
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                onClick={() => {
-                  setSceneEditDialogOpen(false);
-                  setEditingSceneId(null);
-                }}
-              >
-                閉じる
-              </Button>
-            </Box>
-          </Paper>
-        </Box>
-      )}
     </Box>
   );
 }

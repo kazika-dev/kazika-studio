@@ -20,6 +20,7 @@ import {
   ArrowBack as ArrowBackIcon,
   VolumeUp as VolumeUpIcon,
   Image as ImageIcon,
+  EditNote as EditNoteIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -82,6 +83,14 @@ const masterTables: MasterTable[] = [
     description: 'ワークフローで使用する画像素材のマスタデータ（背景、テクスチャなど）',
     icon: <ImageIcon />,
     color: '#f57c00',
+  },
+  {
+    id: 'conversation_prompt_templates',
+    name: 'conversation_prompt_templates',
+    displayName: '会話生成プロンプト',
+    description: '会話生成AIに渡すプロンプトテンプレートの管理',
+    icon: <EditNoteIcon />,
+    color: '#7b1fa2',
   },
 ];
 
