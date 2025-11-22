@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
         // プロンプトを持つノード: {nodeType}_prompt_{nodeId} フィールドから値を取得
         if (['gemini', 'nanobana', 'higgsfield', 'seedream4'].includes(nodeType)) {
           const promptFieldName = `${nodeType}_prompt_${nodeId}`;
-          const characterSheetsFieldName = `${nodeType}_characterSheets_${nodeId}`;
+          const selectedCharacterSheetsFieldName = `${nodeType}_selectedCharacterSheetIds_${nodeId}`;
 
           console.log(`Processing ${nodeType} node ${nodeId} prompt:`, {
             promptFieldName,
@@ -263,44 +263,23 @@ export async function POST(request: NextRequest) {
             console.log(`✗ No matching prompt field or placeholder found for ${nodeType} node ${nodeId}`);
           }
 
-          // キャラクターシート配列の処理
-          console.log(`Processing ${nodeType} node ${nodeId} characterSheets:`, {
-            characterSheetsFieldName,
-            hasField: inputs[characterSheetsFieldName] !== undefined,
-            fieldValue: inputs[characterSheetsFieldName],
+          // キャラクターシートID配列の処理（selectedCharacterSheetIdsフィールドに統一）
+          console.log(`Processing ${nodeType} node ${nodeId} selectedCharacterSheetIds:`, {
+            selectedCharacterSheetsFieldName,
+            hasField: inputs[selectedCharacterSheetsFieldName] !== undefined,
+            fieldValue: inputs[selectedCharacterSheetsFieldName],
           });
 
-          if (inputs[characterSheetsFieldName] !== undefined) {
-            const characterSheetIds = inputs[characterSheetsFieldName];
+          if (inputs[selectedCharacterSheetsFieldName] !== undefined) {
+            const characterSheetIds = inputs[selectedCharacterSheetsFieldName];
 
             if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
-              console.log(`✓ Loading ${characterSheetIds.length} character sheets for ${nodeType} node ${nodeId}`);
+              console.log(`✓ Setting ${characterSheetIds.length} character sheet IDs for ${nodeType} node ${nodeId}:`, characterSheetIds);
 
-              try {
-                const characterSheets = await Promise.all(
-                  characterSheetIds.map(async (id: any) => {
-                    const characterSheet = await getCharacterSheetById(parseInt(id));
-                    if (characterSheet) {
-                      console.log(`  ✓ Loaded character sheet: ${characterSheet.name} (ID: ${id})`);
-                      return characterSheet;
-                    } else {
-                      console.error(`  ✗ Character sheet ${id} not found`);
-                      return null;
-                    }
-                  })
-                );
-
-                const validCharacterSheets = characterSheets.filter(cs => cs !== null);
-
-                node.data.config = {
-                  ...node.data.config,
-                  characterSheets: validCharacterSheets,
-                };
-
-                console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets for ${nodeType} node ${nodeId}`);
-              } catch (error) {
-                console.error(`✗ Error loading character sheets for ${nodeType} node ${nodeId}:`, error);
-              }
+              node.data.config = {
+                ...node.data.config,
+                selectedCharacterSheetIds: characterSheetIds,
+              };
             }
           }
         }
@@ -332,7 +311,7 @@ export async function POST(request: NextRequest) {
 
         // Nanobanaノード: キャラクターシートと参照画像の処理
         if (nodeType === 'nanobana') {
-          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
+          const characterSheetsFieldName = `nanobana_selectedCharacterSheetIds_${nodeId}`;
           const referenceImagesFieldName = `nanobana_referenceImages_${nodeId}`;
 
           console.log(`Processing nanobana node ${nodeId}:`, {
@@ -349,7 +328,7 @@ export async function POST(request: NextRequest) {
 
             node.data.config = {
               ...node.data.config,
-              characterSheetIds: characterSheetIds,
+              selectedCharacterSheetIds: characterSheetIds,
             };
           }
 
@@ -386,50 +365,16 @@ export async function POST(request: NextRequest) {
               aspectRatio: inputs[aspectRatioFieldName],
             };
           }
-        }
 
-        // Nanobanaノード: キャラクターシートの処理
-        if (nodeType === 'nanobana') {
-          const characterSheetsFieldName = `nanobana_characterSheets_${nodeId}`;
-          console.log(`Processing nanobana node ${nodeId} characterSheets:`, {
-            fieldName: characterSheetsFieldName,
-            hasField: inputs[characterSheetsFieldName] !== undefined,
-            currentCharacterSheets: node.data.config?.characterSheets,
-          });
+          // モデル選択の処理
+          const modelFieldName = `nanobana_model_${nodeId}`;
+          if (inputs[modelFieldName] !== undefined) {
+            console.log(`✓ Setting model for nanobana node ${nodeId}:`, inputs[modelFieldName]);
 
-          if (inputs[characterSheetsFieldName] !== undefined) {
-            const characterSheetIds = inputs[characterSheetsFieldName];
-            console.log(`✓ Setting nanobana node ${nodeId} characterSheets with IDs:`, characterSheetIds);
-
-            // キャラクターシート情報をDBから取得
-            if (Array.isArray(characterSheetIds) && characterSheetIds.length > 0) {
-              try {
-                const characterSheets = await Promise.all(
-                  characterSheetIds.map((id: string) => getCharacterSheetById(parseInt(id)))
-                );
-
-                // nullでないものだけフィルタ
-                const validCharacterSheets = characterSheets.filter((cs) => cs !== null);
-
-                if (validCharacterSheets.length > 0) {
-                  node.data.config = {
-                    ...node.data.config,
-                    characterSheets: validCharacterSheets,
-                  };
-                  console.log(`✓ Successfully loaded ${validCharacterSheets.length} character sheets:`,
-                    validCharacterSheets.map((cs) => cs.name)
-                  );
-                } else {
-                  console.error(`✗ No valid character sheets found for IDs:`, characterSheetIds);
-                }
-              } catch (error) {
-                console.error(`✗ Error loading character sheets:`, error);
-              }
-            } else {
-              console.log(`✗ characterSheetIds is not a valid array:`, characterSheetIds);
-            }
-          } else {
-            console.log(`✗ No matching characterSheets field found for nanobana node ${nodeId}`);
+            node.data.config = {
+              ...node.data.config,
+              model: inputs[modelFieldName],
+            };
           }
         }
 
