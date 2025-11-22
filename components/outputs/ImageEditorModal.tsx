@@ -14,7 +14,7 @@ import {
   AppBar,
   Toolbar
 } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith } from '@mui/icons-material';
 import TextInputDialog, { TextConfig } from './TextInputDialog';
 
 interface ImageEditorModalProps {
@@ -24,7 +24,7 @@ interface ImageEditorModalProps {
   onSave: (imageData: { mimeType: string; data: string }) => void;
 }
 
-type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text';
+type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text' | 'move';
 
 interface DrawingPath {
   mode: DrawingMode;
@@ -52,6 +52,9 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [pendingTextPosition, setPendingTextPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectedTextIndex, setSelectedTextIndex] = useState<number | null>(null);
+  const [isDraggingText, setIsDraggingText] = useState(false);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -76,6 +79,42 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     img.src = imageUrl;
   }, [imageUrl, open]);
 
+  // テキストの境界ボックスを計算
+  const getTextBoundingBox = (path: DrawingPath, ctx: CanvasRenderingContext2D) => {
+    if (path.mode !== 'text' || !path.text) return null;
+
+    ctx.font = `${path.fontStyle || 'normal'} ${path.fontWeight || 'normal'} ${path.fontSize || 32}px sans-serif`;
+    const metrics = ctx.measureText(path.text);
+    const width = metrics.width;
+    const height = path.fontSize || 32;
+
+    return {
+      x: path.points[0].x,
+      y: path.points[0].y - height,
+      width,
+      height: height * 1.2, // 余白を追加
+    };
+  };
+
+  // クリック位置がテキストの境界内にあるかチェック
+  const findTextAtPosition = (x: number, y: number) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return -1;
+
+    // 後ろから検索（最後に描画されたものが優先）
+    for (let i = history.length - 1; i >= 0; i--) {
+      const path = history[i];
+      if (path.mode === 'text') {
+        const box = getTextBoundingBox(path, ctx);
+        if (box && x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  };
+
   // 履歴を再描画
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
@@ -87,8 +126,20 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     ctx.drawImage(imageRef.current, 0, 0);
 
     // すべてのパスを再描画
-    history.forEach(path => {
+    history.forEach((path, index) => {
       drawPath(ctx, path);
+
+      // 選択されたテキストには境界ボックスを表示
+      if (drawingMode === 'move' && index === selectedTextIndex && path.mode === 'text') {
+        const box = getTextBoundingBox(path, ctx);
+        if (box) {
+          ctx.strokeStyle = '#1976d2';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(box.x, box.y, box.width, box.height);
+          ctx.setLineDash([]);
+        }
+      }
     });
   };
 
@@ -166,6 +217,24 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
       return;
     }
 
+    // 移動モードの場合はテキストを選択
+    if (drawingMode === 'move') {
+      const textIndex = findTextAtPosition(x, y);
+      if (textIndex !== -1) {
+        setSelectedTextIndex(textIndex);
+        setIsDraggingText(true);
+        const textPath = history[textIndex];
+        setDragOffset({
+          x: x - textPath.points[0].x,
+          y: y - textPath.points[0].y,
+        });
+      } else {
+        setSelectedTextIndex(null);
+      }
+      redrawCanvas();
+      return;
+    }
+
     setIsDrawing(true);
     setCurrentPath({
       mode: drawingMode,
@@ -178,8 +247,6 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
 
   // 描画中
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !currentPath) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -188,6 +255,18 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     const scaleY = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    // テキストをドラッグ中
+    if (isDraggingText && selectedTextIndex !== null) {
+      const newHistory = [...history];
+      const textPath = newHistory[selectedTextIndex];
+      textPath.points = [{ x: x - dragOffset.x, y: y - dragOffset.y }];
+      setHistory(newHistory);
+      redrawCanvas();
+      return;
+    }
+
+    if (!isDrawing || !currentPath) return;
 
     const newPath = {
       ...currentPath,
@@ -205,6 +284,11 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
 
   // 描画終了
   const stopDrawing = () => {
+    if (isDraggingText) {
+      setIsDraggingText(false);
+      return;
+    }
+
     if (currentPath && currentPath.points.length > 0) {
       setHistory([...history, currentPath]);
     }
@@ -303,6 +387,9 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
             </ToggleButton>
             <ToggleButton value="text" title="テキスト">
               <TextFields />
+            </ToggleButton>
+            <ToggleButton value="move" title="移動">
+              <OpenWith />
             </ToggleButton>
             <ToggleButton value="erase" title="消しゴム">
               <Delete />
