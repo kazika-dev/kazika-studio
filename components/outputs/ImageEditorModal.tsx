@@ -14,7 +14,8 @@ import {
   AppBar,
   Toolbar
 } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields } from '@mui/icons-material';
+import TextInputDialog, { TextConfig } from './TextInputDialog';
 
 interface ImageEditorModalProps {
   open: boolean;
@@ -23,7 +24,7 @@ interface ImageEditorModalProps {
   onSave: (imageData: { mimeType: string; data: string }) => void;
 }
 
-type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase';
+type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text';
 
 interface DrawingPath {
   mode: DrawingMode;
@@ -31,6 +32,11 @@ interface DrawingPath {
   lineWidth: number;
   opacity: number;
   points: { x: number; y: number }[];
+  // テキスト用のフィールド
+  text?: string;
+  fontSize?: number;
+  fontWeight?: 'normal' | 'bold';
+  fontStyle?: 'normal' | 'italic';
 }
 
 export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: ImageEditorModalProps) {
@@ -44,6 +50,8 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [pendingTextPosition, setPendingTextPosition] = useState<{ x: number; y: number } | null>(null);
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -92,7 +100,13 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    if (path.mode === 'erase') {
+    if (path.mode === 'text' && path.text) {
+      // テキストを描画
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.font = `${path.fontStyle || 'normal'} ${path.fontWeight || 'normal'} ${path.fontSize || 32}px sans-serif`;
+      ctx.fillStyle = path.color;
+      ctx.fillText(path.text, path.points[0].x, path.points[0].y);
+    } else if (path.mode === 'erase') {
       ctx.globalCompositeOperation = 'destination-out';
       ctx.strokeStyle = path.color;
     } else {
@@ -145,6 +159,13 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // テキストモードの場合はダイアログを表示
+    if (drawingMode === 'text') {
+      setPendingTextPosition({ x, y });
+      setTextDialogOpen(true);
+      return;
+    }
+
     setIsDrawing(true);
     setCurrentPath({
       mode: drawingMode,
@@ -189,6 +210,27 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
     }
     setIsDrawing(false);
     setCurrentPath(null);
+  };
+
+  // テキスト追加
+  const handleAddText = (config: TextConfig) => {
+    if (!pendingTextPosition) return;
+
+    const textPath: DrawingPath = {
+      mode: 'text',
+      color: config.color,
+      lineWidth: 0,
+      opacity: 1,
+      points: [pendingTextPosition],
+      text: config.text,
+      fontSize: config.fontSize,
+      fontWeight: config.fontWeight,
+      fontStyle: config.fontStyle,
+    };
+
+    setHistory([...history, textPath]);
+    setPendingTextPosition(null);
+    setTimeout(() => redrawCanvas(), 0);
   };
 
   // 元に戻す
@@ -258,6 +300,9 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
             </ToggleButton>
             <ToggleButton value="square" title="四角">
               <Square />
+            </ToggleButton>
+            <ToggleButton value="text" title="テキスト">
+              <TextFields />
             </ToggleButton>
             <ToggleButton value="erase" title="消しゴム">
               <Delete />
@@ -354,6 +399,16 @@ export default function ImageEditorModal({ open, imageUrl, onClose, onSave }: Im
           }}
         />
       </DialogContent>
+
+      {/* テキスト入力ダイアログ */}
+      <TextInputDialog
+        open={textDialogOpen}
+        onClose={() => {
+          setTextDialogOpen(false);
+          setPendingTextPosition(null);
+        }}
+        onConfirm={handleAddText}
+      />
     </Dialog>
   );
 }
