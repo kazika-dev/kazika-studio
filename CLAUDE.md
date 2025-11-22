@@ -14,8 +14,65 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
 - **[会話からスタジオ作成時のワークフロー設定自動化](/docs/conversation-to-studio-workflow.md)** - 会話データからワークフローノード設定を自動生成
 - **[Gemini 3 Pro Image Preview モデル対応](/docs/gemini-3-pro-image-preview.md)** - 最新のGemini 3 Pro Image Previewモデルの追加
+- **[画像素材マスタ機能](/docs/image-materials-master.md)** - ワークフローで使用する画像素材を管理するマスタ機能
 
 ## 最近の主要な変更
+
+### 2025-11-22: 画像素材マスタ機能を追加
+
+**目的**: ワークフローで再利用可能な画像素材（背景、テクスチャ、パーツなど）を管理するマスタ機能を実装
+
+**変更内容**:
+- **データベース**: `kazikastudio.m_image_materials` テーブルを作成
+  - 素材名、説明、カテゴリ、タグで管理
+  - 画像サイズ（width × height）とファイルサイズを自動取得
+  - RLSポリシー: 全ユーザー参照可能、認証済みユーザーのみ編集可能
+
+- **バックエンドAPI**:
+  - `/api/image-materials` - 一覧取得・新規作成
+  - `/api/image-materials/[id]` - 個別取得・更新・削除
+  - Sharp ライブラリで画像メタデータを自動取得
+  - 署名付きURLを生成して2時間有効なアクセスURLを提供
+
+- **GCP Storage**:
+  - `materials/` フォルダに画像を保存
+  - ファイル名: `{baseName}-{timestamp}-{randomStr}.{extension}`
+  - 対応フォーマット: PNG, JPG, JPEG, WEBP（最大10MB）
+
+- **フロントエンド**:
+  - `/components/master/ImageMaterialsManager.tsx` - 管理画面コンポーネント
+  - サムネイル付きテーブル表示
+  - ドラッグ&ドロップアップロード対応
+  - 画像プレビュー表示
+  - カテゴリフィルター（背景、キャラクター、テクスチャ、パーツ、その他）
+  - タグによる検索機能
+
+- **マスタページ統合**:
+  - `/app/master/page.tsx` に画像素材マスタのカードを追加
+  - `/app/master/m_image_materials/page.tsx` で管理画面にルーティング
+
+**技術的詳細**:
+- 効果音マスタと同じアーキテクチャで実装（一貫性を確保）
+- 画像の差し替えは不可（削除→再作成のフロー）
+- 編集時はメタデータのみ更新可能
+- 削除時はデータベース + GCP Storageの両方から削除
+
+**データフロー**:
+1. ユーザーが画像ファイルとメタデータを送信
+2. サーバーがファイルタイプ・サイズをバリデーション
+3. Sharpで画像のメタデータ（width × height）を取得
+4. GCP Storageの `materials/` フォルダにアップロード
+5. データベースにメタデータを保存
+6. 署名付きURLを生成してレスポンス
+
+**影響範囲**:
+- `/master` ページに「画像素材」カードが追加され、素材管理が可能に
+- 将来的にワークフローノード（ImageInput, Nanobana, Geminiなど）で素材マスタから画像を選択可能にする予定
+- 既存機能への影響なし（完全に独立した新機能）
+
+**ドキュメント**: [/docs/image-materials-master.md](/docs/image-materials-master.md)
+
+---
 
 ### 2025-11-22: Gemini 3 Pro モデル対応（画像認識・画像生成）
 
