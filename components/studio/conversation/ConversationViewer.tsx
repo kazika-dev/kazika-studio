@@ -57,7 +57,7 @@ interface ConversationViewerProps {
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
-  onAddMessage?: (characterId: number, messageText: string, emotionTag?: string) => Promise<void>;
+  onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
   readonly?: boolean;
 }
 
@@ -70,6 +70,7 @@ interface SortableMessageProps {
   saving: boolean;
   reanalyzing: boolean;
   readonly?: boolean;
+  showInsertButton?: boolean;
   onEditClick: (message: ConversationMessageWithCharacter) => void;
   onSave: (messageId: number) => void;
   onCancel: () => void;
@@ -78,6 +79,7 @@ interface SortableMessageProps {
   onTextChange: (text: string) => void;
   onCharacterChange: (characterId: number) => void;
   onOpenTagSelector: () => void;
+  onInsertAfter?: (messageId: number) => void;
   textFieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -90,6 +92,7 @@ function SortableMessage({
   saving,
   reanalyzing,
   readonly,
+  showInsertButton,
   onEditClick,
   onSave,
   onCancel,
@@ -98,6 +101,7 @@ function SortableMessage({
   onTextChange,
   onCharacterChange,
   onOpenTagSelector,
+  onInsertAfter,
   textFieldRef
 }: SortableMessageProps) {
   const {
@@ -136,6 +140,7 @@ function SortableMessage({
   };
 
   return (
+    <>
     <Paper
       ref={setNodeRef}
       style={style}
@@ -387,6 +392,37 @@ function SortableMessage({
         </Box>
       )}
     </Paper>
+    {/* Insert After Button */}
+    {showInsertButton && !readonly && onInsertAfter && (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          my: 1
+        }}
+      >
+        <Tooltip title="このメッセージの後にメッセージを追加">
+          <IconButton
+            size="small"
+            onClick={() => onInsertAfter(message.id)}
+            sx={{
+              borderRadius: '50%',
+              border: '1px dashed',
+              borderColor: 'primary.main',
+              color: 'primary.main',
+              '&:hover': {
+                backgroundColor: 'primary.light',
+                color: 'white',
+                borderStyle: 'solid'
+              }
+            }}
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    )}
+  </>
   );
 }
 
@@ -408,6 +444,7 @@ export default function ConversationViewer({
   const [reanalyzingId, setReanalyzingId] = useState<number | null>(null);
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(
@@ -600,12 +637,18 @@ export default function ConversationViewer({
     if (!onAddMessage) return;
 
     try {
-      await onAddMessage(characterId, messageText, emotionTag);
+      await onAddMessage(characterId, messageText, emotionTag, insertAfterMessageId);
       setAddDialogOpen(false);
+      setInsertAfterMessageId(undefined);
     } catch (error) {
       console.error('Failed to add message:', error);
       throw error; // Re-throw to let dialog handle the error
     }
+  };
+
+  const handleOpenAddDialog = (afterMessageId?: number) => {
+    setInsertAfterMessageId(afterMessageId);
+    setAddDialogOpen(true);
   };
 
   if (localMessages.length === 0) {
@@ -646,6 +689,7 @@ export default function ConversationViewer({
               saving={saving}
               reanalyzing={reanalyzingId === message.id}
               readonly={readonly}
+              showInsertButton={!readonly && !!onAddMessage && !!characters && characters.length > 0}
               onEditClick={handleEditClick}
               onSave={handleSaveEdit}
               onCancel={handleCancelEdit}
@@ -654,6 +698,7 @@ export default function ConversationViewer({
               onTextChange={setEditText}
               onCharacterChange={setEditCharacterId}
               onOpenTagSelector={handleOpenTagSelector}
+              onInsertAfter={handleOpenAddDialog}
               textFieldRef={textFieldRef}
             />
           ))}
@@ -666,7 +711,7 @@ export default function ConversationViewer({
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
-            onClick={() => setAddDialogOpen(true)}
+            onClick={() => handleOpenAddDialog()}
             size="large"
             sx={{
               borderStyle: 'dashed',
@@ -692,7 +737,15 @@ export default function ConversationViewer({
         <MessageAddDialog
           open={addDialogOpen}
           characters={characters}
-          onClose={() => setAddDialogOpen(false)}
+          insertAfterMessage={
+            insertAfterMessageId
+              ? localMessages.find(m => m.id === insertAfterMessageId)
+              : null
+          }
+          onClose={() => {
+            setAddDialogOpen(false);
+            setInsertAfterMessageId(undefined);
+          }}
           onAdd={handleAddMessage}
         />
       )}

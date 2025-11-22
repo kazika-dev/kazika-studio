@@ -25,9 +25,16 @@ interface Character {
   image_url?: string;
 }
 
+interface InsertAfterMessage {
+  id: number;
+  speaker_name: string;
+  message_text: string;
+}
+
 interface MessageAddDialogProps {
   open: boolean;
   characters: Character[];
+  insertAfterMessage?: InsertAfterMessage | null;
   onClose: () => void;
   onAdd: (characterId: number, messageText: string, emotionTag?: string) => Promise<void>;
 }
@@ -35,6 +42,7 @@ interface MessageAddDialogProps {
 export default function MessageAddDialog({
   open,
   characters,
+  insertAfterMessage,
   onClose,
   onAdd
 }: MessageAddDialogProps) {
@@ -91,9 +99,44 @@ export default function MessageAddDialog({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>新しいメッセージを追加</DialogTitle>
+        <DialogTitle>
+          {insertAfterMessage ? 'メッセージの後に追加' : '新しいメッセージを追加'}
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            {/* Insert Position Info */}
+            {insertAfterMessage && (
+              <Box
+                sx={{
+                  p: 2,
+                  backgroundColor: 'action.hover',
+                  borderRadius: 1,
+                  borderLeft: '3px solid',
+                  borderColor: 'primary.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                  このメッセージの後に追加されます:
+                </Typography>
+                <Typography variant="body2" fontWeight="bold">
+                  {insertAfterMessage.speaker_name}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    mt: 0.5,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical'
+                  }}
+                >
+                  {insertAfterMessage.message_text}
+                </Typography>
+              </Box>
+            )}
+
             {/* Character Selection */}
             <FormControl fullWidth>
               <InputLabel>キャラクター</InputLabel>
