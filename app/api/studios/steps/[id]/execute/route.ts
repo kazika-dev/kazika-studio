@@ -718,6 +718,43 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any, ste
             continue;
           }
 
+          // ElevenLabsノード専用フィールド（elevenlabs_text_, elevenlabs_voiceId_, elevenlabs_modelId_）
+          if (nodeType === 'elevenlabs' && fieldName.includes(node.id)) {
+            if (fieldName.startsWith('elevenlabs_text_')) {
+              console.log(`  Setting ElevenLabs text field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = { ...node.data.config, text: fieldValue };
+              continue;
+            } else if (fieldName.startsWith('elevenlabs_voiceId_')) {
+              console.log(`  Setting ElevenLabs voiceId field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = { ...node.data.config, voiceId: fieldValue };
+              continue;
+            } else if (fieldName.startsWith('elevenlabs_modelId_')) {
+              console.log(`  Setting ElevenLabs modelId field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = { ...node.data.config, modelId: fieldValue };
+              continue;
+            }
+          }
+
+          // Nanobanaノード専用フィールド（nanobana_prompt_, nanobana_model_, nanobana_selectedCharacterSheetIds_）
+          if (nodeType === 'nanobana' && fieldName.includes(node.id)) {
+            if (fieldName.startsWith('nanobana_prompt_')) {
+              console.log(`  Setting Nanobana prompt field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = { ...node.data.config, prompt: fieldValue };
+              continue;
+            } else if (fieldName.startsWith('nanobana_model_')) {
+              console.log(`  Setting Nanobana model field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = { ...node.data.config, model: fieldValue };
+              continue;
+            } else if (fieldName.startsWith('nanobana_selectedCharacterSheetIds_')) {
+              console.log(`  Setting Nanobana selectedCharacterSheetIds field for node ${node.id}:`, fieldValue);
+              node.data.config = {
+                ...node.data.config,
+                selectedCharacterSheetIds: Array.isArray(fieldValue) ? fieldValue : [fieldValue]
+              };
+              continue;
+            }
+          }
+
           // promptまたはtextareaフィールドは既存のプロンプトに追加
           if (fieldType === 'prompt' || fieldType === 'textarea' || fieldName === 'prompt') {
             // フィールド名にノードIDが含まれている場合は、そのノードにのみ適用
