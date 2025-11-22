@@ -28,6 +28,9 @@ import {
   Stack,
   Chip,
   Paper,
+  Avatar,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
@@ -35,7 +38,16 @@ import ImageIcon from '@mui/icons-material/Image';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import AudiotrackIcon from '@mui/icons-material/Audiotrack';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DynamicFormField, { FormFieldConfig } from '@/components/form/DynamicFormField';
+
+interface CharacterSheet {
+  id: number;
+  name: string;
+  image_url: string | null;
+  description: string | null;
+}
 
 interface Workflow {
   id: number;
@@ -100,6 +112,11 @@ export default function AddWorkflowStepDialog({
   const [usePreviousImage, setUsePreviousImage] = useState(false);
   const [usePreviousVideo, setUsePreviousVideo] = useState(false);
   const [usePreviousAudio, setUsePreviousAudio] = useState(false);
+
+  // キャラクターシート関連
+  const [characterSheets, setCharacterSheets] = useState<CharacterSheet[]>([]);
+  const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const [usePreviousText, setUsePreviousText] = useState(false);
 
   // ワークフロー一覧を読み込む
@@ -140,10 +157,55 @@ export default function AddWorkflowStepDialog({
     }
   }, []);
 
+  // キャラクターシートを読み込む
+  const loadCharacterSheets = async () => {
+    try {
+      const response = await fetch('/api/character-sheets');
+      const result = await response.json();
+      if (result.success && result.data?.characterSheets) {
+        setCharacterSheets(result.data.characterSheets);
+      }
+    } catch (error) {
+      console.error('Failed to load character sheets:', error);
+    }
+  };
+
+  // キャラクターシートを追加
+  const handleAddCharacterSheet = (characterSheetId: number, nodeId: string) => {
+    setNodeOverrides(prev => {
+      const currentIds = prev[nodeId]?.selectedCharacterSheetIds || [];
+      if (currentIds.includes(characterSheetId) || currentIds.length >= 4) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [nodeId]: {
+          ...prev[nodeId],
+          selectedCharacterSheetIds: [...currentIds, characterSheetId]
+        }
+      };
+    });
+    setCharacterDialogOpen(false);
+  };
+
+  // キャラクターシートを削除
+  const handleRemoveCharacterSheet = (characterSheetId: number, nodeId: string) => {
+    setNodeOverrides(prev => ({
+      ...prev,
+      [nodeId]: {
+        ...prev[nodeId],
+        selectedCharacterSheetIds: (prev[nodeId]?.selectedCharacterSheetIds || []).filter(
+          (id: number) => id !== characterSheetId
+        )
+      }
+    }));
+  };
+
   // ダイアログが開いたときの初期化
   useEffect(() => {
     if (open) {
       loadWorkflows();
+      loadCharacterSheets();
       // 編集モードの場合、初期値を設定
       if (isEditMode && editStep) {
         console.log('Setting edit mode initial values:', {
@@ -201,6 +263,67 @@ export default function AddWorkflowStepDialog({
       }
     }
   }, [selectedWorkflowId, isEditMode, loadWorkflowDetails]);
+
+  // nodeOverridesからformValuesへの値を抽出する関数
+  const extractFormValuesFromNodeOverrides = (
+    nodeOverrides: Record<string, any>,
+    workflow: Workflow
+  ): Record<string, any> => {
+    const extracted: Record<string, any> = {};
+
+    if (!workflow.form_config?.fields) {
+      return extracted;
+    }
+
+    // form_config.fieldsに存在するフィールド名のセットを作成
+    const formFieldNames = new Set(workflow.form_config.fields.map(f => f.name));
+
+    // 各ノードのnodeOverridesを走査
+    Object.entries(nodeOverrides).forEach(([nodeId, config]) => {
+      if (!config || typeof config !== 'object') return;
+
+      // configの各フィールドをformValuesに展開
+      Object.entries(config).forEach(([key, value]) => {
+        // 同じフィールド名がform_config.fieldsに存在する場合のみ展開
+        if (formFieldNames.has(key)) {
+          // 既に値がある場合は上書きしない（最初に見つかった値を優先）
+          if (extracted[key] === undefined) {
+            extracted[key] = value;
+            console.log(`[extractFormValues] Extracted ${key} = ${JSON.stringify(value)} from node ${nodeId}`);
+          }
+        }
+      });
+    });
+
+    return extracted;
+  };
+
+  // ワークフロー詳細読み込み後、nodeOverridesの値をformValuesにマージ
+  useEffect(() => {
+    if (selectedWorkflow && isEditMode && editStep?.input_config?.nodeOverrides) {
+      console.log('[AddWorkflowStepDialog] Merging nodeOverrides into formValues');
+      console.log('nodeOverrides:', editStep.input_config.nodeOverrides);
+      console.log('form_config.fields:', selectedWorkflow.form_config?.fields);
+
+      const extractedValues = extractFormValuesFromNodeOverrides(
+        editStep.input_config.nodeOverrides,
+        selectedWorkflow
+      );
+
+      console.log('Extracted values from nodeOverrides:', extractedValues);
+
+      if (Object.keys(extractedValues).length > 0) {
+        setFormValues(prev => {
+          const merged = {
+            ...prev,
+            ...extractedValues  // nodeOverridesの値で上書き
+          };
+          console.log('Merged formValues:', merged);
+          return merged;
+        });
+      }
+    }
+  }, [selectedWorkflow, isEditMode, editStep]);
 
   // デバッグ: formValuesの変更を監視
   useEffect(() => {
@@ -587,15 +710,72 @@ export default function AddWorkflowStepDialog({
                             </Box>
                           )}
 
-                          {/* キャラクターシートID（Nanobanaノード用） */}
+                          {/* キャラクターシート選択（Nanobanaノード用） */}
                           {config.selectedCharacterSheetIds !== undefined && (
                             <Box>
                               <Typography variant="caption" fontWeight={600} display="block" gutterBottom>
-                                キャラクターシートID:
+                                登場キャラクター（最大4人）
                               </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {config.selectedCharacterSheetIds?.join(', ') || 'なし'}
-                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                                {config.selectedCharacterSheetIds?.length === 0 && (
+                                  <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                                    キャラクターが選択されていません
+                                  </Typography>
+                                )}
+
+                                {config.selectedCharacterSheetIds?.map((sheetId: number) => {
+                                  const sheet = characterSheets.find(cs => cs.id === sheetId);
+                                  return (
+                                    <Box key={sheetId} sx={{ position: 'relative' }}>
+                                      <Tooltip title={sheet?.name || `ID: ${sheetId}`}>
+                                        <Avatar
+                                          src={sheet?.image_url || undefined}
+                                          alt={sheet?.name}
+                                          sx={{ width: 40, height: 40, border: '2px solid', borderColor: 'primary.main' }}
+                                        />
+                                      </Tooltip>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => handleRemoveCharacterSheet(sheetId, nodeId)}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: -8,
+                                          right: -8,
+                                          bgcolor: 'error.main',
+                                          color: 'white',
+                                          width: 20,
+                                          height: 20,
+                                          '&:hover': { bgcolor: 'error.dark' }
+                                        }}
+                                      >
+                                        <DeleteIcon sx={{ fontSize: 14 }} />
+                                      </IconButton>
+                                    </Box>
+                                  );
+                                })}
+
+                                <Tooltip title="キャラクターを追加">
+                                  <span>
+                                    <IconButton
+                                      onClick={() => {
+                                        setCurrentNodeId(nodeId);
+                                        setCharacterDialogOpen(true);
+                                      }}
+                                      disabled={(config.selectedCharacterSheetIds?.length || 0) >= 4}
+                                      sx={{
+                                        border: '2px dashed',
+                                        borderColor: (config.selectedCharacterSheetIds?.length || 0) >= 4 ? 'action.disabled' : 'primary.main',
+                                        borderRadius: '50%',
+                                        width: 40,
+                                        height: 40,
+                                        color: (config.selectedCharacterSheetIds?.length || 0) >= 4 ? 'action.disabled' : 'primary.main'
+                                      }}
+                                    >
+                                      <PersonAddIcon sx={{ fontSize: 20 }} />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </Box>
                             </Box>
                           )}
                         </Paper>
@@ -704,6 +884,54 @@ export default function AddWorkflowStepDialog({
           {isEditMode ? '保存' : '追加'}
         </Button>
       </DialogActions>
+
+      {/* キャラクターシート選択ダイアログ */}
+      <Dialog
+        open={characterDialogOpen}
+        onClose={() => setCharacterDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>キャラクターシートを選択</DialogTitle>
+        <DialogContent>
+          {characterSheets.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              キャラクターシートがありません
+            </Typography>
+          ) : (
+            <List>
+              {characterSheets
+                .filter(sheet => {
+                  if (!currentNodeId) return false;
+                  const currentIds = nodeOverrides[currentNodeId]?.selectedCharacterSheetIds || [];
+                  return !currentIds.includes(sheet.id);
+                })
+                .map(sheet => (
+                  <ListItem key={sheet.id} disablePadding sx={{ py: 1 }}>
+                    <ListItemButton
+                      onClick={() => currentNodeId && handleAddCharacterSheet(sheet.id, currentNodeId)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                        <Avatar src={sheet.image_url || undefined} alt={sheet.name} />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body1">{sheet.name}</Typography>
+                          {sheet.description && (
+                            <Typography variant="caption" color="text.secondary">
+                              {sheet.description}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCharacterDialogOpen(false)}>キャンセル</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

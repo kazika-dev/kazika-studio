@@ -64,6 +64,20 @@ Canvas画像エディタに、画像の一部を選択して移動または削�
 - 「キャンセル (Esc)」ボタンをクリック
 - または、キーボードの **Esc** キーを押す
 
+### 6. 元に戻す（Undo）
+
+**機能**:
+- 選択範囲の移動・確定・削除操作を元に戻す
+- 画像の履歴（最大20個）を保持し、順番に戻せる
+- ペンやマーカーなどの描画操作も元に戻せる
+
+**操作方法**:
+- 「元に戻す」ボタンをクリック
+
+**注意**:
+- 移動開始時、確定時、削除時に自動的に履歴が保存される
+- キャンセルボタンとは異なり、複数ステップ前まで遡れる
+
 ## 技術的詳細
 
 ### データ構造
@@ -87,6 +101,7 @@ interface SelectionArea {
 - `selection`: 現在の選択範囲の情報
 - `isCreatingSelection`: 選択範囲を作成中かどうか
 - `isDraggingSelection`: 選択範囲をドラッグ中かどうか
+- `imageHistory`: 画像の履歴（Undo用、最大20個）
 
 ### 画像データの処理
 
@@ -118,6 +133,13 @@ interface SelectionArea {
    - キャンバスをクリアして `savedImageBeforeMove` を描画
    - `imageRef.current` を `savedImageBeforeMove` に更新
    - `selection` を `null` にして選択をクリア
+
+6. **元に戻す（Undo）**:
+   - `imageHistory` から最後の画像を取得
+   - キャンバスをクリアして前の画像を描画
+   - `imageRef.current` を前の画像に更新
+   - `imageHistory` から最後の要素を削除
+   - `selection` をクリア
 
 ### UIコンポーネント
 

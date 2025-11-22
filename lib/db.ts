@@ -1744,137 +1744,6 @@ export async function deleteImageMaterial(id: number) {
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
-// =====================================================
-// Story Scene Characters（シーンキャラクター管理）
-// =====================================================
-
-/**
- * シーンに登録されているキャラクター一覧を取得
- */
-export async function getSceneCharacters(sceneId: number) {
-  const pool = getPool();
-  const result = await pool.query(
-    `SELECT
-      ssc.*,
-      cs.id as character_id,
-      cs.name as character_name,
-      cs.image_url,
-      cs.description,
-      cs.personality,
-      cs.speaking_style,
-      cs.sample_dialogues
-    FROM kazikastudio.story_scene_characters ssc
-    JOIN kazikastudio.character_sheets cs ON cs.id = ssc.character_sheet_id
-    WHERE ssc.story_scene_id = $1
-    ORDER BY ssc.display_order ASC, ssc.created_at ASC`,
-    [sceneId]
-  );
-  return result.rows;
-}
-
-/**
- * シーンにキャラクターを追加
- */
-export async function addCharacterToScene(
-  sceneId: number,
-  characterId: number,
-  options?: {
-    displayOrder?: number;
-    isMainCharacter?: boolean;
-  }
-) {
-  const pool = getPool();
-
-  // 既存の最大 display_order を取得
-  const maxOrder = await pool.query(
-    `SELECT COALESCE(MAX(display_order), 0) as max_order
-     FROM kazikastudio.story_scene_characters
-     WHERE story_scene_id = $1`,
-    [sceneId]
-  );
-
-  const displayOrder = options?.displayOrder ?? (maxOrder.rows[0].max_order + 1);
-
-  const result = await pool.query(
-    `INSERT INTO kazikastudio.story_scene_characters
-      (story_scene_id, character_sheet_id, display_order, is_main_character)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (story_scene_id, character_sheet_id)
-    DO UPDATE SET
-      display_order = EXCLUDED.display_order,
-      is_main_character = EXCLUDED.is_main_character
-    RETURNING *`,
-    [sceneId, characterId, displayOrder, options?.isMainCharacter ?? false]
-  );
-
-  return result.rows[0];
-}
-
-/**
- * シーンからキャラクターを削除
- */
-export async function removeCharacterFromScene(sceneId: number, characterId: number) {
-  const pool = getPool();
-  const result = await pool.query(
-    `DELETE FROM kazikastudio.story_scene_characters
-     WHERE story_scene_id = $1 AND character_sheet_id = $2
-     RETURNING *`,
-    [sceneId, characterId]
-  );
-  return result.rows[0];
-}
-
-/**
- * シーンのキャラクター表示順序を更新
- */
-export async function updateSceneCharacterOrder(
-  sceneId: number,
-  characterOrders: Array<{ characterId: number; displayOrder: number }>
-) {
-  const pool = getPool();
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-
-    for (const { characterId, displayOrder } of characterOrders) {
-      await client.query(
-        `UPDATE kazikastudio.story_scene_characters
-         SET display_order = $3
-         WHERE story_scene_id = $1 AND character_sheet_id = $2`,
-        [sceneId, characterId, displayOrder]
-      );
-    }
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * シーンのメインキャラクターを更新
- */
-export async function updateSceneMainCharacter(
-  sceneId: number,
-  characterId: number,
-  isMain: boolean
-) {
-  const pool = getPool();
-  const result = await pool.query(
-    `UPDATE kazikastudio.story_scene_characters
-     SET is_main_character = $3
-     WHERE story_scene_id = $1 AND character_sheet_id = $2
-     RETURNING *`,
-    [sceneId, characterId, isMain]
-  );
-
-  return result.rows[0];
-}
-
 // ==========================================
 // Conversation Message Characters Functions
 // ==========================================
@@ -2005,4 +1874,171 @@ export async function updateMessageCharacterOrder(
   } finally {
     client.release();
   }
+}
+
+// ============================================================================
+// Conversation Prompt Templates
+// ============================================================================
+
+/**
+ * Get all conversation prompt templates for a user (or global templates if userId is null)
+ */
+export async function getConversationPromptTemplates(userId?: string) {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT * FROM kazikastudio.conversation_prompt_templates
+     WHERE user_id = $1 OR user_id IS NULL
+     ORDER BY is_default DESC, created_at DESC`,
+    [userId || null]
+  );
+  return result.rows;
+}
+
+/**
+ * Get a single conversation prompt template by ID
+ */
+export async function getConversationPromptTemplateById(id: number) {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT * FROM kazikastudio.conversation_prompt_templates WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * Get the default conversation prompt template
+ */
+export async function getDefaultConversationPromptTemplate() {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT * FROM kazikastudio.conversation_prompt_templates
+     WHERE is_default = true
+     ORDER BY created_at DESC
+     LIMIT 1`
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * Create a new conversation prompt template
+ */
+export async function createConversationPromptTemplate(
+  userId: string,
+  name: string,
+  templateText: string,
+  description?: string,
+  isDefault?: boolean
+) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // If creating a new default template, clear all other defaults first
+    if (isDefault === true) {
+      await client.query(
+        `UPDATE kazikastudio.conversation_prompt_templates
+         SET is_default = false`
+      );
+    }
+
+    const result = await client.query(
+      `INSERT INTO kazikastudio.conversation_prompt_templates
+       (user_id, name, description, template_text, is_default)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [userId, name, description || null, templateText, isDefault || false]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Update a conversation prompt template
+ */
+export async function updateConversationPromptTemplate(
+  id: number,
+  updates: {
+    name?: string;
+    description?: string;
+    templateText?: string;
+    isDefault?: boolean;
+  }
+) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // If setting this template as default, clear all other defaults first
+    if (updates.isDefault === true) {
+      await client.query(
+        `UPDATE kazikastudio.conversation_prompt_templates
+         SET is_default = false
+         WHERE id != $1`,
+        [id]
+      );
+    }
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (updates.name !== undefined) {
+      setClauses.push(`name = $${paramIndex++}`);
+      values.push(updates.name);
+    }
+    if (updates.description !== undefined) {
+      setClauses.push(`description = $${paramIndex++}`);
+      values.push(updates.description);
+    }
+    if (updates.templateText !== undefined) {
+      setClauses.push(`template_text = $${paramIndex++}`);
+      values.push(updates.templateText);
+    }
+    if (updates.isDefault !== undefined) {
+      setClauses.push(`is_default = $${paramIndex++}`);
+      values.push(updates.isDefault);
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const result = await client.query(
+      `UPDATE kazikastudio.conversation_prompt_templates
+       SET ${setClauses.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Delete a conversation prompt template
+ */
+export async function deleteConversationPromptTemplate(id: number) {
+  const pool = getPool();
+  await pool.query(
+    `DELETE FROM kazikastudio.conversation_prompt_templates WHERE id = $1`,
+    [id]
+  );
 }
