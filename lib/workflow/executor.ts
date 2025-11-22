@@ -554,7 +554,7 @@ async function executeNode(
         const nanobanaImages: Array<{ mimeType: string; data: string }> = [];
 
         // 1. キャラクターシート画像を取得（最大4枚）
-        const characterSheetIds = node.data.config?.characterSheetIds || [];
+        const characterSheetIds = node.data.config?.selectedCharacterSheetIds || [];
         if (characterSheetIds.length > 0) {
           console.log(`Loading ${characterSheetIds.length} character sheet(s) for Nanobana:`, characterSheetIds);
 
