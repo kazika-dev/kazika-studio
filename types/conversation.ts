@@ -168,6 +168,22 @@ export interface UpdateMessageResponse {
   error?: string;
 }
 
+export interface CreateMessageRequest {
+  conversationId: number;
+  characterId: number;
+  messageText: string;
+  insertAfterMessageId?: number; // Optional: insert after this message ID
+  emotionTag?: string;
+}
+
+export interface CreateMessageResponse {
+  success: boolean;
+  data?: {
+    message: ConversationMessageWithCharacter;
+  };
+  error?: string;
+}
+
 export interface ListConversationsRequest {
   studioId: number;
   limit?: number;

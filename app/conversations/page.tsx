@@ -252,6 +252,35 @@ export default function ConversationsPage() {
     }
   };
 
+  const handleAddMessage = async (characterId: number, messageText: string, emotionTag?: string) => {
+    if (!selectedConversation) return;
+
+    try {
+      const response = await fetch('/api/conversations/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: selectedConversation.id,
+          characterId,
+          messageText,
+          emotionTag
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Add the new message to the list
+        setMessages(prev => [...prev, result.data.message]);
+      } else {
+        throw new Error(result.error || 'Failed to add message');
+      }
+    } catch (error) {
+      console.error('Failed to add message:', error);
+      throw error;
+    }
+  };
+
   const handleConversationGenerated = async (conversationId: number) => {
     await loadStoryTree();
     await loadConversation(conversationId);
@@ -444,6 +473,7 @@ export default function ConversationsPage() {
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}
                   onReanalyzeEmotion={handleReanalyzeEmotion}
+                  onAddMessage={handleAddMessage}
                 />
               </>
             ) : (

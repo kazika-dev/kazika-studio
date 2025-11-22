@@ -22,8 +22,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import AddIcon from '@mui/icons-material/Add';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
+import MessageAddDialog from './MessageAddDialog';
 import {
   DndContext,
   closestCenter,
@@ -55,6 +57,7 @@ interface ConversationViewerProps {
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
+  onAddMessage?: (characterId: number, messageText: string, emotionTag?: string) => Promise<void>;
   readonly?: boolean;
 }
 
@@ -394,6 +397,7 @@ export default function ConversationViewer({
   onReorderMessages,
   onDeleteMessage,
   onReanalyzeEmotion,
+  onAddMessage,
   readonly = false
 }: ConversationViewerProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -403,6 +407,7 @@ export default function ConversationViewer({
   const [saving, setSaving] = useState(false);
   const [reanalyzingId, setReanalyzingId] = useState<number | null>(null);
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(
@@ -591,6 +596,18 @@ export default function ConversationViewer({
     }
   };
 
+  const handleAddMessage = async (characterId: number, messageText: string, emotionTag?: string) => {
+    if (!onAddMessage) return;
+
+    try {
+      await onAddMessage(characterId, messageText, emotionTag);
+      setAddDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to add message:', error);
+      throw error; // Re-throw to let dialog handle the error
+    }
+  };
+
   if (localMessages.length === 0) {
     return (
       <Box
@@ -643,12 +660,42 @@ export default function ConversationViewer({
         </SortableContext>
       </DndContext>
 
+      {/* Add Message Button */}
+      {!readonly && onAddMessage && characters && characters.length > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => setAddDialogOpen(true)}
+            size="large"
+            sx={{
+              borderStyle: 'dashed',
+              borderWidth: 2,
+              py: 1.5,
+              px: 3
+            }}
+          >
+            新しいメッセージを追加
+          </Button>
+        </Box>
+      )}
+
       {/* Emotion Tag Selector Dialog */}
       <EmotionTagSelector
         open={tagSelectorOpen}
         onClose={() => setTagSelectorOpen(false)}
         onSelectTag={handleSelectTag}
       />
+
+      {/* Message Add Dialog */}
+      {characters && characters.length > 0 && (
+        <MessageAddDialog
+          open={addDialogOpen}
+          characters={characters}
+          onClose={() => setAddDialogOpen(false)}
+          onAdd={handleAddMessage}
+        />
+      )}
     </Box>
   );
 }
