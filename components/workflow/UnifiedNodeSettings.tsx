@@ -70,7 +70,12 @@ export default function UnifiedNodeSettings({
           case 'select':
             // 既存の設定からデフォルト値を取得
             if (field.name === 'model') {
-              defaultValue = 'gemini-2.5-flash';
+              // ノードタイプに応じてデフォルトモデルを選択
+              if (nodeType === 'nanobana') {
+                defaultValue = 'gemini-2.5-flash-image';
+              } else {
+                defaultValue = 'gemini-2.5-flash';
+              }
             } else if (field.name === 'voiceId') {
               defaultValue = 'JBFqnCBsd6RMkjVDRZzb';
             } else if (field.name === 'modelId') {

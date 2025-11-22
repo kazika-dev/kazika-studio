@@ -1,6 +1,8 @@
 import { Node } from 'reactflow';
 import { FormFieldConfig } from '@/components/form/DynamicFormField';
 import { ELEVENLABS_PRESET_VOICES, ELEVENLABS_MODEL_OPTIONS } from '@/lib/elevenlabs/constants';
+import { GEMINI_MODEL_OPTIONS } from '@/lib/gemini/constants';
+import { NANOBANA_MODEL_OPTIONS } from '@/lib/nanobana/constants';
 
 /**
  * ノードタイプごとの設定フィールド定義
@@ -27,11 +29,7 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             name: 'model',
             label: 'モデル',
             required: false,
-            options: [
-              { label: 'Gemini 2.5 Flash (推奨)', value: 'gemini-2.5-flash' },
-              { label: 'Gemini 2.5 Pro (高性能)', value: 'gemini-2.5-pro' },
-              { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
-            ],
+            options: GEMINI_MODEL_OPTIONS,
             helperText: 'APIキーは環境変数から自動的に読み込まれます',
           },
           {
@@ -75,6 +73,14 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
         displayName: 'Nanobana 画像生成',
         color: '#ff6b9d',
         fields: [
+          {
+            type: 'select',
+            name: 'model',
+            label: 'モデル',
+            required: false,
+            options: NANOBANA_MODEL_OPTIONS,
+            helperText: 'Gemini 3 Pro Imageは高品質・最大4K、Gemini 2.5 Flash Imageは高速・低コスト',
+          },
           {
             type: 'select',
             name: 'aspectRatio',

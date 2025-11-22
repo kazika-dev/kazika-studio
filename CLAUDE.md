@@ -13,8 +13,46 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
 - **[会話からスタジオ作成時のワークフロー設定自動化](/docs/conversation-to-studio-workflow.md)** - 会話データからワークフローノード設定を自動生成
+- **[Gemini 3 Pro Image Preview モデル対応](/docs/gemini-3-pro-image-preview.md)** - 最新のGemini 3 Pro Image Previewモデルの追加
 
 ## 最近の主要な変更
+
+### 2025-11-22: Gemini 3 Pro モデル対応（画像認識・画像生成）
+
+**目的**: 最新のGemini 3 Proモデルを利用可能にし、画像認識の精度と画像生成の品質を向上
+
+**変更内容（Gemini AI ノード）**:
+- `/lib/gemini/constants.ts` を新規作成し、`GEMINI_MODEL_OPTIONS` で利用可能なモデルを一元管理
+  - `gemini-3-pro-image-preview` (最新・画像認識)
+  - `gemini-2.5-flash` (推奨)
+  - `gemini-2.5-pro` (高性能)
+  - `gemini-2.0-flash`
+- `/lib/workflow/formConfigGenerator.ts` の Gemini ノード設定を更新し、`GEMINI_MODEL_OPTIONS` を使用
+- モデル選択は動的に行われるため、`/api/gemini/route.ts` と `/lib/workflow/executor.ts` は変更不要
+
+**変更内容（Nanobana 画像生成ノード）**:
+- `/lib/nanobana/constants.ts` を新規作成し、`NANOBANA_MODEL_OPTIONS` で利用可能なモデルを一元管理
+  - `gemini-3-pro-image` (Nano Banana Pro - 高品質、最大4K)
+  - `gemini-2.5-flash-image` (高速、低コスト、最大1024px)
+- `/lib/workflow/formConfigGenerator.ts` の Nanobana ノード設定に `model` フィールドを追加
+- `/app/api/nanobana/route.ts` でモデルパラメータを受け取り、動的に使用
+- `/lib/workflow/executor.ts` でNanobanaノード実行時にモデル名を送信
+- `/components/workflow/UnifiedNodeSettings.tsx` でNanobanaのデフォルトモデルを `gemini-2.5-flash-image` に設定
+- `/lib/workflow/migration.ts` で既存のNanobanaノードに `model` フィールドを自動追加
+
+**技術的詳細**:
+- ElevenLabs と同じパターンで定数を一元管理し、保守性を向上
+- `getNodeTypeConfig()` による一元管理の原則に従い、ワークフローノード設定と `/form` ページの両方に自動反映
+- API は動的にモデル名を受け取るため、新しいモデルも自動的に対応
+- 既存のNanobanaノードにはマイグレーション処理で `model: 'gemini-2.5-flash-image'` が自動追加される
+
+**影響範囲**:
+- **Gemini AI ノード**: 画像認識タスクで最新モデルの高精度な分析が利用可能に
+- **Nanobana ノード**: Gemini 3 Pro Imageで最大4Kの高品質画像生成が可能に
+- 両方のノード設定画面と `/form` ページで新しいモデルが選択可能に
+- 既存のワークフローは後方互換性を維持しながら、マイグレーション処理で自動的に更新
+
+---
 
 ### 2025-11-18: 会話メッセージの感情タグ再分析機能を追加
 

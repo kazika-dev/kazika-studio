@@ -682,6 +682,7 @@ async function executeNode(
         requestBody = {
           prompt: nanobanaPrompt,
           aspectRatio: node.data.config?.aspectRatio || '1:1',
+          model: node.data.config?.model || 'gemini-2.5-flash-image',
           referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
         };
 

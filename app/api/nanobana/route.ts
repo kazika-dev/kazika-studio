@@ -4,7 +4,12 @@ import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, aspectRatio = '1:1', referenceImages } = await request.json();
+    const {
+      prompt,
+      aspectRatio = '1:1',
+      model = 'gemini-2.5-flash-image',
+      referenceImages
+    } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -25,9 +30,11 @@ export async function POST(request: NextRequest) {
     // 公式ドキュメントに基づく実装
     const genAI = new GoogleGenerativeAI(apiKey);
 
+    console.log(`Using Nanobana model: ${model}`);
+
     // 画像生成専用モデルを使用
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-image',
+    const generativeModel = genAI.getGenerativeModel({
+      model: model,
     });
 
     // 画像生成設定
@@ -54,7 +61,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const result = await model.generateContent({
+    const result = await generativeModel.generateContent({
       contents: [{ role: 'user', parts }],
       generationConfig: generationConfig as any,
     });
@@ -144,7 +151,7 @@ export async function POST(request: NextRequest) {
         data: imageData.data, // Base64エンコードされた画像データ
       },
       storagePath, // GCP Storage内部パス（アップロード成功時のみ）
-      model: 'gemini-2.5-flash-image',
+      model, // 使用されたモデル名を返す
     });
   } catch (error: any) {
     console.error('Nanobana API error:', error);
