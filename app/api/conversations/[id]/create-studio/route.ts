@@ -90,6 +90,30 @@ export async function POST(
       );
     }
 
+    // Fetch scene characters for all messages
+    const { data: sceneCharacters, error: scError } = await supabase
+      .from('conversation_message_characters')
+      .select('conversation_message_id, character_sheet_id, display_order')
+      .in('conversation_message_id', messages.map(m => m.id))
+      .order('conversation_message_id')
+      .order('display_order');
+
+    if (scError) {
+      console.error('Failed to fetch scene characters:', scError);
+      // Continue without scene characters (fallback to speaker character only)
+    }
+
+    // Build a map of messageId -> characterSheetIds
+    const messageCharactersMap = new Map<number, number[]>();
+    if (sceneCharacters) {
+      sceneCharacters.forEach(sc => {
+        if (!messageCharactersMap.has(sc.conversation_message_id)) {
+          messageCharactersMap.set(sc.conversation_message_id, []);
+        }
+        messageCharactersMap.get(sc.conversation_message_id)!.push(sc.character_sheet_id);
+      });
+    }
+
     console.log('[POST /api/conversations/:id/create-studio] Found', messages.length, 'messages');
 
     // Create studio
@@ -235,9 +259,17 @@ export async function POST(
             workflowInputs[`nanobana_prompt_${nodeId}`] = prompt;
             workflowInputs[`nanobana_model_${nodeId}`] = node.data?.config?.model || 'gemini-3-pro-image-preview';
 
-            // キャラクターIDがある場合、キャラクターシートIDを設定
-            if (message.character_id) {
+            // Get scene characters from the map (characters registered in conversation_message_characters)
+            const sceneCharacterIds = messageCharactersMap.get(message.id) || [];
+
+            if (sceneCharacterIds.length > 0) {
+              // Use scene characters if available (up to 4 characters as per Nanobana limit)
+              workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = sceneCharacterIds.slice(0, 4).map(String);
+              console.log(`[Board ${idx}] Using scene characters for Nanobana:`, sceneCharacterIds);
+            } else if (message.character_id) {
+              // Fallback to speaker character if no scene characters registered
               workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = [String(message.character_id)];
+              console.log(`[Board ${idx}] Falling back to speaker character for Nanobana:`, message.character_id);
             }
           });
 
