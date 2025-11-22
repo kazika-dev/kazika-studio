@@ -4,7 +4,7 @@
 
 Google AI の最新モデルをワークフローエディタと `/form` ページで利用可能にしました：
 - **Gemini AI ノード**: `gemini-3-pro-image-preview` (画像認識)
-- **Nanobana ノード**: `gemini-3-pro-image` (Nano Banana Pro - 画像生成)
+- **Nanobana ノード**: `gemini-3-pro-image-preview` (Nano Banana Pro - 画像生成)
 
 ## 変更内容
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
  * Nanobana (Gemini Image Generation) モデルのオプション
  */
 export const NANOBANA_MODEL_OPTIONS = [
-  { label: 'Gemini 3 Pro Image (Nano Banana Pro - 高品質、最大4K)', value: 'gemini-3-pro-image' },
+  { label: 'Gemini 3 Pro Image Preview (Nano Banana Pro - 高品質、最大4K)', value: 'gemini-3-pro-image-preview' },
   { label: 'Gemini 2.5 Flash Image (高速、低コスト)', value: 'gemini-2.5-flash-image' },
 ] as const;
 
@@ -274,8 +274,8 @@ if (nodeType === 'nanobana' && config.model === undefined) {
 
 #### 使い分けの推奨
 - **プロトタイピング・大量生成**: `gemini-2.5-flash-image` (高速、低コスト)
-- **高品質・プロダクション**: `gemini-3-pro-image` (4K、高精度テキスト)
-- **テキスト入り画像**: `gemini-3-pro-image` (テキストレンダリングが優秀)
+- **高品質・プロダクション**: `gemini-3-pro-image-preview` (4K、高精度テキスト)
+- **テキスト入り画像**: `gemini-3-pro-image-preview` (テキストレンダリングが優秀)
 
 ## 今後の拡張
 
@@ -300,7 +300,7 @@ export const GEMINI_MODEL_OPTIONS = [
 ```typescript
 export const NANOBANA_MODEL_OPTIONS = [
   { label: 'Gemini 4 Flash Image (架空)', value: 'gemini-4-flash-image' }, // ← 追加
-  { label: 'Gemini 3 Pro Image (Nano Banana Pro - 高品質、最大4K)', value: 'gemini-3-pro-image' },
+  { label: 'Gemini 3 Pro Image Preview (Nano Banana Pro - 高品質、最大4K)', value: 'gemini-3-pro-image-preview' },
   // ...
 ] as const;
 ```

@@ -32,7 +32,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 **変更内容（Nanobana 画像生成ノード）**:
 - `/lib/nanobana/constants.ts` を新規作成し、`NANOBANA_MODEL_OPTIONS` で利用可能なモデルを一元管理
-  - `gemini-3-pro-image` (Nano Banana Pro - 高品質、最大4K)
+  - `gemini-3-pro-image-preview` (Nano Banana Pro - 高品質、最大4K)
   - `gemini-2.5-flash-image` (高速、低コスト、最大1024px)
 - `/lib/workflow/formConfigGenerator.ts` の Nanobana ノード設定に `model` フィールドを追加
 - `/app/api/nanobana/route.ts` でモデルパラメータを受け取り、動的に使用
@@ -48,7 +48,7 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 **影響範囲**:
 - **Gemini AI ノード**: 画像認識タスクで最新モデルの高精度な分析が利用可能に
-- **Nanobana ノード**: Gemini 3 Pro Imageで最大4Kの高品質画像生成が可能に
+- **Nanobana ノード**: Gemini 3 Pro Image Preview で最大4Kの高品質画像生成が可能に
 - 両方のノード設定画面と `/form` ページで新しいモデルが選択可能に
 - 既存のワークフローは後方互換性を維持しながら、マイグレーション処理で自動的に更新
 
