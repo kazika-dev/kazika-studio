@@ -18,6 +18,79 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-22: ワークフローステップの編集機能を追加（nodeOverrides対応）
+
+**目的**: メッセージからスタジオを作成した際に自動生成されたワークフローステップ（Nanobana、ElevenLabsなど）のノード設定を、編集フォームで確認・編集できるようにする
+
+**変更内容**:
+- **AddWorkflowStepDialog.tsx**:
+  - `nodeOverrides` の編集フォームを追加（444-606行目）
+  - ElevenLabsノード用フィールド: テキスト、音声ID、モデルID
+  - Nanobanaノード用フィールド: プロンプト、アスペクト比、キャラクターシートID（表示のみ）
+  - 全てのフィールドがリアルタイムで編集可能
+
+- **API エンドポイント**:
+  - `/app/api/studios/steps/[id]/route.ts` - PUT メソッドで `input_config` を更新
+  - 既存のGET、DELETE メソッドも実装済み
+  - `/lib/db.ts` の `updateStep()` 関数を使用して DB 更新
+
+- **WorkflowStepList.tsx**:
+  - 編集ボタンクリックで `handleEditStep()` を呼び出し
+  - `AddWorkflowStepDialog` を編集モードで開く（`editStep` prop）
+  - `handleUpdateStep()` で PUT API を呼び出して保存
+
+**データフロー**:
+1. ユーザーが `WorkflowStepCard` の編集ボタンをクリック
+2. `AddWorkflowStepDialog` が編集モードで開く（`nodeOverrides` を表示）
+3. ユーザーがフォームでテキスト、音声ID、プロンプトなどを編集
+4. 保存ボタンで `PUT /api/studios/steps/[id]` を呼び出し
+5. `studio_board_workflow_steps.input_config.nodeOverrides` を更新
+6. ワークフロー実行時に `applyInputsToNodes()` で `nodeOverrides` が `node.data.config` にマージされる
+
+**技術的詳細**:
+- `nodeOverrides` の各フィールドは条件分岐でレンダリング（`config.text !== undefined` など）
+- ElevenLabsとNanobanaノードの両方に対応
+- 編集時にワークフローIDは変更不可（編集モードで disabled）
+- 既存の `input_config` の構造を保持（`character_id`, `character_name`, `has_custom_voice` など）
+
+**影響範囲**:
+- メッセージからスタジオを作成した後、各ステップのノード設定を個別に編集可能に
+- ワークフローノード設定と `/form` ページの一元管理の原則に従い、設定の一貫性を確保
+- 既存の会話→スタジオ作成フローとの後方互換性を維持
+
+**使用例**:
+```typescript
+// 編集前の nodeOverrides
+{
+  "elevenlabs-1": {
+    "text": "[friendly] こんにちは！",
+    "voiceId": "ja-JP-Wavenet-A",
+    "modelId": "eleven_turbo_v2_5"
+  },
+  "nanobana-1": {
+    "prompt": "school rooftop at daytime, anime style...",
+    "aspectRatio": "16:9",
+    "selectedCharacterSheetIds": [1]
+  }
+}
+
+// 編集後（ユーザーがテキストとプロンプトを変更）
+{
+  "elevenlabs-1": {
+    "text": "[excited] やった！",
+    "voiceId": "ja-JP-Wavenet-A",
+    "modelId": "eleven_turbo_v2_5"
+  },
+  "nanobana-1": {
+    "prompt": "sunset on school rooftop, warm lighting, anime style",
+    "aspectRatio": "9:16",  // アスペクト比も変更
+    "selectedCharacterSheetIds": [1]
+  }
+}
+```
+
+---
+
 ### 2025-11-22: 会話メッセージの手動追加機能を実装
 
 **目的**: ユーザーが会話の途中または最後に、手動でメッセージを追加できる機能を実装
