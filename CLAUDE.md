@@ -20,6 +20,83 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-22: 会話からスタジオ作成時のワークフロー設定形式を通常形式に統一
+
+**目的**: 会話からスタジオを作成した際のワークフローステップの `input_config` 構造を、通常のワークフロー実行と同じ形式に統一し、保守性と一貫性を向上
+
+**問題点**:
+- 以前は会話からスタジオを作成すると、独自の `nodeOverrides` 構造でノード設定を保存していた
+- 通常のワークフロー実行では `workflowInputs` 構造を使用しており、2つの異なる形式が混在していた
+- この不一致により、コードの保守が困難になり、バグの原因となっていた
+
+**変更内容**:
+- `/app/api/conversations/[id]/create-studio/route.ts` を修正し、`input_config` の構造を以下のように統一:
+
+**変更前（独自のnodeOverrides形式）**:
+```typescript
+input_config: {
+  character_id: message.character_id,
+  character_name: message.speaker_name,
+  has_custom_voice: !!characterVoiceId,
+  scene_prompt_en: message.scene_prompt_en,
+  scene_prompt_ja: message.scene_prompt_ja,
+  nodeOverrides: {
+    "node-123": {
+      text: "こんにちは",
+      voiceId: "ja-JP-Wavenet-A",
+      modelId: "eleven_turbo_v2_5"
+    },
+    "node-456": {
+      prompt: "school rooftop...",
+      aspectRatio: "16:9",
+      selectedCharacterSheetIds: [1]
+    }
+  }
+}
+```
+
+**変更後（通常のworkflowInputs形式）**:
+```typescript
+input_config: {
+  usePrompt: false,
+  workflowInputs: {
+    "elevenlabs_text_node-123": "こんにちは",
+    "elevenlabs_voiceId_node-123": "ja-JP-Wavenet-A",
+    "elevenlabs_modelId_node-123": "eleven_turbo_v2_5",
+    "nanobana_prompt_node-456": "school rooftop...",
+    "nanobana_model_node-456": "gemini-3-pro-image-preview",
+    "nanobana_selectedCharacterSheetIds_node-456": ["1"]
+  },
+  usePreviousText: false,
+  usePreviousAudio: false,
+  usePreviousImage: false,
+  usePreviousVideo: false
+}
+```
+
+**技術的詳細**:
+- **ElevenLabsノード設定**: `elevenlabs_{field}_{nodeId}` の形式でフィールドを生成
+  - `text`: メッセージテキスト
+  - `voiceId`: キャラクターの音声ID（デフォルト: 'JBFqnCBsd6RMkjVDRZzb'）
+  - `modelId`: ノードに設定されたモデル（デフォルト: 'eleven_turbo_v2_5'）
+
+- **Nanobanaノード設定**: `nanobana_{field}_{nodeId}` の形式でフィールドを生成
+  - `prompt`: シーンプロンプト（英語 → 日本語 → metadata.scene の優先順位）
+  - `model`: ノードに設定されたモデル（デフォルト: 'gemini-3-pro-image-preview'）
+  - `selectedCharacterSheetIds`: キャラクターID（文字列配列）
+
+**影響範囲**:
+- 会話からスタジオを作成した場合と、通常のワークフロー実行で、完全に同じ `input_config` 構造が使用される
+- `/app/api/studios/steps/[id]/execute/route.ts` の `applyInputsToNodes()` 関数が `workflowInputs` を処理する既存のロジックをそのまま利用できる
+- `nodeOverrides` の処理ロジックは後方互換性のために残しているが、新規作成分では使用されない
+- コードの一貫性が向上し、保守が容易になる
+
+**後方互換性**:
+- 既存の `nodeOverrides` 形式のステップは引き続き動作する（`applyInputsToNodes` で処理される）
+- 新規作成分から `workflowInputs` 形式に統一される
+
+---
+
 ### 2025-11-22: メッセージごとのシーンキャラクターシート設定機能を実装
 
 **目的**: `conversation_messages` の各メッセージ（シーンプロンプト）ごとに、登場人物のキャラクターシートを複数設定できるようにする
