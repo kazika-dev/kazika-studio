@@ -252,6 +252,41 @@ export default function ConversationsPage() {
     }
   };
 
+  const handleAddMessage = async (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => {
+    if (!selectedConversation) return;
+
+    try {
+      const response = await fetch('/api/conversations/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: selectedConversation.id,
+          characterId,
+          messageText,
+          emotionTag,
+          insertAfterMessageId
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // If inserting after a message, reload the entire conversation to get updated sequence_order
+        if (insertAfterMessageId) {
+          await loadConversation(selectedConversation.id);
+        } else {
+          // If adding at the end, just append to the list
+          setMessages(prev => [...prev, result.data.message]);
+        }
+      } else {
+        throw new Error(result.error || 'Failed to add message');
+      }
+    } catch (error) {
+      console.error('Failed to add message:', error);
+      throw error;
+    }
+  };
+
   const handleConversationGenerated = async (conversationId: number) => {
     await loadStoryTree();
     await loadConversation(conversationId);
@@ -444,6 +479,7 @@ export default function ConversationsPage() {
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}
                   onReanalyzeEmotion={handleReanalyzeEmotion}
+                  onAddMessage={handleAddMessage}
                 />
               </>
             ) : (
