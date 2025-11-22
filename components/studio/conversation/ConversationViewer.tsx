@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -13,14 +13,17 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Button
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
+import EmotionTagSelector from './EmotionTagSelector';
 import {
   DndContext,
   closestCenter,
@@ -71,6 +74,8 @@ interface SortableMessageProps {
   onReanalyzeEmotion: (messageId: number) => void;
   onTextChange: (text: string) => void;
   onCharacterChange: (characterId: number) => void;
+  onOpenTagSelector: () => void;
+  textFieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 function SortableMessage({
@@ -88,7 +93,9 @@ function SortableMessage({
   onDelete,
   onReanalyzeEmotion,
   onTextChange,
-  onCharacterChange
+  onCharacterChange,
+  onOpenTagSelector,
+  textFieldRef
 }: SortableMessageProps) {
   const {
     attributes,
@@ -233,16 +240,32 @@ function SortableMessage({
 
         {/* Message Text */}
         {isEditing ? (
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            value={editText}
-            onChange={(e) => onTextChange(e.target.value)}
-            disabled={saving}
-            autoFocus
-            sx={{ mb: 1 }}
-          />
+          <Box sx={{ mb: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+              <Tooltip title="感情タグを追加">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LocalOfferIcon />}
+                  onClick={onOpenTagSelector}
+                  disabled={saving}
+                  sx={{ fontSize: '0.75rem', py: 0.5 }}
+                >
+                  感情タグを追加
+                </Button>
+              </Tooltip>
+            </Box>
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              value={editText}
+              onChange={(e) => onTextChange(e.target.value)}
+              disabled={saving}
+              autoFocus
+              inputRef={textFieldRef}
+            />
+          </Box>
         ) : (
           <>
             <Typography
@@ -379,6 +402,8 @@ export default function ConversationViewer({
   const [editCharacterId, setEditCharacterId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [reanalyzingId, setReanalyzingId] = useState<number | null>(null);
+  const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
+  const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -488,6 +513,34 @@ export default function ConversationViewer({
     }
   };
 
+  const handleOpenTagSelector = () => {
+    setTagSelectorOpen(true);
+  };
+
+  const handleSelectTag = (tagName: string) => {
+    // カーソル位置にタグを挿入
+    const textarea = textFieldRef.current;
+    if (!textarea) {
+      // フォールバック: textareaが取得できない場合は末尾に追加
+      setEditText(editText + `[${tagName}]`);
+      return;
+    }
+
+    const cursorPosition = textarea.selectionStart || 0;
+    const textBefore = editText.substring(0, cursorPosition);
+    const textAfter = editText.substring(cursorPosition);
+    const newText = textBefore + `[${tagName}]` + textAfter;
+
+    setEditText(newText);
+
+    // カーソル位置をタグの後ろに移動
+    setTimeout(() => {
+      const newCursorPosition = cursorPosition + tagName.length + 2; // [tagName] の長さ
+      textarea.setSelectionRange(newCursorPosition, newCursorPosition);
+      textarea.focus();
+    }, 0);
+  };
+
   const handleDeleteMessage = async (messageId: number) => {
     if (!onDeleteMessage) return;
 
@@ -583,10 +636,19 @@ export default function ConversationViewer({
               onReanalyzeEmotion={handleReanalyzeEmotion}
               onTextChange={setEditText}
               onCharacterChange={setEditCharacterId}
+              onOpenTagSelector={handleOpenTagSelector}
+              textFieldRef={textFieldRef}
             />
           ))}
         </SortableContext>
       </DndContext>
+
+      {/* Emotion Tag Selector Dialog */}
+      <EmotionTagSelector
+        open={tagSelectorOpen}
+        onClose={() => setTagSelectorOpen(false)}
+        onSelectTag={handleSelectTag}
+      />
     </Box>
   );
 }

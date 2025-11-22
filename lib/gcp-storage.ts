@@ -191,3 +191,70 @@ export async function deleteImageFromStorage(filePath: string): Promise<void> {
 
   await file.delete();
 }
+
+/**
+ * 画像素材をGCP Storageにアップロード
+ * @param fileBuffer 画像ファイルのBuffer
+ * @param fileName ファイル名（例: "bg-school-001.png"）
+ * @param mimeType ファイルのMIMEタイプ
+ * @returns ファイルパス（例: "materials/bg-school-001.png"）
+ */
+export async function uploadImageMaterial(
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string
+): Promise<string> {
+  const storage = getStorageClient();
+  const bucketName = process.env.GCP_STORAGE_BUCKET;
+
+  if (!bucketName) {
+    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  }
+
+  const bucket = storage.bucket(bucketName);
+
+  // ファイル名を生成（タイムスタンプ + 元のファイル名）
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  const extension = fileName.split('.').pop() || 'png';
+  const baseName = fileName.split('.').slice(0, -1).join('.').replace(/[^a-zA-Z0-9-_]/g, '-');
+  const finalFileName = `${baseName}-${timestamp}-${randomStr}.${extension}`;
+
+  const filePath = `materials/${finalFileName}`;
+  console.log('[gcp-storage] Uploading image material to path:', filePath);
+
+  const file = bucket.file(filePath);
+
+  // ファイルをアップロード（非公開）
+  await file.save(fileBuffer, {
+    metadata: {
+      contentType: mimeType,
+      cacheControl: 'public, max-age=86400', // 24時間キャッシュ（マスタデータなので長めに設定）
+    },
+  });
+
+  console.log('[gcp-storage] Image material upload completed successfully');
+
+  return filePath;
+}
+
+/**
+ * 画像素材をGCP Storageから削除
+ * @param fileName ファイル名（例: "materials/bg-school-001.png"）
+ */
+export async function deleteImageMaterial(fileName: string): Promise<void> {
+  return deleteImageFromStorage(fileName);
+}
+
+/**
+ * 画像素材の署名付きURLを生成
+ * @param fileName ファイル名（例: "materials/bg-school-001.png"）
+ * @param expiresInMinutes 有効期限（分）デフォルト: 60分
+ * @returns 署名付きURL
+ */
+export async function getImageMaterialSignedUrl(
+  fileName: string,
+  expiresInMinutes: number = 60
+): Promise<string> {
+  return getSignedUrl(fileName, expiresInMinutes);
+}

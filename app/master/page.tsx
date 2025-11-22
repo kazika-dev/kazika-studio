@@ -19,6 +19,7 @@ import {
   Label as LabelIcon,
   ArrowBack as ArrowBackIcon,
   VolumeUp as VolumeUpIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -73,6 +74,14 @@ const masterTables: MasterTable[] = [
     description: '効果音のマスタデータ（GCP Storageに保存された音声ファイル）',
     icon: <VolumeUpIcon />,
     color: '#d32f2f',
+  },
+  {
+    id: 'm_image_materials',
+    name: 'm_image_materials',
+    displayName: '画像素材',
+    description: 'ワークフローで使用する画像素材のマスタデータ（背景、テクスチャなど）',
+    icon: <ImageIcon />,
+    color: '#f57c00',
   },
 ];
 

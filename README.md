@@ -113,3 +113,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 PORT=6000 npx vibe-kanban
+
+/workspaces/kazika-studio/CLAUDE.md

@@ -1641,3 +1641,105 @@ export async function getStoriesTreeByUserId(userId: string) {
 
   return tree;
 }
+
+// =====================================================
+// 画像素材マスタ関連の関数
+// =====================================================
+
+/**
+ * 全ての画像素材を取得
+ */
+export async function getAllImageMaterials() {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_image_materials ORDER BY created_at DESC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * IDで画像素材を取得
+ */
+export async function getImageMaterialById(id: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_image_materials WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * 画像素材を作成
+ */
+export async function createImageMaterial(data: {
+  name: string;
+  description: string;
+  file_name: string;
+  width: number | null;
+  height: number | null;
+  file_size_bytes: number;
+  category: string;
+  tags: string[];
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_image_materials
+      (name, description, file_name, width, height, file_size_bytes, category, tags)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+    [
+      data.name,
+      data.description,
+      data.file_name,
+      data.width,
+      data.height,
+      data.file_size_bytes,
+      data.category,
+      data.tags,
+    ]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * 画像素材を更新
+ */
+export async function updateImageMaterial(
+  id: number,
+  data: {
+    name: string;
+    description: string;
+    category: string;
+    tags: string[];
+  }
+) {
+  const result = await query(
+    `UPDATE kazikastudio.m_image_materials
+      SET name = $1, description = $2, category = $3, tags = $4, updated_at = NOW()
+      WHERE id = $5
+      RETURNING *`,
+    [data.name, data.description, data.category, data.tags, id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * 画像素材を削除
+ */
+export async function deleteImageMaterial(id: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.m_image_materials WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}

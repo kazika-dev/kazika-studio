@@ -29,7 +29,7 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             name: 'model',
             label: 'モデル',
             required: false,
-            options: GEMINI_MODEL_OPTIONS,
+            options: GEMINI_MODEL_OPTIONS as unknown as { label: string; value: string }[],
             helperText: 'APIキーは環境変数から自動的に読み込まれます',
           },
           {
@@ -78,7 +78,7 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             name: 'model',
             label: 'モデル',
             required: false,
-            options: NANOBANA_MODEL_OPTIONS,
+            options: NANOBANA_MODEL_OPTIONS as unknown as { label: string; value: string }[],
             helperText: 'Gemini 3 Pro Imageは高品質・最大4K、Gemini 2.5 Flash Imageは高速・低コスト',
           },
           {
@@ -162,7 +162,7 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             name: 'modelId',
             label: 'モデル',
             required: false,
-            options: ELEVENLABS_MODEL_OPTIONS,
+            options: ELEVENLABS_MODEL_OPTIONS as unknown as { label: string; value: string }[],
             helperText: 'Turbo v2.5推奨（バランス型）、v3は最高品質だが要アクセス権',
           },
           {
