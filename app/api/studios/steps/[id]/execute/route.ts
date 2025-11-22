@@ -718,8 +718,46 @@ async function applyInputsToNodes(nodes: Node[], inputs: any, workflow: any, ste
             continue;
           }
 
+          // ElevenLabsノード専用処理
+          if (nodeType === 'elevenlabs' && fieldName.includes(node.id)) {
+            if (fieldName.startsWith('elevenlabs_text_')) {
+              console.log(`  Setting ElevenLabs text field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = {
+                ...node.data.config,
+                text: fieldValue,
+              };
+            } else if (fieldName.startsWith('elevenlabs_voiceId_')) {
+              console.log(`  Setting ElevenLabs voiceId field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = {
+                ...node.data.config,
+                voiceId: fieldValue,
+              };
+            } else if (fieldName.startsWith('elevenlabs_modelId_')) {
+              console.log(`  Setting ElevenLabs modelId field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = {
+                ...node.data.config,
+                modelId: fieldValue,
+              };
+            }
+          }
+          // Nanobanaノード専用処理
+          else if (nodeType === 'nanobana' && fieldName.includes(node.id)) {
+            if (fieldName.startsWith('nanobana_model_')) {
+              console.log(`  Setting Nanobana model field for node ${node.id}: "${fieldValue}"`);
+              node.data.config = {
+                ...node.data.config,
+                model: fieldValue,
+              };
+            } else if (fieldName.startsWith('nanobana_selectedCharacterSheetIds_')) {
+              console.log(`  Setting Nanobana selectedCharacterSheetIds field for node ${node.id}:`, fieldValue);
+              node.data.config = {
+                ...node.data.config,
+                selectedCharacterSheetIds: Array.isArray(fieldValue) ? fieldValue : [fieldValue],
+              };
+            }
+          }
           // promptまたはtextareaフィールドは既存のプロンプトに追加
-          if (fieldType === 'prompt' || fieldType === 'textarea' || fieldName === 'prompt') {
+          else if (fieldType === 'prompt' || fieldType === 'textarea' || fieldName === 'prompt') {
             // フィールド名にノードIDが含まれている場合は、そのノードにのみ適用
             // 例: gemini_prompt_{nodeId}, nanobana_prompt_{nodeId}, qwenImage_prompt_{nodeId}
             let shouldApply = true;
