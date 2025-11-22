@@ -18,6 +18,81 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
+### 2025-11-22: 会話メッセージの手動追加機能を実装
+
+**目的**: ユーザーが会話の途中または最後に、手動でメッセージを追加できる機能を実装
+
+**変更内容**:
+- **型定義** (`/types/conversation.ts`):
+  - `CreateMessageRequest` - メッセージ作成リクエスト型
+  - `CreateMessageResponse` - メッセージ作成レスポンス型
+  - `insertAfterMessageId` で特定のメッセージの後に挿入可能（将来の拡張用）
+
+- **API エンドポイント** (`/app/api/conversations/messages/route.ts`):
+  - `POST /api/conversations/messages` - 新しいメッセージを作成
+  - 所有権チェック（conversation → studio/story → user の階層）
+  - `sequence_order` の自動調整（最後に追加 or 特定位置に挿入）
+  - 感情タグをメッセージテキストに `[emotionTag]` プレフィックスとして自動追加
+  - `metadata.manuallyCreated: true` フラグで手動作成を識別
+
+- **UI コンポーネント** (`/components/studio/conversation/MessageAddDialog.tsx`):
+  - キャラクター選択ドロップダウン
+  - メッセージテキスト入力（multiline）
+  - 感情タグ選択（EmotionTagSelector を再利用）
+  - 保存/キャンセルボタン
+  - バリデーション（空のメッセージは送信不可）
+
+- **ConversationViewer の拡張** (`/components/studio/conversation/ConversationViewer.tsx`):
+  - `onAddMessage` プロップを追加
+  - メッセージリストの最後に「新しいメッセージを追加」ボタンを配置（破線スタイル）
+  - MessageAddDialog との統合
+  - 追加後にローカル状態を更新
+
+- **ページレベルの統合** (`/app/conversations/page.tsx`):
+  - `handleAddMessage` ハンドラーを実装
+  - API エンドポイントを呼び出し
+  - 成功時にメッセージリストに追加
+
+**技術的詳細**:
+- **sequence_order の自動調整**:
+  - 最後に追加する場合: 現在の最大値 + 1
+  - 特定のメッセージの後に挿入する場合: それ以降のメッセージを +1 でインクリメント
+  - PostgreSQL の `UPDATE ... WHERE sequence_order >= N` で一括更新
+
+- **感情タグの処理**:
+  - ユーザーが選択した感情タグを `[tagName]` 形式でメッセージテキストの先頭に追加
+  - `metadata.emotionTag` にも保存
+  - 選択しない場合は `neutral` がデフォルト
+
+- **後方互換性**:
+  - 既存のメッセージ編集・削除・並び替え機能と共存
+  - `sequence_order` の整合性を保つ
+  - AI生成メッセージと手動作成メッセージを `metadata.manuallyCreated` で区別
+
+**UI/UX**:
+- メッセージリストの最後に破線ボタンを配置（視覚的に追加を促す）
+- ダイアログで感情タグを選択すると、プレフィックスが自動追加されることをユーザーに通知
+- 保存中はボタンを無効化して多重送信を防止
+
+**影響範囲**:
+- `/conversations` ページで会話の手動編集が可能に
+- AI生成後に追加の会話を手動で継続できる
+- 既存の会話生成機能には影響なし
+
+**将来の拡張可能性**:
+- 「続きを生成」ボタンでAIが自動的に会話を続ける
+- シーンプロンプトの自動生成
+
+**追加実装（メッセージ間への挿入機能）**:
+- ✅ 各メッセージの下に [+] 挿入ボタンを配置（円形、破線ボーダー）
+- ✅ ホバー時にボタンが強調表示（背景色変更、ボーダーがソリッドに）
+- ✅ ボタンクリックで MessageAddDialog が開き、挿入位置のプレビューを表示
+- ✅ 挿入位置プレビュー: 話者名とメッセージの最初の2行を表示
+- ✅ 挿入時は `insertAfterMessageId` を API に送信し、`sequence_order` を自動調整
+- ✅ 挿入後は会話全体をリロードして最新の `sequence_order` を反映
+
+---
+
 ### 2025-11-22: ワークフローステップの編集機能を追加（nodeOverrides対応）
 
 **目的**: メッセージからスタジオを作成した際に自動生成されたワークフローステップ（Nanobana、ElevenLabsなど）のノード設定を、編集フォームで確認・編集できるようにする
@@ -88,74 +163,6 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
   }
 }
 ```
-
----
-
-### 2025-11-22: 会話メッセージの手動追加機能を実装
-
-**目的**: ユーザーが会話の途中または最後に、手動でメッセージを追加できる機能を実装
-
-**変更内容**:
-- **型定義** (`/types/conversation.ts`):
-  - `CreateMessageRequest` - メッセージ作成リクエスト型
-  - `CreateMessageResponse` - メッセージ作成レスポンス型
-  - `insertAfterMessageId` で特定のメッセージの後に挿入可能（将来の拡張用）
-
-- **API エンドポイント** (`/app/api/conversations/messages/route.ts`):
-  - `POST /api/conversations/messages` - 新しいメッセージを作成
-  - 所有権チェック（conversation → studio/story → user の階層）
-  - `sequence_order` の自動調整（最後に追加 or 特定位置に挿入）
-  - 感情タグをメッセージテキストに `[emotionTag]` プレフィックスとして自動追加
-  - `metadata.manuallyCreated: true` フラグで手動作成を識別
-
-- **UI コンポーネント** (`/components/studio/conversation/MessageAddDialog.tsx`):
-  - キャラクター選択ドロップダウン
-  - メッセージテキスト入力（multiline）
-  - 感情タグ選択（EmotionTagSelector を再利用）
-  - 保存/キャンセルボタン
-  - バリデーション（空のメッセージは送信不可）
-
-- **ConversationViewer の拡張** (`/components/studio/conversation/ConversationViewer.tsx`):
-  - `onAddMessage` プロップを追加
-  - メッセージリストの最後に「新しいメッセージを追加」ボタンを配置（破線スタイル）
-  - MessageAddDialog との統合
-  - 追加後にローカル状態を更新
-
-- **ページレベルの統合** (`/app/conversations/page.tsx`):
-  - `handleAddMessage` ハンドラーを実装
-  - API エンドポイントを呼び出し
-  - 成功時にメッセージリストに追加
-
-**技術的詳細**:
-- **sequence_order の自動調整**:
-  - 最後に追加する場合: 現在の最大値 + 1
-  - 特定のメッセージの後に挿入する場合: それ以降のメッセージを +1 でインクリメント
-  - PostgreSQL の `UPDATE ... WHERE sequence_order >= N` で一括更新
-
-- **感情タグの処理**:
-  - ユーザーが選択した感情タグを `[tagName]` 形式でメッセージテキストの先頭に追加
-  - `metadata.emotionTag` にも保存
-  - 選択しない場合は `neutral` がデフォルト
-
-- **後方互換性**:
-  - 既存のメッセージ編集・削除・並び替え機能と共存
-  - `sequence_order` の整合性を保つ
-  - AI生成メッセージと手動作成メッセージを `metadata.manuallyCreated` で区別
-
-**UI/UX**:
-- メッセージリストの最後に破線ボタンを配置（視覚的に追加を促す）
-- ダイアログで感情タグを選択すると、プレフィックスが自動追加されることをユーザーに通知
-- 保存中はボタンを無効化して多重送信を防止
-
-**影響範囲**:
-- `/conversations` ページで会話の手動編集が可能に
-- AI生成後に追加の会話を手動で継続できる
-- 既存の会話生成機能には影響なし
-
-**将来の拡張可能性**:
-- メッセージ間への挿入機能（各メッセージの間に [+] ボタンを配置）
-- 「続きを生成」ボタンでAIが自動的に会話を続ける
-- シーンプロンプトの自動生成
 
 ---
 

@@ -252,7 +252,7 @@ export default function ConversationsPage() {
     }
   };
 
-  const handleAddMessage = async (characterId: number, messageText: string, emotionTag?: string) => {
+  const handleAddMessage = async (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => {
     if (!selectedConversation) return;
 
     try {
@@ -263,15 +263,21 @@ export default function ConversationsPage() {
           conversationId: selectedConversation.id,
           characterId,
           messageText,
-          emotionTag
+          emotionTag,
+          insertAfterMessageId
         })
       });
 
       const result = await response.json();
 
       if (result.success && result.data) {
-        // Add the new message to the list
-        setMessages(prev => [...prev, result.data.message]);
+        // If inserting after a message, reload the entire conversation to get updated sequence_order
+        if (insertAfterMessageId) {
+          await loadConversation(selectedConversation.id);
+        } else {
+          // If adding at the end, just append to the list
+          setMessages(prev => [...prev, result.data.message]);
+        }
       } else {
         throw new Error(result.error || 'Failed to add message');
       }
