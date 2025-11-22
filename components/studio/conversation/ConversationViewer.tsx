@@ -705,26 +705,6 @@ export default function ConversationViewer({
         </SortableContext>
       </DndContext>
 
-      {/* Add Message Button */}
-      {!readonly && onAddMessage && characters && characters.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenAddDialog()}
-            size="large"
-            sx={{
-              borderStyle: 'dashed',
-              borderWidth: 2,
-              py: 1.5,
-              px: 3
-            }}
-          >
-            新しいメッセージを追加
-          </Button>
-        </Box>
-      )}
-
       {/* Emotion Tag Selector Dialog */}
       <EmotionTagSelector
         open={tagSelectorOpen}
