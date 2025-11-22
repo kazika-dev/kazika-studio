@@ -19,13 +19,11 @@
   },
 
 
-"postCreateCommand": "sudo mkdir -p /home/node/.ssh && sudo chown -R node:node /home/node/.ssh && chmod 700 /home/node/.ssh && npm install && npm install -g @anthropic-ai/claude-code"
-,
-  "remoteUser": "node",
+ "postCreateCommand": "sudo mkdir -p /home/node/.ssh && sudo chown -R node:node /home/node/.ssh && chmod 700 /home/node/.ssh && ssh-keyscan github.com >> /home/node/.ssh/known_hosts && chmod 644 /home/node/.ssh/known_hosts && npm install && npm install -g @anthropic-ai/claude-code",
+"remoteUser": "node",
 
   "mounts": [
-    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume",
-    "source=kazika-studio-vscode,target=/home/node/.vscode-server,type=volume"
+    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume"
   ],
 
   "forwardPorts": [3000]
