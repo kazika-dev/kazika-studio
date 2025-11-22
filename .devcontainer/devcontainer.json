@@ -24,7 +24,8 @@
   "remoteUser": "node",
 
   "mounts": [
-    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume"
+    "source=kazika-studio-ssh,target=/home/node/.ssh,type=volume",
+    "source=kazika-studio-vscode,target=/home/node/.vscode-server,type=volume"
   ],
 
   "forwardPorts": [3000]
