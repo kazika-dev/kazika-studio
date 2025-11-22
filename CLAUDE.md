@@ -20,255 +20,80 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 
 ## 最近の主要な変更
 
-### 2025-11-22: ワークフローステップ編集時にnodeOverridesの値をフォームに自動反映
+### 2025-11-22: 会話からスタジオ作成時のワークフロー設定形式を通常形式に統一
 
-**目的**: 会話からスタジオを作成した際のワークフローステップを編集する時、`nodeOverrides` に保存された設定値を通常のワークフロー入力フォームに自動的に反映させる
+**目的**: 会話からスタジオを作成した際のワークフローステップの `input_config` 構造を、通常のワークフロー実行と同じ形式に統一し、保守性と一貫性を向上
 
-**問題**:
-- 会話からスタジオを作成すると、`input_config.nodeOverrides` に以下のような設定が保存される：
-  ```json
-  {
-    "elevenlabs-1": { "text": "[friendly] こんにちは！", "voiceId": "ja-JP-Wavenet-A" },
-    "nanobana-1": { "prompt": "school rooftop...", "selectedCharacterSheetIds": [13, 14] }
-  }
-  ```
-- `AddWorkflowStepDialog` で編集時に**2つの別々のフォームセクション**が表示されていた：
-  1. **ワークフロー入力フォーム**（`form_config.fields`から生成）← 空の状態
-  2. **ノード設定の上書きフォーム**（`nodeOverrides`セクション）← ここに値が入っている
-- ユーザーは同じ設定を2箇所で見ることになり、混乱する
+**問題点**:
+- 以前は会話からスタジオを作成すると、独自の `nodeOverrides` 構造でノード設定を保存していた
+- 通常のワークフロー実行では `workflowInputs` 構造を使用しており、2つの異なる形式が混在していた
+- この不一致により、コードの保守が困難になり、バグの原因となっていた
 
 **変更内容**:
-- **`extractFormValuesFromNodeOverrides()` 関数を追加** (`/components/studio/AddWorkflowStepDialog.tsx`):
-  - `nodeOverrides` の各ノード設定を走査
-  - `workflow.form_config.fields` に存在するフィールド名と一致する場合のみ値を抽出
-  - 複数のノードに同じフィールドがある場合は、最初に見つかった値を優先
+- `/app/api/conversations/[id]/create-studio/route.ts` を修正し、`input_config` の構造を以下のように統一:
 
-- **useEffect でワークフロー詳細読み込み後に自動マージ**:
-  - `selectedWorkflow` と `editStep?.input_config?.nodeOverrides` が両方存在する場合
-  - `extractFormValuesFromNodeOverrides()` を呼び出して値を抽出
-  - `setFormValues(prev => ({ ...prev, ...extractedValues }))` でマージ
-
-**技術的詳細**:
+**変更前（独自のnodeOverrides形式）**:
 ```typescript
-// nodeOverridesからformValuesへの値を抽出
-const extractFormValuesFromNodeOverrides = (
-  nodeOverrides: Record<string, any>,
-  workflow: Workflow
-): Record<string, any> => {
-  const extracted: Record<string, any> = {};
-  const formFieldNames = new Set(workflow.form_config?.fields?.map(f => f.name) || []);
-
-  Object.entries(nodeOverrides).forEach(([nodeId, config]) => {
-    Object.entries(config).forEach(([key, value]) => {
-      if (formFieldNames.has(key) && extracted[key] === undefined) {
-        extracted[key] = value;
-      }
-    });
-  });
-
-  return extracted;
-};
-
-// ワークフロー詳細読み込み後にマージ
-useEffect(() => {
-  if (selectedWorkflow && isEditMode && editStep?.input_config?.nodeOverrides) {
-    const extractedValues = extractFormValuesFromNodeOverrides(
-      editStep.input_config.nodeOverrides,
-      selectedWorkflow
-    );
-
-    if (Object.keys(extractedValues).length > 0) {
-      setFormValues(prev => ({ ...prev, ...extractedValues }));
+input_config: {
+  character_id: message.character_id,
+  character_name: message.speaker_name,
+  has_custom_voice: !!characterVoiceId,
+  scene_prompt_en: message.scene_prompt_en,
+  scene_prompt_ja: message.scene_prompt_ja,
+  nodeOverrides: {
+    "node-123": {
+      text: "こんにちは",
+      voiceId: "ja-JP-Wavenet-A",
+      modelId: "eleven_turbo_v2_5"
+    },
+    "node-456": {
+      prompt: "school rooftop...",
+      aspectRatio: "16:9",
+      selectedCharacterSheetIds: [1]
     }
   }
-}, [selectedWorkflow, isEditMode, editStep]);
+}
 ```
 
-**影響範囲**:
-- ✅ 会話から作成したステップの編集時、フォームに値が自動的に入力される
-- ✅ `prompt`, `text`, `selectedCharacterSheetIds`, `aspectRatio` などの設定値が通常フォームに反映
-- ✅ ユーザーは1つの統一されたフォームで編集可能
-- ✅ 通常のワークフロー追加機能には影響なし（`isEditMode` と `nodeOverrides` が両方存在する場合のみ動作）
-
-**UI/UX改善**:
-- 編集ダイアログを開いた瞬間から、すべての設定値が表示されている
-- 2つの別々のセクションで混乱することがなくなる
-- フォームフィールドと `nodeOverrides` セクションの両方で同じ値を確認できる（整合性チェック）
-
-**コミット**: `[今回のコミット]` - "会話から作成したステップ編集時にnodeOverridesの値をフォームに自動反映"
-
----
-
-### 2025-11-22: AddWorkflowStepDialogにキャラクターシート選択UI追加
-
-**目的**: Nanobanaノードの `selectedCharacterSheetIds` を編集モーダルで選択・編集可能にする
-
-**変更内容**:
-- **キャラクターシート選択UI** (`/components/studio/AddWorkflowStepDialog.tsx`):
-  - 選択済みキャラクターをアバター形式で表示（最大4人）
-  - 各アバターに削除ボタン（×）を配置
-  - 追加ボタン（破線の円形アイコン）をクリックで選択ダイアログを表示
-  - `MessageCharacterSelector` と同じUIパターンを採用
-
-- **キャラクターシート選択ダイアログ**:
-  - 利用可能なキャラクターシートをリスト表示
-  - アバター、名前、説明を表示
-  - 既に選択済みのキャラクターは自動的にフィルタリング
-
-- **状態管理**:
-  - `characterSheets` - 全キャラクターシートのリスト
-  - `characterDialogOpen` - ダイアログの開閉状態
-  - `currentNodeId` - 現在編集中のノードID
+**変更後（通常のworkflowInputs形式）**:
+```typescript
+input_config: {
+  usePrompt: false,
+  workflowInputs: {
+    "elevenlabs_text_node-123": "こんにちは",
+    "elevenlabs_voiceId_node-123": "ja-JP-Wavenet-A",
+    "elevenlabs_modelId_node-123": "eleven_turbo_v2_5",
+    "nanobana_prompt_node-456": "school rooftop...",
+    "nanobana_model_node-456": "gemini-3-pro-image-preview",
+    "nanobana_selectedCharacterSheetIds_node-456": ["1"]
+  },
+  usePreviousText: false,
+  usePreviousAudio: false,
+  usePreviousImage: false,
+  usePreviousVideo: false
+}
+```
 
 **技術的詳細**:
-- `loadCharacterSheets()` で `/api/character-sheets` から全キャラクターシートを取得
-- `handleAddCharacterSheet()` で `nodeOverrides[nodeId].selectedCharacterSheetIds` に追加
-- `handleRemoveCharacterSheet()` で配列から削除
-- 最大4人までの制限を実装（Nanobana APIの制限に準拠）
+- **ElevenLabsノード設定**: `elevenlabs_{field}_{nodeId}` の形式でフィールドを生成
+  - `text`: メッセージテキスト
+  - `voiceId`: キャラクターの音声ID（デフォルト: 'JBFqnCBsd6RMkjVDRZzb'）
+  - `modelId`: ノードに設定されたモデル（デフォルト: 'eleven_turbo_v2_5'）
+
+- **Nanobanaノード設定**: `nanobana_{field}_{nodeId}` の形式でフィールドを生成
+  - `prompt`: シーンプロンプト（英語 → 日本語 → metadata.scene の優先順位）
+  - `model`: ノードに設定されたモデル（デフォルト: 'gemini-3-pro-image-preview'）
+  - `selectedCharacterSheetIds`: キャラクターID（文字列配列）
 
 **影響範囲**:
-- ✅ 会話から作成したスタジオのNanobanaノード設定が編集可能に
-- ✅ キャラクターシートIDが読み取り専用のテキスト表示から、インタラクティブなUI に変更
-- ✅ 既存の `nodeOverrides` アーキテクチャと完全互換
+- 会話からスタジオを作成した場合と、通常のワークフロー実行で、完全に同じ `input_config` 構造が使用される
+- `/app/api/studios/steps/[id]/execute/route.ts` の `applyInputsToNodes()` 関数が `workflowInputs` を処理する既存のロジックをそのまま利用できる
+- `nodeOverrides` の処理ロジックは後方互換性のために残しているが、新規作成分では使用されない
+- コードの一貫性が向上し、保守が容易になる
 
----
-
-### 2025-11-22: Canvas画像編集の選択範囲点線が消えない問題を修正（第3版・最終解決）
-
-**目的**: 選択範囲を削除・確定・キャンセルした後、点線の枠線が確実に消えるようにする
-
-**問題**:
-- `handleDeleteSelection()`、`handleConfirmSelection()`、`handleCancelSelection()`で選択範囲をクリアしても、点線の枠線が画面に残り続ける
-- 原因: `img.onload`内で`setSelection(null)`を呼んだ後、`requestAnimationFrame(() => redrawCanvas())`や`setRedrawTrigger`を実行していたため、React状態更新が反映される前に`redrawCanvas()`が呼ばれ、古い`selection`値を参照して点線を再描画してしまう
-
-**修正内容（最終解決）**:
-- **`setSelection(null)`を最も早いタイミングで実行**:
-  - 削除・確定時：`img.onload`の**前**（画像データの作成前）に`setSelection(null)`を呼ぶ
-  - キャンセル時：`selection.savedImageBeforeMove`を変数に保存してから`setSelection(null)`を呼ぶ
-
-- **不要な再描画呼び出しを削除**:
-  - `requestAnimationFrame(() => redrawCanvas())`を削除
-  - `setRedrawTrigger(prev => prev + 1)`を削除
-  - `img.onload`内では手動でCanvasクリア・再描画のみを実行
-
-- **最終コード（削除・確定）**:
-  ```typescript
-  // 選択範囲をクリア（再描画の前に）
-  setSelection(null);
-
-  // 画像参照を更新
-  const tempCanvas = document.createElement('canvas');
-  // ... tempCanvasにコピー ...
-  img.onload = () => {
-    imageRef.current = img;
-
-    // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-
-    // すべてのパスを再描画
-    history.forEach(path => {
-      drawPath(ctx, path);
-    });
-    // ここで終了！追加の再描画呼び出しなし
-  };
-  ```
-
-- **最終コード（キャンセル）**:
-  ```typescript
-  // 移動開始前の画像を取得（setSelection前に）
-  const savedImage = selection.savedImageBeforeMove;
-
-  // 選択範囲をクリア（再描画の前に）
-  setSelection(null);
-
-  // 移動開始前の画像が保存されている場合は復元
-  if (savedImage) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(savedImage, 0, 0);
-    imageRef.current = savedImage;
-  }
-
-  // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(imageRef.current, 0, 0);
-
-  // すべてのパスを再描画
-  history.forEach(path => {
-    drawPath(ctx, path);
-  });
-  // ここで終了！追加の再描画呼び出しなし
-  ```
-
-**技術的詳細**:
-- **Before**: `img.onload`内で`setSelection(null)` → 手動再描画 → `requestAnimationFrame(() => redrawCanvas())` → まだ`selection`が`null`になっていない → 点線が再描画される
-- **After**: `img.onload`の**前**に`setSelection(null)` → 手動再描画のみ → 追加の再描画呼び出しなし → 点線が描画されない
-
-**影響範囲**:
-- 選択範囲の削除・確定・キャンセル後、点線の枠線が確実に消えるようになった
-- 不要な再描画呼び出しを削除したことで、パフォーマンスも向上
-
----
-
-### 2025-11-22: Canvas画像編集のUndo機能の再描画問題を修正（第2版）
-
-**目的**: 元に戻すボタンを押したときに、Canvasがすぐに再描画されるようにする
-
-**問題**:
-- `handleUndo()`で画像履歴から前の画像を復元しても、UIが即座に更新されなかった
-- 次のアクション（別のツールの使用など）を起こすまで、視覚的に変化が反映されない
-- 原因: `imageRef.current`（ref）を更新してもReactの再レンダリングがトリガーされず、Canvas描画が実行されない
-
-**修正内容**:
-- **`redrawTrigger`状態を追加** (`/components/outputs/ImageEditor.tsx`):
-  - `const [redrawTrigger, setRedrawTrigger] = useState(0);`
-  - Canvas再描画をトリガーするための状態変数
-
-- **`useEffect`で自動再描画を実装**:
-  ```typescript
-  useEffect(() => {
-    if (redrawTrigger > 0) {
-      redrawCanvas();
-    }
-  }, [redrawTrigger]);
-  ```
-  - `redrawTrigger`が変更されるたびに`redrawCanvas()`を実行
-
-- **`handleUndo()`を修正（多重防御）**:
-  - 画像を復元した後、**3つの方法で確実に再描画**：
-    1. **即座に`redrawCanvas()`を実行** - 同期的に再描画
-    2. **`requestAnimationFrame`で次のフレームでも再描画** - ブラウザの描画タイミングに合わせて確実に実行
-    3. **`setRedrawTrigger(prev => prev + 1)`で状態更新** - `useEffect`経由での再描画もトリガー
-
-  ```typescript
-  // 画像を復元
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(previousImage, 0, 0);
-  imageRef.current = previousImage;
-
-  // 即座に再描画
-  redrawCanvas();
-
-  // さらに次のフレームでも再描画（確実に反映させるため）
-  requestAnimationFrame(() => {
-    redrawCanvas();
-  });
-
-  // redrawTriggerも更新（念のため）
-  setRedrawTrigger(prev => prev + 1);
-  ```
-
-**技術的詳細**:
-- **多重防御アプローチ**:
-  - 同期的な即時実行（`redrawCanvas()`）
-  - 非同期のフレーム同期（`requestAnimationFrame`）
-  - React状態管理経由（`useEffect` + `redrawTrigger`）
-- これにより、どのタイミングでも確実にCanvas再描画が実行される
-
-**影響範囲**:
-- Undoボタンを押したときに、Canvasが即座に再描画されるようになった
-- 選択範囲の移動・削除・確定後のUndoが正しく視覚的に反映される
-- 既存の描画履歴（ペン、マーカー、図形など）のUndo機能には影響なし
+**後方互換性**:
+- 既存の `nodeOverrides` 形式のステップは引き続き動作する（`applyInputsToNodes` で処理される）
+- 新規作成分から `workflowInputs` 形式に統一される
 
 ---
 
@@ -374,7 +199,6 @@ useEffect(() => {
   - 「確定 (Enter)」ボタン - 新しい位置に画像を貼り付けて確定（元の位置は既に白）
   - 「削除 (Delete)」ボタン - 選択範囲を白で塗りつぶして削除
   - 「キャンセル (Esc)」ボタン - **移動前の画像状態に復元**（白く塗りつぶした部分も元に戻る）
-  - 「元に戻す」ボタン - **選択範囲の操作を含む全ての編集を元に戻す**（最大20ステップ）
 
 - **キーボードショートカット**:
   - `Enter` - 選択範囲を確定
@@ -388,20 +212,16 @@ useEffect(() => {
 - `ctx.getImageData()` で選択範囲の画像データを保存（元の画像は切り取らない）
 - `ctx.putImageData()` で移動先に画像データを貼り付け
 - 選択範囲の状態管理: `selection`, `isCreatingSelection`, `isDraggingSelection`
-- `imageHistory` - 画像の履歴配列（Undo用、最大20個）
-- 移動開始時、確定時、削除時に `saveImageToHistory()` で履歴を保存
 
 **データフロー**:
 1. ユーザーが選択ツールで矩形をドラッグ
 2. マウスを離すと `ctx.getImageData()` で画像データを取得、`originalX/Y` に元の位置を記録
 3. **元の画像はそのまま**、選択範囲には点線の枠線のみ表示
-4. 選択範囲内をクリックすると、**`saveImageToHistory()` で Undo 用に履歴を保存**
-5. **現在の画像状態を `savedImageBeforeMove` に保存**（キャンセル用）
-6. **その瞬間に元の位置を白で塗りつぶす**（画像参照を更新）
-7. ドラッグ中は座標を更新して画像データをリアルタイム表示
-8. 確定ボタンで `ctx.putImageData()` で新しい位置に貼り付け、画像参照を更新
-9. キャンセルボタンで `savedImageBeforeMove` を復元し、元の状態に戻る
-10. 元に戻すボタンで `imageHistory` から前の画像を復元（複数ステップ戻せる）
+4. 選択範囲内をクリックすると、**現在の画像状態を `savedImageBeforeMove` に保存**
+5. **その瞬間に元の位置を白で塗りつぶす**（画像参照を更新）
+6. ドラッグ中は座標を更新して画像データをリアルタイム表示
+7. 確定ボタンで `ctx.putImageData()` で新しい位置に貼り付け、画像参照を更新
+8. キャンセルボタンで `savedImageBeforeMove` を復元し、元の状態に戻る
 
 **影響範囲**:
 - `/components/outputs/ImageEditor.tsx` に機能を追加

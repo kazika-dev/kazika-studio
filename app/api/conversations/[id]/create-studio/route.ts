@@ -57,7 +57,7 @@ export async function POST(
 
     console.log('[POST /api/conversations/:id/create-studio] Conversation found:', conversation.id);
 
-    // Fetch messages with scene characters
+    // Fetch messages
     const { data: messages, error: msgError } = await supabase
       .from('conversation_messages')
       .select(`
@@ -235,20 +235,20 @@ export async function POST(
           // デフォルトの音声ID（キャラクターに設定されていない場合）
           const voiceId = characterVoiceId || 'JBFqnCBsd6RMkjVDRZzb';
 
-          // Build input_config with node-specific overrides
-          const nodeOverrides: any = {};
+          // Build workflowInputs in the same format as normal workflow execution
+          const workflowInputs: Record<string, any> = {};
 
           // For each ElevenLabs node, set text, voiceId, and modelId
           elevenLabsNodes.forEach((node: any) => {
-            nodeOverrides[node.id] = {
-              text: message.message_text,
-              voiceId: voiceId,
-              modelId: node.data?.config?.modelId || 'eleven_turbo_v2_5', // デフォルトはTurbo v2.5
-            };
+            const nodeId = node.id;
+            workflowInputs[`elevenlabs_text_${nodeId}`] = message.message_text;
+            workflowInputs[`elevenlabs_voiceId_${nodeId}`] = voiceId;
+            workflowInputs[`elevenlabs_modelId_${nodeId}`] = node.data?.config?.modelId || 'eleven_turbo_v2_5';
           });
 
-          // For each Nanobana node, set prompt and character sheet
+          // For each Nanobana node, set prompt, model, and character sheets
           nanobanaNodes.forEach((node: any) => {
+            const nodeId = node.id;
             // 英語プロンプトを優先、なければ日本語、それもなければシーン説明
             const prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
 
@@ -256,32 +256,28 @@ export async function POST(
               console.warn(`[Board ${idx}] Warning: No prompt available for Nanobana node. scene_prompt_en: ${!!message.scene_prompt_en}, scene_prompt_ja: ${!!message.scene_prompt_ja}, metadata.scene: ${!!message.metadata?.scene}`);
             }
 
-            const nodeConfig: any = {
-              prompt: prompt,
-              aspectRatio: node.data?.config?.aspectRatio || '16:9', // デフォルトは16:9
-            };
+            workflowInputs[`nanobana_prompt_${nodeId}`] = prompt;
+            workflowInputs[`nanobana_model_${nodeId}`] = node.data?.config?.model || 'gemini-3-pro-image-preview';
 
             // Get scene characters from the map (characters registered in conversation_message_characters)
             const sceneCharacterIds = messageCharactersMap.get(message.id) || [];
 
             if (sceneCharacterIds.length > 0) {
               // Use scene characters if available (up to 4 characters as per Nanobana limit)
-              nodeConfig.selectedCharacterSheetIds = sceneCharacterIds.slice(0, 4);
+              workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = sceneCharacterIds.slice(0, 4).map(String);
               console.log(`[Board ${idx}] Using scene characters for Nanobana:`, sceneCharacterIds);
             } else if (message.character_id) {
               // Fallback to speaker character if no scene characters registered
-              nodeConfig.selectedCharacterSheetIds = [message.character_id];
+              workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = [String(message.character_id)];
               console.log(`[Board ${idx}] Falling back to speaker character for Nanobana:`, message.character_id);
             }
-
-            nodeOverrides[node.id] = nodeConfig;
           });
 
           console.log(`[Board ${idx}] Message: "${message.message_text.substring(0, 50)}..."`);
           console.log(`[Board ${idx}] Character: ${message.speaker_name}, VoiceID: ${voiceId}`);
           console.log(`[Board ${idx}] Scene Prompt (EN): "${(message.scene_prompt_en || '').substring(0, 50)}..."`);
           console.log(`[Board ${idx}] Scene Prompt (JA): "${(message.scene_prompt_ja || '').substring(0, 50)}..."`);
-          console.log(`[Board ${idx}] Node overrides:`, JSON.stringify(nodeOverrides, null, 2));
+          console.log(`[Board ${idx}] Workflow inputs:`, JSON.stringify(workflowInputs, null, 2));
 
           return {
             board_id: board.id,
@@ -289,14 +285,12 @@ export async function POST(
             step_order: workflowIdsArray.indexOf(workflowId), // 複数ワークフローの実行順序
             execution_status: 'pending',
             input_config: {
-              // General metadata
-              character_id: message.character_id,
-              character_name: message.speaker_name,
-              has_custom_voice: !!characterVoiceId,
-              scene_prompt_en: message.scene_prompt_en,
-              scene_prompt_ja: message.scene_prompt_ja,
-              // Node-specific overrides
-              nodeOverrides: nodeOverrides,
+              usePrompt: false,
+              workflowInputs: workflowInputs,
+              usePreviousText: false,
+              usePreviousAudio: false,
+              usePreviousImage: false,
+              usePreviousVideo: false
             }
           };
         });
