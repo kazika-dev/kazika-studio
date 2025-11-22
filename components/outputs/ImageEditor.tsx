@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import TextInputDialog, { TextConfig } from './TextInputDialog';
 
@@ -13,7 +13,19 @@ interface ImageEditorProps {
   onClose?: () => void;
 }
 
-type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text' | 'move';
+type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text' | 'move' | 'select';
+
+interface SelectionArea {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  imageData?: ImageData;
+  isDragging?: boolean;
+  originalX?: number;  // 選択時の元のX座標
+  originalY?: number;  // 選択時の元のY座標
+  savedImageBeforeMove?: HTMLImageElement;  // 移動前の画像状態（キャンセル用）
+}
 
 interface DrawingPath {
   mode: DrawingMode;
@@ -46,6 +58,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const [selectedTextIndex, setSelectedTextIndex] = useState<number | null>(null);
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selection, setSelection] = useState<SelectionArea | null>(null);
+  const [isCreatingSelection, setIsCreatingSelection] = useState(false);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -130,6 +145,40 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         }
       }
     });
+
+    // 選択範囲を描画
+    if (selection) {
+      const { startX, startY, endX, endY } = selection;
+      const x = Math.min(startX, endX);
+      const y = Math.min(startY, endY);
+      const width = Math.abs(endX - startX);
+      const height = Math.abs(endY - startY);
+
+      // 移動中の場合は画像データを表示
+      if (isDraggingSelection && selection.imageData) {
+        ctx.putImageData(selection.imageData, x, y);
+      }
+
+      // 選択範囲の枠線を描画（点線）
+      ctx.strokeStyle = '#1976d2';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(x, y, width, height);
+      ctx.setLineDash([]);
+
+      // コーナーのハンドルを描画
+      ctx.fillStyle = '#1976d2';
+      const handleSize = 8;
+      const corners = [
+        { x: x, y: y },
+        { x: x + width, y: y },
+        { x: x, y: y + height },
+        { x: x + width, y: y + height },
+      ];
+      corners.forEach(corner => {
+        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+      });
+    }
   };
 
   // パスを描画
@@ -188,11 +237,22 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     ctx.globalCompositeOperation = 'source-over';
   };
 
+  // 選択範囲内かチェック
+  const isInsideSelection = (x: number, y: number) => {
+    if (!selection) return false;
+    const sx = Math.min(selection.startX, selection.endX);
+    const sy = Math.min(selection.startY, selection.endY);
+    const ex = Math.max(selection.startX, selection.endX);
+    const ey = Math.max(selection.startY, selection.endY);
+    return x >= sx && x <= ex && y >= sy && y <= ey;
+  };
+
   // 描画開始
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas || !imageLoaded) return;
 
+    const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -203,6 +263,62 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     if (drawingMode === 'text') {
       setPendingTextPosition({ x, y });
       setTextDialogOpen(true);
+      return;
+    }
+
+    // 選択モードの場合
+    if (drawingMode === 'select') {
+      // 既存の選択範囲内をクリックした場合は移動モード
+      if (selection && isInsideSelection(x, y)) {
+        // 移動開始時に元の位置を白で塗りつぶす前に、現在の画像状態を保存
+        if (selection.originalX !== undefined && selection.originalY !== undefined && ctx && imageRef.current) {
+          // キャンセル用に現在の画像を保存
+          const savedImage = new Image();
+          savedImage.src = imageRef.current.src;
+
+          const width = Math.abs(selection.endX - selection.startX);
+          const height = Math.abs(selection.endY - selection.startY);
+
+          // 元の位置を白で塗りつぶす
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(selection.originalX, selection.originalY, width, height);
+
+          // 画像参照を更新
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = canvas.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          if (tempCtx) {
+            tempCtx.drawImage(canvas, 0, 0);
+            const img = new Image();
+            img.onload = () => {
+              imageRef.current = img;
+            };
+            img.src = tempCanvas.toDataURL();
+          }
+
+          // 選択範囲に保存した画像を記録
+          setSelection({
+            ...selection,
+            savedImageBeforeMove: savedImage,
+          });
+        }
+
+        setIsDraggingSelection(true);
+        setDragOffset({
+          x: x - Math.min(selection.startX, selection.endX),
+          y: y - Math.min(selection.startY, selection.endY),
+        });
+      } else {
+        // 新しい選択範囲を作成
+        setIsCreatingSelection(true);
+        setSelection({
+          startX: x,
+          startY: y,
+          endX: x,
+          endY: y,
+        });
+      }
       return;
     }
 
@@ -245,6 +361,35 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // 選択範囲をドラッグ中
+    if (isDraggingSelection && selection) {
+      const width = Math.abs(selection.endX - selection.startX);
+      const height = Math.abs(selection.endY - selection.startY);
+      const newX = x - dragOffset.x;
+      const newY = y - dragOffset.y;
+
+      setSelection({
+        ...selection,
+        startX: newX,
+        startY: newY,
+        endX: newX + width,
+        endY: newY + height,
+      });
+      redrawCanvas();
+      return;
+    }
+
+    // 選択範囲を作成中
+    if (isCreatingSelection && selection) {
+      setSelection({
+        ...selection,
+        endX: x,
+        endY: y,
+      });
+      redrawCanvas();
+      return;
+    }
+
     // テキストをドラッグ中
     if (isDraggingText && selectedTextIndex !== null) {
       const newHistory = [...history];
@@ -273,6 +418,36 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
 
   // 描画終了
   const stopDrawing = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+
+    if (isDraggingSelection) {
+      setIsDraggingSelection(false);
+      return;
+    }
+
+    if (isCreatingSelection && selection && ctx) {
+      // 選択範囲が作成された - 画像データを保存（切り取りはしない）
+      const x = Math.min(selection.startX, selection.endX);
+      const y = Math.min(selection.startY, selection.endY);
+      const width = Math.abs(selection.endX - selection.startX);
+      const height = Math.abs(selection.endY - selection.startY);
+
+      if (width > 0 && height > 0) {
+        // 選択範囲の画像データを保存
+        const imageData = ctx.getImageData(x, y, width, height);
+
+        setSelection({
+          ...selection,
+          imageData,
+          originalX: x,  // 元の位置を記録
+          originalY: y,
+        });
+      }
+      setIsCreatingSelection(false);
+      return;
+    }
+
     if (isDraggingText) {
       setIsDraggingText(false);
       return;
@@ -305,6 +480,120 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     setPendingTextPosition(null);
     setTimeout(() => redrawCanvas(), 0);
   };
+
+  // 選択範囲を削除
+  const handleDeleteSelection = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !selection) return;
+
+    // 選択範囲を白で塗りつぶす
+    const x = Math.min(selection.startX, selection.endX);
+    const y = Math.min(selection.startY, selection.endY);
+    const width = Math.abs(selection.endX - selection.startX);
+    const height = Math.abs(selection.endY - selection.startY);
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x, y, width, height);
+
+    // 画像参照を更新
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx) {
+      tempCtx.drawImage(canvas, 0, 0);
+      const img = new Image();
+      img.onload = () => {
+        imageRef.current = img;
+      };
+      img.src = tempCanvas.toDataURL();
+    }
+
+    // 選択範囲をクリア
+    setSelection(null);
+    redrawCanvas();
+  };
+
+  // 選択範囲を確定（画像に貼り付け）
+  const handleConfirmSelection = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !selection || !selection.imageData) return;
+
+    const x = Math.min(selection.startX, selection.endX);
+    const y = Math.min(selection.startY, selection.endY);
+
+    // 現在の位置に画像データを描画
+    ctx.putImageData(selection.imageData, x, y);
+
+    // 画像参照を更新
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx) {
+      tempCtx.drawImage(canvas, 0, 0);
+      const img = new Image();
+      img.onload = () => {
+        imageRef.current = img;
+      };
+      img.src = tempCanvas.toDataURL();
+    }
+
+    // 選択範囲をクリア
+    setSelection(null);
+    redrawCanvas();
+  };
+
+  // 選択をキャンセル
+  const handleCancelSelection = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !selection) return;
+
+    // 移動開始前の画像が保存されている場合は復元
+    if (selection.savedImageBeforeMove) {
+      selection.savedImageBeforeMove.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(selection.savedImageBeforeMove!, 0, 0);
+        imageRef.current = selection.savedImageBeforeMove!;
+        setSelection(null);
+        redrawCanvas();
+      };
+      // 画像が既にロード済みの場合
+      if (selection.savedImageBeforeMove.complete) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(selection.savedImageBeforeMove, 0, 0);
+        imageRef.current = selection.savedImageBeforeMove;
+      }
+    }
+
+    // 選択範囲をクリア
+    setSelection(null);
+    redrawCanvas();
+  };
+
+  // キーボードイベントを処理
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Deleteキーで選択範囲を削除
+      if (e.key === 'Delete' && selection && drawingMode === 'select') {
+        handleDeleteSelection();
+      }
+      // Enterキーで選択範囲を確定
+      if (e.key === 'Enter' && selection && drawingMode === 'select') {
+        handleConfirmSelection();
+      }
+      // Escapeキーで選択をキャンセル
+      if (e.key === 'Escape' && selection) {
+        handleCancelSelection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selection, drawingMode]);
 
   // 元に戻す
   const handleUndo = () => {
@@ -373,6 +662,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
             onChange={(_, value) => value && setDrawingMode(value)}
             size="small"
           >
+            <ToggleButton value="select" title="選択">
+              <CropFree />
+            </ToggleButton>
             <ToggleButton value="pen" title="ペン">
               <Edit />
             </ToggleButton>
@@ -395,6 +687,34 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
               <Delete />
             </ToggleButton>
           </ToggleButtonGroup>
+
+          {/* 選択範囲の操作ボタン */}
+          {selection && drawingMode === 'select' && (
+            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleConfirmSelection}
+              >
+                確定 (Enter)
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                color="error"
+                onClick={handleDeleteSelection}
+              >
+                削除 (Delete)
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleCancelSelection}
+              >
+                キャンセル (Esc)
+              </Button>
+            </Box>
+          )}
 
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Typography variant="body2">色:</Typography>
@@ -485,7 +805,12 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
           style={{
             maxWidth: '100%',
             maxHeight: '100%',
-            cursor: drawingMode === 'erase' ? 'crosshair' : 'crosshair',
+            cursor:
+              drawingMode === 'select' ? 'crosshair' :
+              drawingMode === 'move' ? 'move' :
+              drawingMode === 'text' ? 'text' :
+              drawingMode === 'erase' ? 'crosshair' :
+              'crosshair',
             boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
           }}
         />

@@ -26,6 +26,7 @@ import AddIcon from '@mui/icons-material/Add';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
+import MessageCharacterSelector from './MessageCharacterSelector';
 import {
   DndContext,
   closestCenter,
@@ -327,6 +328,24 @@ function SortableMessage({
                     <strong>English Prompt:</strong> {message.scene_prompt_en}
                   </Typography>
                 )}
+              </Box>
+            )}
+
+            {/* Scene Characters */}
+            {(message.scene_prompt_ja || message.scene_prompt_en) && characters && characters.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <MessageCharacterSelector
+                  messageId={message.id}
+                  availableCharacters={characters.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    image_url: c.image_url || null
+                  }))}
+                  onUpdate={() => {
+                    // Refresh conversation view if needed
+                    console.log('[ConversationViewer] Message characters updated');
+                  }}
+                />
               </Box>
             )}
           </>
@@ -704,26 +723,6 @@ export default function ConversationViewer({
           ))}
         </SortableContext>
       </DndContext>
-
-      {/* Add Message Button */}
-      {!readonly && onAddMessage && characters && characters.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenAddDialog()}
-            size="large"
-            sx={{
-              borderStyle: 'dashed',
-              borderWidth: 2,
-              py: 1.5,
-              px: 3
-            }}
-          >
-            新しいメッセージを追加
-          </Button>
-        </Box>
-      )}
 
       {/* Emotion Tag Selector Dialog */}
       <EmotionTagSelector

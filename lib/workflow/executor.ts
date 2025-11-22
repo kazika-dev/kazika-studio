@@ -553,8 +553,29 @@ async function executeNode(
         // 入力データから画像を抽出（参照画像として使用）
         const nanobanaImages: Array<{ mimeType: string; data: string }> = [];
 
+        // 0. 会話メッセージからキャラクターを自動取得（最優先）
+        const conversationMessageId = node.data.config?.conversationMessageId;
+        let messageCharacterSheetIds: number[] = [];
+        if (conversationMessageId) {
+          console.log(`Loading characters from conversation message ${conversationMessageId} for Nanobana`);
+          try {
+            const { getMessageCharacters } = await import('@/lib/db');
+            const messageCharacters = await getMessageCharacters(conversationMessageId);
+            messageCharacterSheetIds = messageCharacters.map(mc => mc.character_sheet_id);
+            console.log(`Found ${messageCharacterSheetIds.length} characters in message:`, messageCharacterSheetIds);
+          } catch (error) {
+            console.error(`Failed to load characters from message ${conversationMessageId}:`, error);
+          }
+        }
+
         // 1. キャラクターシート画像を取得（最大4枚）
-        const characterSheetIds = node.data.config?.selectedCharacterSheetIds || [];
+        // メッセージキャラクター + 手動選択キャラクターを結合（重複は除去）
+        const manualCharacterSheetIds = node.data.config?.selectedCharacterSheetIds || [];
+        const allCharacterSheetIds = [
+          ...messageCharacterSheetIds,
+          ...manualCharacterSheetIds.filter((id: number) => !messageCharacterSheetIds.includes(id))
+        ];
+        const characterSheetIds = allCharacterSheetIds;
         if (characterSheetIds.length > 0) {
           console.log(`Loading ${characterSheetIds.length} character sheet(s) for Nanobana:`, characterSheetIds);
 

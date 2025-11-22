@@ -1743,3 +1743,266 @@ export async function deleteImageMaterial(id: number) {
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }
+
+// =====================================================
+// Story Scene Characters（シーンキャラクター管理）
+// =====================================================
+
+/**
+ * シーンに登録されているキャラクター一覧を取得
+ */
+export async function getSceneCharacters(sceneId: number) {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT
+      ssc.*,
+      cs.id as character_id,
+      cs.name as character_name,
+      cs.image_url,
+      cs.description,
+      cs.personality,
+      cs.speaking_style,
+      cs.sample_dialogues
+    FROM kazikastudio.story_scene_characters ssc
+    JOIN kazikastudio.character_sheets cs ON cs.id = ssc.character_sheet_id
+    WHERE ssc.story_scene_id = $1
+    ORDER BY ssc.display_order ASC, ssc.created_at ASC`,
+    [sceneId]
+  );
+  return result.rows;
+}
+
+/**
+ * シーンにキャラクターを追加
+ */
+export async function addCharacterToScene(
+  sceneId: number,
+  characterId: number,
+  options?: {
+    displayOrder?: number;
+    isMainCharacter?: boolean;
+  }
+) {
+  const pool = getPool();
+
+  // 既存の最大 display_order を取得
+  const maxOrder = await pool.query(
+    `SELECT COALESCE(MAX(display_order), 0) as max_order
+     FROM kazikastudio.story_scene_characters
+     WHERE story_scene_id = $1`,
+    [sceneId]
+  );
+
+  const displayOrder = options?.displayOrder ?? (maxOrder.rows[0].max_order + 1);
+
+  const result = await pool.query(
+    `INSERT INTO kazikastudio.story_scene_characters
+      (story_scene_id, character_sheet_id, display_order, is_main_character)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (story_scene_id, character_sheet_id)
+    DO UPDATE SET
+      display_order = EXCLUDED.display_order,
+      is_main_character = EXCLUDED.is_main_character
+    RETURNING *`,
+    [sceneId, characterId, displayOrder, options?.isMainCharacter ?? false]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * シーンからキャラクターを削除
+ */
+export async function removeCharacterFromScene(sceneId: number, characterId: number) {
+  const pool = getPool();
+  const result = await pool.query(
+    `DELETE FROM kazikastudio.story_scene_characters
+     WHERE story_scene_id = $1 AND character_sheet_id = $2
+     RETURNING *`,
+    [sceneId, characterId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * シーンのキャラクター表示順序を更新
+ */
+export async function updateSceneCharacterOrder(
+  sceneId: number,
+  characterOrders: Array<{ characterId: number; displayOrder: number }>
+) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    for (const { characterId, displayOrder } of characterOrders) {
+      await client.query(
+        `UPDATE kazikastudio.story_scene_characters
+         SET display_order = $3
+         WHERE story_scene_id = $1 AND character_sheet_id = $2`,
+        [sceneId, characterId, displayOrder]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * シーンのメインキャラクターを更新
+ */
+export async function updateSceneMainCharacter(
+  sceneId: number,
+  characterId: number,
+  isMain: boolean
+) {
+  const pool = getPool();
+  const result = await pool.query(
+    `UPDATE kazikastudio.story_scene_characters
+     SET is_main_character = $3
+     WHERE story_scene_id = $1 AND character_sheet_id = $2
+     RETURNING *`,
+    [sceneId, characterId, isMain]
+  );
+
+  return result.rows[0];
+}
+
+// ==========================================
+// Conversation Message Characters Functions
+// ==========================================
+
+/**
+ * メッセージに紐づくキャラクター一覧を取得
+ */
+export async function getMessageCharacters(messageId: number) {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT
+      cmc.id,
+      cmc.conversation_message_id,
+      cmc.character_sheet_id,
+      cmc.display_order,
+      cmc.created_at,
+      cmc.metadata,
+      cs.id as character_id,
+      cs.name as character_name,
+      cs.image_url as character_image_url,
+      cs.description as character_description,
+      cs.personality as character_personality,
+      cs.speaking_style as character_speaking_style
+    FROM kazikastudio.conversation_message_characters cmc
+    JOIN kazikastudio.character_sheets cs ON cs.id = cmc.character_sheet_id
+    WHERE cmc.conversation_message_id = $1
+    ORDER BY cmc.display_order ASC`,
+    [messageId]
+  );
+
+  return result.rows.map(row => ({
+    id: row.id,
+    conversation_message_id: row.conversation_message_id,
+    character_sheet_id: row.character_sheet_id,
+    display_order: row.display_order,
+    created_at: row.created_at,
+    metadata: row.metadata,
+    character_sheets: {
+      id: row.character_id,
+      name: row.character_name,
+      image_url: row.character_image_url,
+      description: row.character_description,
+      personality: row.character_personality,
+      speaking_style: row.character_speaking_style
+    }
+  }));
+}
+
+/**
+ * メッセージにキャラクターを追加
+ */
+export async function addCharacterToMessage(
+  messageId: number,
+  characterId: number,
+  options?: { displayOrder?: number }
+) {
+  const pool = getPool();
+
+  // Get current max display_order if not provided
+  let displayOrder = options?.displayOrder;
+  if (displayOrder === undefined) {
+    const maxResult = await pool.query(
+      `SELECT COALESCE(MAX(display_order), 0) as max_order
+       FROM kazikastudio.conversation_message_characters
+       WHERE conversation_message_id = $1`,
+      [messageId]
+    );
+    displayOrder = (maxResult.rows[0]?.max_order || 0) + 1;
+  }
+
+  const result = await pool.query(
+    `INSERT INTO kazikastudio.conversation_message_characters
+      (conversation_message_id, character_sheet_id, display_order)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (conversation_message_id, character_sheet_id)
+     DO UPDATE SET display_order = EXCLUDED.display_order
+     RETURNING *`,
+    [messageId, characterId, displayOrder]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * メッセージからキャラクターを削除
+ */
+export async function removeCharacterFromMessage(
+  messageId: number,
+  characterId: number
+) {
+  const pool = getPool();
+  const result = await pool.query(
+    `DELETE FROM kazikastudio.conversation_message_characters
+     WHERE conversation_message_id = $1 AND character_sheet_id = $2
+     RETURNING *`,
+    [messageId, characterId]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * メッセージ内のキャラクター表示順序を更新
+ */
+export async function updateMessageCharacterOrder(
+  messageId: number,
+  characterOrders: Array<{ characterId: number; displayOrder: number }>
+) {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    for (const { characterId, displayOrder } of characterOrders) {
+      await client.query(
+        `UPDATE kazikastudio.conversation_message_characters
+         SET display_order = $3
+         WHERE conversation_message_id = $1 AND character_sheet_id = $2`,
+        [messageId, characterId, displayOrder]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
