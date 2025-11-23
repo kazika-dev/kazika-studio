@@ -15,8 +15,222 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[会話からスタジオ作成時のワークフロー設定自動化](/docs/conversation-to-studio-workflow.md)** - 会話データからワークフローノード設定を自動生成
 - **[Gemini 3 Pro Image Preview モデル対応](/docs/gemini-3-pro-image-preview.md)** - 最新のGemini 3 Pro Image Previewモデルの追加
 - **[画像素材マスタ機能](/docs/image-materials-master.md)** - ワークフローで使用する画像素材を管理するマスタ機能
+- **[Canvas画像編集機能 - 選択・移動・削除](/docs/canvas-selection-feature.md)** - Canvas上で画像の一部を選択して移動または削除する機能
+- **[メッセージごとのシーンキャラクターシート設定機能](/docs/message-scene-character-sheets.md)** - 会話メッセージのシーンプロンプトごとに登場キャラクターのキャラクターシートを設定
 
 ## 最近の主要な変更
+
+### 2025-11-22: 会話からスタジオ作成時のワークフロー設定形式を通常形式に統一
+
+**目的**: 会話からスタジオを作成した際のワークフローステップの `input_config` 構造を、通常のワークフロー実行と同じ形式に統一し、保守性と一貫性を向上
+
+**問題点**:
+- 以前は会話からスタジオを作成すると、独自の `nodeOverrides` 構造でノード設定を保存していた
+- 通常のワークフロー実行では `workflowInputs` 構造を使用しており、2つの異なる形式が混在していた
+- この不一致により、コードの保守が困難になり、バグの原因となっていた
+
+**変更内容**:
+- `/app/api/conversations/[id]/create-studio/route.ts` を修正し、`input_config` の構造を以下のように統一:
+
+**変更前（独自のnodeOverrides形式）**:
+```typescript
+input_config: {
+  character_id: message.character_id,
+  character_name: message.speaker_name,
+  has_custom_voice: !!characterVoiceId,
+  scene_prompt_en: message.scene_prompt_en,
+  scene_prompt_ja: message.scene_prompt_ja,
+  nodeOverrides: {
+    "node-123": {
+      text: "こんにちは",
+      voiceId: "ja-JP-Wavenet-A",
+      modelId: "eleven_turbo_v2_5"
+    },
+    "node-456": {
+      prompt: "school rooftop...",
+      aspectRatio: "16:9",
+      selectedCharacterSheetIds: [1]
+    }
+  }
+}
+```
+
+**変更後（通常のworkflowInputs形式）**:
+```typescript
+input_config: {
+  usePrompt: false,
+  workflowInputs: {
+    "elevenlabs_text_node-123": "こんにちは",
+    "elevenlabs_voiceId_node-123": "ja-JP-Wavenet-A",
+    "elevenlabs_modelId_node-123": "eleven_turbo_v2_5",
+    "nanobana_prompt_node-456": "school rooftop...",
+    "nanobana_model_node-456": "gemini-3-pro-image-preview",
+    "nanobana_selectedCharacterSheetIds_node-456": ["1"]
+  },
+  usePreviousText: false,
+  usePreviousAudio: false,
+  usePreviousImage: false,
+  usePreviousVideo: false
+}
+```
+
+**技術的詳細**:
+- **ElevenLabsノード設定**: `elevenlabs_{field}_{nodeId}` の形式でフィールドを生成
+  - `text`: メッセージテキスト
+  - `voiceId`: キャラクターの音声ID（デフォルト: 'JBFqnCBsd6RMkjVDRZzb'）
+  - `modelId`: ノードに設定されたモデル（デフォルト: 'eleven_turbo_v2_5'）
+
+- **Nanobanaノード設定**: `nanobana_{field}_{nodeId}` の形式でフィールドを生成
+  - `prompt`: シーンプロンプト（英語 → 日本語 → metadata.scene の優先順位）
+  - `model`: ノードに設定されたモデル（デフォルト: 'gemini-3-pro-image-preview'）
+  - `selectedCharacterSheetIds`: キャラクターID（文字列配列）
+
+**影響範囲**:
+- 会話からスタジオを作成した場合と、通常のワークフロー実行で、完全に同じ `input_config` 構造が使用される
+- `/app/api/studios/steps/[id]/execute/route.ts` の `applyInputsToNodes()` 関数が `workflowInputs` を処理する既存のロジックをそのまま利用できる
+- `nodeOverrides` の処理ロジックは後方互換性のために残しているが、新規作成分では使用されない
+- コードの一貫性が向上し、保守が容易になる
+
+**後方互換性**:
+- 既存の `nodeOverrides` 形式のステップは引き続き動作する（`applyInputsToNodes` で処理される）
+- 新規作成分から `workflowInputs` 形式に統一される
+
+---
+
+### 2025-11-22: メッセージごとのシーンキャラクターシート設定機能を実装
+
+**目的**: `conversation_messages` の各メッセージ（シーンプロンプト）ごとに、登場人物のキャラクターシートを複数設定できるようにする
+
+**変更内容**:
+- **データベースマイグレーション** (`supabase/migrations/20251122000002_create_conversation_message_characters.sql`):
+  - `conversation_message_characters` テーブルを作成（メッセージとキャラクターシートの多対多関係）
+  - UNIQUE制約で重複を防止、CASCADE削除でデータ整合性を維持
+  - RLSポリシーで所有権チェック（studio/storyベースの会話に対応）
+
+- **バックエンドヘルパー関数** (`/lib/db.ts`):
+  - `getMessageCharacters(messageId)` - メッセージに紐づくキャラクター一覧を取得
+  - `addCharacterToMessage(messageId, characterId, options)` - メッセージにキャラクターを追加
+  - `removeCharacterFromMessage(messageId, characterId)` - メッセージからキャラクターを削除
+  - `updateMessageCharacterOrder(messageId, characterOrders)` - キャラクター表示順序を更新
+
+- **型定義** (`/types/conversation.ts`):
+  - `ConversationMessageCharacter` - 基本型
+  - `ConversationMessageCharacterWithDetails` - キャラクター詳細を含む拡張型
+  - `GeneratedMessage` に `sceneCharacterIds` フィールドを追加（AIが返すシーン登場キャラクター）
+  - `ConversationMessageWithCharacter` に `scene_characters` フィールドを追加
+
+- **APIエンドポイント** (`/app/api/conversations/messages/[id]/characters/route.ts`):
+  - `GET` - メッセージに紐づくキャラクター一覧を取得
+  - `POST` - メッセージにキャラクターを追加
+  - `DELETE` - メッセージからキャラクターを削除（クエリパラメータ: `?characterId=X`）
+  - `PATCH` - キャラクター表示順序を更新
+  - 全エンドポイントで所有権チェック実装（conversation → studio/story → user）
+
+- **AI自動判定機能** (`/lib/conversation/prompt-builder.ts`):
+  - プロンプトに `sceneCharacterIds` フィールドの出力を追加
+  - 各メッセージのシーンに登場する全キャラクターIDを配列で返すように指示
+  - 話者（speakerId）だけでなく、背景に映り込むキャラクターも含めて最大4人まで判定
+  - 例: 「カジカは優しい笑顔でメスガキに語りかけ、二人に歩み寄る。夕焼けの中、３人で並んで歩き出す。」 → `sceneCharacterIds: [12, 13, 14]`
+
+- **会話生成API自動登録** (`/app/api/conversations/generate/route.ts:307-334`):
+  - メッセージ保存後、各メッセージの `sceneCharacterIds` を `conversation_message_characters` テーブルに自動登録
+  - 最大4枚までのキャラクターシートを登録（画像生成の制約）
+  - エラー発生時も他のキャラクターの登録を継続（耐障害性）
+
+- **UIコンポーネント** (`/components/studio/conversation/MessageCharacterSelector.tsx`):
+  - キャラクター一覧表示（アバター形式、最大4人）
+  - 追加ボタン（破線の円形ボタン）でキャラクター選択ダイアログを開く
+  - 削除ボタン（×アイコン）で個別削除
+  - 未登録時は「登場キャラクターなし」を表示
+
+- **ConversationViewer統合** (`/components/studio/conversation/ConversationViewer.tsx`):
+  - シーンプロンプト表示セクションの後に `MessageCharacterSelector` を配置
+  - `availableCharacters` として全キャラクターを渡す
+  - 手動でキャラクターの追加・削除が可能
+
+- **Nanobanaノード統合** (`/lib/workflow/executor.ts:556-578`):
+  - `conversationMessageId` が設定されている場合、メッセージに紐づくキャラクターを自動取得
+  - `getMessageCharacters()` で取得したキャラクターシートIDを最優先で画像生成に使用
+  - 手動選択キャラクター（`selectedCharacterSheetIds`）と結合（重複は除去）
+  - 最大4枚までのキャラクターシート画像を Nanobana API に送信
+
+**データフロー**:
+1. ユーザーがシーンで会話を生成リクエスト
+2. Gemini AIが各メッセージの `sceneCharacterIds` を判定して返す
+3. 会話生成APIがメッセージを保存後、`conversation_message_characters` に自動登録
+4. ConversationViewerで各メッセージの登場キャラクターをアバター表示
+5. ユーザーが手動で追加・削除可能
+6. Nanobanaノード実行時、メッセージに紐づくキャラクターシートを自動取得して画像生成
+
+**技術的詳細**:
+- **多対多関係**: 1つのメッセージに複数のキャラクター、1つのキャラクターが複数のメッセージに登場
+- **display_order**: キャラクターシートの優先順位（画像生成時に左から順に配置）
+- **ON CONFLICT DO UPDATE**: 重複登録時は `display_order` を更新
+- **CASCADE削除**: メッセージまたはキャラクターシート削除時、関連レコードも自動削除
+- **後方互換性**: `character_id`（話者）と `scene_characters`（登場人物）は別物として管理
+
+**影響範囲**:
+- 会話生成時にGemini AIが自動的にシーン登場キャラクターを判定・登録
+- UIで手動編集も可能（追加・削除）
+- Nanobanaノード実行時、メッセージに紐づくキャラクターシートが自動的に使用される
+- 最大4枚までのキャラクターシート画像が画像生成に使用される
+- 既存の会話データには影響なし（新規機能として追加）
+
+**詳細ドキュメント**: [/docs/message-scene-character-sheets.md](/docs/message-scene-character-sheets.md)
+
+---
+
+### 2025-11-22: Canvas画像エディタに選択・移動・削除機能を追加
+
+**目的**: canvas上で画像の一部をドラッグ&ドロップで選択し、移動または削除できる機能を実装
+
+**変更内容**:
+- **選択ツール** (`select`モード) を追加:
+  - `CropFree` アイコンで矩形選択範囲を作成
+  - **選択時は元の画像をそのままにして、画像データを内部に保存**（点線の枠線のみ表示）
+  - 選択範囲には青い点線の枠線と四隅にハンドルを表示
+
+- **選択範囲の移動**:
+  - 選択範囲内をクリック&ドラッグで任意の場所に移動
+  - **移動開始時（クリック時）に元の位置を白で塗りつぶす**
+  - **移動中は画像データを表示**してリアルタイムでプレビュー
+
+- **選択範囲の操作**:
+  - 「確定 (Enter)」ボタン - 新しい位置に画像を貼り付けて確定（元の位置は既に白）
+  - 「削除 (Delete)」ボタン - 選択範囲を白で塗りつぶして削除
+  - 「キャンセル (Esc)」ボタン - **移動前の画像状態に復元**（白く塗りつぶした部分も元に戻る）
+
+- **キーボードショートカット**:
+  - `Enter` - 選択範囲を確定
+  - `Delete` - 選択範囲を削除
+  - `Esc` - 選択をキャンセル
+
+**技術的詳細**:
+- `SelectionArea` インターフェースを追加（座標、画像データ、元の位置、保存画像を管理）
+  - `originalX`, `originalY` - 選択時の元の位置を記録
+  - `savedImageBeforeMove` - 移動開始前の画像状態（キャンセル用）
+- `ctx.getImageData()` で選択範囲の画像データを保存（元の画像は切り取らない）
+- `ctx.putImageData()` で移動先に画像データを貼り付け
+- 選択範囲の状態管理: `selection`, `isCreatingSelection`, `isDraggingSelection`
+
+**データフロー**:
+1. ユーザーが選択ツールで矩形をドラッグ
+2. マウスを離すと `ctx.getImageData()` で画像データを取得、`originalX/Y` に元の位置を記録
+3. **元の画像はそのまま**、選択範囲には点線の枠線のみ表示
+4. 選択範囲内をクリックすると、**現在の画像状態を `savedImageBeforeMove` に保存**
+5. **その瞬間に元の位置を白で塗りつぶす**（画像参照を更新）
+6. ドラッグ中は座標を更新して画像データをリアルタイム表示
+7. 確定ボタンで `ctx.putImageData()` で新しい位置に貼り付け、画像参照を更新
+8. キャンセルボタンで `savedImageBeforeMove` を復元し、元の状態に戻る
+
+**影響範囲**:
+- `/components/outputs/ImageEditor.tsx` に機能を追加
+- 既存のペン、マーカー、テキスト、移動機能には影響なし
+- 画像編集の自由度が大幅に向上（選択→確認→確定の3ステップで安全に編集）
+
+**ドキュメント**: [/docs/canvas-selection-feature.md](/docs/canvas-selection-feature.md)
+
+---
 
 ### 2025-11-22: 会話メッセージの手動追加機能を実装
 
