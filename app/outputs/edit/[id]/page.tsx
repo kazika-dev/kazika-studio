@@ -107,21 +107,37 @@ export default function EditOutputPage() {
   return (
     <ImageEditor
       imageUrl={getImageSrc(output.content_url)}
-      onSave={async (blob) => {
+      onSave={async (blob, saveMode = 'overwrite') => {
         try {
           const formData = new FormData();
           formData.append('file', blob, 'edited-image.png');
-          formData.append('originalOutputId', id);
 
-          const response = await fetch('/api/outputs/save-edited', {
-            method: 'POST',
-            body: formData,
-          });
+          if (saveMode === 'overwrite') {
+            // 上書き保存: 元のoutputを更新
+            formData.append('originalOutputId', id);
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Save error:', errorData);
-            throw new Error(errorData.error || 'Failed to save image');
+            const response = await fetch('/api/outputs/save-edited', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error('Save error:', errorData);
+              throw new Error(errorData.error || 'Failed to save image');
+            }
+          } else {
+            // 新規保存: 元のoutputの情報をコピーして新しいoutputとして保存
+            const response = await fetch('/api/outputs/save-edited', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error('Save error:', errorData);
+              throw new Error(errorData.error || 'Failed to save image');
+            }
           }
 
           router.push('/outputs');
@@ -133,6 +149,7 @@ export default function EditOutputPage() {
       onClose={() => {
         router.push('/outputs');
       }}
+      enableSaveModeSelection={true}
     />
   );
 }
