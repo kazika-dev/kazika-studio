@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const originalOutputId = formData.get('originalOutputId') as string | null;
+    const customPrompt = formData.get('prompt') as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     };
 
     // 元のアウトプット情報を取得
-    let prompt = 'Edited image';
+    let prompt = customPrompt || 'Edited image';
     let workflowId = null;
 
     if (originalOutputId) {
@@ -52,7 +53,10 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (originalOutput) {
-        prompt = `Edited: ${originalOutput.prompt || 'image'}`;
+        // customPromptがない場合のみ、元のプロンプトを使用
+        if (!customPrompt) {
+          prompt = `Edited: ${originalOutput.prompt || 'image'}`;
+        }
         workflowId = originalOutput.workflow_id;
         metadata.originalOutputId = originalOutputId;
         metadata.originalMetadata = originalOutput.metadata;

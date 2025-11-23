@@ -107,30 +107,51 @@ export default function EditOutputPage() {
   return (
     <ImageEditor
       imageUrl={getImageSrc(output.content_url)}
-      onSave={async (blob) => {
+      onSave={async (blob, saveMode?: 'overwrite' | 'new') => {
         try {
           const formData = new FormData();
-          formData.append('image', blob);
-          formData.append('originalOutputId', id);
+          formData.append('file', blob, 'edited-image.png');
 
-          const response = await fetch('/api/outputs/save-edited', {
-            method: 'POST',
-            body: formData,
-          });
+          let response;
+          let successMessage;
 
-          if (!response.ok) {
-            throw new Error('Failed to save image');
+          if (saveMode === 'new') {
+            // 新規保存: 元のoutputの情報をコピーして新しいoutputとして保存
+            formData.append('originalOutputId', id);
+            formData.append('prompt', output.prompt ? `${output.prompt} (編集済み)` : 'Edited image');
+
+            response = await fetch('/api/outputs/save-edited', {
+              method: 'POST',
+              body: formData,
+            });
+            successMessage = '新しい画像として保存しました';
+          } else {
+            // 上書き保存（デフォルト）: 既存のoutputを更新
+            response = await fetch(`/api/outputs/${id}/replace-image`, {
+              method: 'PUT',
+              body: formData,
+            });
+            successMessage = '画像を更新しました';
           }
 
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            console.error('Save error:', data);
+            throw new Error(data.error || 'Failed to save image');
+          }
+
+          alert(successMessage);
           router.push('/outputs');
         } catch (err) {
           console.error('Error saving image:', err);
-          alert('画像の保存に失敗しました');
+          alert('画像の保存に失敗しました: ' + (err instanceof Error ? err.message : ''));
         }
       }}
       onClose={() => {
         router.push('/outputs');
       }}
+      enableSaveModeSelection={true}
     />
   );
 }

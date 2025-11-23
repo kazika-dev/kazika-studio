@@ -67,6 +67,7 @@ export default function StudioDetailPage() {
   const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const studioId = idParam ? parseInt(idParam, 10) : NaN;
 
+  const [mounted, setMounted] = useState(false);
   const [studio, setStudio] = useState<Studio | null>(null);
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +85,14 @@ export default function StudioDetailPage() {
   const [newBoardPrompt, setNewBoardPrompt] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // Prevent hydration mismatch by only rendering after mount
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     if (!isNaN(studioId) && studioId > 0) {
       loadStudio();
       loadBoards();
@@ -93,7 +101,7 @@ export default function StudioDetailPage() {
       setError('無効なスタジオIDです');
       setLoading(false);
     }
-  }, [studioId, idParam]);
+  }, [studioId, idParam, mounted]);
 
   const loadStudio = async () => {
     try {
@@ -211,7 +219,8 @@ export default function StudioDetailPage() {
     setBoards(boards.filter(b => b.id !== boardId));
   };
 
-  if (loading) {
+  // Show loading state before mounted or while loading
+  if (!mounted || loading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4, textAlign: 'center' }}>
         <CircularProgress />
