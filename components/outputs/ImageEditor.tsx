@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton, TextField } from '@mui/material';
 import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
-import TextInputDialog, { TextConfig } from './TextInputDialog';
 
 interface ImageEditorProps {
   imageUrl: string;
@@ -54,8 +53,12 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageHistory, setImageHistory] = useState<HTMLImageElement[]>([]);  // 画像の履歴（Undo用）
   const router = useRouter();
-  const [textDialogOpen, setTextDialogOpen] = useState(false);
-  const [pendingTextPosition, setPendingTextPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [textInput, setTextInput] = useState('');
+  const [textPosition, setTextPosition] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+  const [textConfig, setTextConfig] = useState({ fontSize: 32, fontWeight: 'normal' as 'normal' | 'bold', fontStyle: 'normal' as 'normal' | 'italic' });
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const [displayScale, setDisplayScale] = useState(1); // Canvas表示スケール
   const [selectedTextIndex, setSelectedTextIndex] = useState<number | null>(null);
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -282,10 +285,30 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // テキストモードの場合はダイアログを表示
+    // テキストモードの場合はcanvas上に直接入力フィールドを表示
     if (drawingMode === 'text') {
-      setPendingTextPosition({ x, y });
-      setTextDialogOpen(true);
+      // 既存のテキスト入力があれば先に確定
+      if (isEditingText && textInput.trim()) {
+        handleConfirmText();
+      }
+
+      // 表示用のスケールを計算（Canvas表示サイズ / Canvas実サイズ）
+      const scale = rect.width / canvas.width;
+      setDisplayScale(scale);
+
+      // 新しい位置を設定
+      setTextPosition({
+        x: e.clientX,  // ページ全体での絶対X座標
+        y: e.clientY,  // ページ全体での絶対Y座標
+        canvasX: x,    // Canvas内での相対X座標（スケール済み）
+        canvasY: y,    // Canvas内での相対Y座標（スケール済み）
+      });
+      setIsEditingText(true);
+      setTextInput('');
+      // 次のフレームでフォーカス
+      setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 0);
       return;
     }
 
@@ -486,26 +509,55 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     setCurrentPath(null);
   };
 
-  // テキスト追加
-  const handleAddText = (config: TextConfig) => {
-    if (!pendingTextPosition) return;
+  // テキスト追加を確定
+  const handleConfirmText = () => {
+    if (!textInput.trim() || !textPosition) {
+      setIsEditingText(false);
+      return;
+    }
 
+    // テキストのベースライン位置を調整（フォントサイズ分だけ下げる）
     const textPath: DrawingPath = {
       mode: 'text',
-      color: config.color,
+      color: color,
       lineWidth: 0,
       opacity: 1,
-      points: [pendingTextPosition],
-      text: config.text,
-      fontSize: config.fontSize,
-      fontWeight: config.fontWeight,
-      fontStyle: config.fontStyle,
+      points: [{
+        x: textPosition.canvasX,  // 既にスケール済みのCanvas座標を使用
+        y: textPosition.canvasY + textConfig.fontSize  // フォントサイズ分だけ下げる（ベースライン調整）
+      }],
+      text: textInput,
+      fontSize: textConfig.fontSize,
+      fontWeight: textConfig.fontWeight,
+      fontStyle: textConfig.fontStyle,
     };
 
     setHistory([...history, textPath]);
-    setPendingTextPosition(null);
+    setIsEditingText(false);
+    setTextInput('');
+    setTextPosition(null);
     setTimeout(() => redrawCanvas(), 0);
   };
+
+  // テキスト入力のキーボードイベント
+  useEffect(() => {
+    if (isEditingText) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleConfirmText();
+        } else if (e.key === 'Escape') {
+          setIsEditingText(false);
+          setTextInput('');
+          setTextPosition(null);
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditingText, textInput, textPosition]);
 
   // 選択範囲を削除
   const handleDeleteSelection = () => {
@@ -877,6 +929,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
           alignItems: 'center',
           overflow: 'auto',
           p: 2,
+          position: 'relative',
         }}
       >
         <canvas
@@ -897,17 +950,114 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
             boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
           }}
         />
-      </Box>
 
-      {/* テキスト入力ダイアログ */}
-      <TextInputDialog
-        open={textDialogOpen}
-        onClose={() => {
-          setTextDialogOpen(false);
-          setPendingTextPosition(null);
-        }}
-        onConfirm={handleAddText}
-      />
+        {/* Canvas上でのテキスト入力（画像に重ねて直接表示） */}
+        {isEditingText && textPosition && canvasRef.current && (
+          <>
+            {/* 点線の入力エリア */}
+            <Box
+              sx={{
+                position: 'fixed',
+                left: textPosition.x,
+                top: textPosition.y,
+                border: '2px dashed #1976d2',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                minWidth: 200,
+                minHeight: textConfig.fontSize * displayScale * 1.5,
+                pointerEvents: 'none',
+                zIndex: 999,
+              }}
+            />
+            {/* 透明なテキスト入力フィールド */}
+            <TextField
+              inputRef={textInputRef}
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="テキストを入力..."
+              multiline
+              autoFocus
+              variant="standard"
+              sx={{
+                position: 'fixed',
+                left: textPosition.x,
+                top: textPosition.y,
+                zIndex: 1000,
+                '& .MuiInput-root': {
+                  '&:before, &:after': {
+                    display: 'none',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  fontSize: `${textConfig.fontSize * displayScale}px`,  // スケールを適用
+                  fontWeight: textConfig.fontWeight,
+                  fontStyle: textConfig.fontStyle,
+                  color: color,
+                  padding: 0,
+                  backgroundColor: 'transparent',
+                  minWidth: 200,
+                  lineHeight: 1.2,
+                  '&::placeholder': {
+                    color: 'rgba(0, 0, 0, 0.3)',
+                    opacity: 1,
+                  },
+                },
+              }}
+            />
+            {/* フローティングツールバー（入力エリアの上に表示） */}
+            <Paper
+              sx={{
+                position: 'fixed',
+                left: textPosition.x,
+                top: textPosition.y - 60,
+                zIndex: 1001,
+                p: 1,
+                display: 'flex',
+                gap: 1,
+                alignItems: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                backdropFilter: 'blur(10px)',
+              }}
+            >
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="caption">サイズ:</Typography>
+                <Slider
+                  value={textConfig.fontSize}
+                  onChange={(_, value) => setTextConfig({ ...textConfig, fontSize: value as number })}
+                  min={12}
+                  max={120}
+                  size="small"
+                  sx={{ width: 100 }}
+                />
+                <Typography variant="caption" sx={{ minWidth: 30 }}>{textConfig.fontSize}</Typography>
+              </Box>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={textConfig.fontWeight}
+                onChange={(_, value) => value && setTextConfig({ ...textConfig, fontWeight: value })}
+              >
+                <ToggleButton value="normal">標準</ToggleButton>
+                <ToggleButton value="bold">太字</ToggleButton>
+              </ToggleButtonGroup>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={textConfig.fontStyle}
+                onChange={(_, value) => value && setTextConfig({ ...textConfig, fontStyle: value })}
+              >
+                <ToggleButton value="normal">標準</ToggleButton>
+                <ToggleButton value="italic">斜体</ToggleButton>
+              </ToggleButtonGroup>
+              <Button size="small" onClick={() => { setIsEditingText(false); setTextInput(''); }}>
+                キャンセル
+              </Button>
+              <Button size="small" variant="contained" onClick={handleConfirmText}>
+                確定
+              </Button>
+            </Paper>
+          </>
+        )}
+      </Box>
     </Box>
   );
 }
