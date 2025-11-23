@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@/lib/supabase/server';
 
-// Gemini APIを初期化
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
-
 /**
  * POST /api/conversations/messages/[id]/translate-prompt
  * 日本語のシーンプロンプトを英語に翻訳する
@@ -87,7 +84,16 @@ export async function POST(
     }
 
     // Gemini APIを使って翻訳
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'GEMINI_API_KEY is not configured' },
+        { status: 500 }
+      );
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `
 あなたはプロの翻訳者です。以下の日本語のシーンプロンプトを、画像生成AIに最適な英語プロンプトに翻訳してください。
