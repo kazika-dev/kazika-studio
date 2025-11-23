@@ -288,8 +288,36 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     // テキストモードの場合はcanvas上に直接入力フィールドを表示
     if (drawingMode === 'text') {
       // 既存のテキスト入力があれば先に確定
-      if (isEditingText && textInput.trim()) {
-        handleConfirmText();
+      if (isEditingText && textInput.trim() && textPosition) {
+        // 古いテキストを確定
+        const oldTextPath: DrawingPath = {
+          mode: 'text',
+          color: color,
+          lineWidth: 0,
+          opacity: 1,
+          points: [{
+            x: textPosition.canvasX,
+            y: textPosition.canvasY + textConfig.fontSize
+          }],
+          text: textInput,
+          fontSize: textConfig.fontSize,
+          fontWeight: textConfig.fontWeight,
+          fontStyle: textConfig.fontStyle,
+        };
+
+        // historyを更新
+        const newHistory = [...history, oldTextPath];
+        setHistory(newHistory);
+
+        // 即座にCanvasに描画（状態更新を待たずに）
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          redrawCanvas();  // まず既存の履歴を描画
+          drawPath(ctx, oldTextPath);  // 新しいテキストを追加で描画
+        }
+
+        // 状態をクリア
+        setTextInput('');
       }
 
       // 表示用のスケールを計算（Canvas表示サイズ / Canvas実サイズ）
@@ -304,7 +332,6 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         canvasY: y,    // Canvas内での相対Y座標（スケール済み）
       });
       setIsEditingText(true);
-      setTextInput('');
       // 次のフレームでフォーカス
       setTimeout(() => {
         textInputRef.current?.focus();
@@ -532,11 +559,21 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       fontStyle: textConfig.fontStyle,
     };
 
+    // historyを更新
     setHistory([...history, textPath]);
+
+    // 即座にCanvasに描画（状態更新を待たずに）
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) {
+      redrawCanvas();  // まず既存の履歴を描画
+      drawPath(ctx, textPath);  // 新しいテキストを追加で描画
+    }
+
+    // 状態をクリア
     setIsEditingText(false);
     setTextInput('');
     setTextPosition(null);
-    setTimeout(() => redrawCanvas(), 0);
   };
 
   // テキスト入力のキーボードイベント
