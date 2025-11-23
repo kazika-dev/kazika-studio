@@ -16,9 +16,45 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[Gemini 3 Pro Image Preview モデル対応](/docs/gemini-3-pro-image-preview.md)** - 最新のGemini 3 Pro Image Previewモデルの追加
 - **[画像素材マスタ機能](/docs/image-materials-master.md)** - ワークフローで使用する画像素材を管理するマスタ機能
 - **[Canvas画像編集機能 - 選択・移動・削除](/docs/canvas-selection-feature.md)** - Canvas上で画像の一部を選択して移動または削除する機能
+- **[Canvas画像エディタのテキスト機能修正](/docs/image-editor-text-feature-fix.md)** - テキスト挿入時の位置ずれ、即座描画、Undo機能の不具合を修正
 - **[メッセージごとのシーンキャラクターシート設定機能](/docs/message-scene-character-sheets.md)** - 会話メッセージのシーンプロンプトごとに登場キャラクターのキャラクターシートを設定
 
 ## 最近の主要な変更
+
+### 2025-11-23: Canvas画像エディタのテキスト機能修正
+
+**目的**: テキスト挿入時の位置ずれ、即座描画されない問題、Undo機能の不具合を修正し、ユーザビリティを向上
+
+**修正内容**:
+- **テキスト位置のずれ修正**: Canvas の `fillText()` がベースラインを基準とするため、y座標にフォントサイズを加算してクリック位置とテキストの上端を一致させた
+- **前回位置への挿入問題を解決**: React の非同期状態更新を考慮し、`handleConfirmText()` を呼ばずに直接処理することで、現在の `textPosition` を確実に使用
+- **即座描画の実装**: 新しい履歴配列（`newHistory`）を作成し、それを使って即座にCanvasに描画することで、状態更新を待たずに反映
+- **Undo機能の修正**: Canvas の描画内容と `history` 状態が一致するように、`newHistory` を使った完全な再描画に変更
+
+**技術的詳細**:
+```typescript
+// 修正前: 状態更新を待つため、Canvas と history が不一致
+setHistory([...history, textPath]);
+setTimeout(() => redrawCanvas(), 0);
+
+// 修正後: 新しい履歴を使って即座に描画
+const newHistory = [...history, textPath];
+setHistory(newHistory);
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+ctx.drawImage(imageRef.current, 0, 0);
+newHistory.forEach(path => drawPath(ctx, path));
+```
+
+**影響範囲**:
+- テキストモードでクリックした位置に正確にテキストが配置される
+- テキスト確定後、即座にCanvas上に表示される（他の操作を待つ必要がない）
+- Undoボタンで正確に1つずつ履歴が戻る（Canvas と履歴の不一致がない）
+
+**修正ファイル**: `/components/outputs/ImageEditor.tsx` (291-327行目、533-545行目、731-740行目)
+
+**詳細ドキュメント**: [/docs/image-editor-text-feature-fix.md](/docs/image-editor-text-feature-fix.md)
+
+---
 
 ### 2025-11-22: 会話からスタジオ作成時のワークフロー設定形式を通常形式に統一
 

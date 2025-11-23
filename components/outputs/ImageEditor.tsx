@@ -309,11 +309,17 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         const newHistory = [...history, oldTextPath];
         setHistory(newHistory);
 
-        // 即座にCanvasに描画（状態更新を待たずに）
+        // 即座にCanvasに描画（新しい履歴を使って完全に再描画）
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          redrawCanvas();  // まず既存の履歴を描画
-          drawPath(ctx, oldTextPath);  // 新しいテキストを追加で描画
+        if (ctx && imageRef.current) {
+          // 画像をクリアして再描画
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(imageRef.current, 0, 0);
+
+          // 新しい履歴を含めてすべてのパスを再描画
+          newHistory.forEach(path => {
+            drawPath(ctx, path);
+          });
         }
 
         // 状態をクリア
@@ -560,14 +566,21 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     };
 
     // historyを更新
-    setHistory([...history, textPath]);
+    const newHistory = [...history, textPath];
+    setHistory(newHistory);
 
-    // 即座にCanvasに描画（状態更新を待たずに）
+    // 即座にCanvasに描画（新しい履歴を使って完全に再描画）
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (canvas && ctx) {
-      redrawCanvas();  // まず既存の履歴を描画
-      drawPath(ctx, textPath);  // 新しいテキストを追加で描画
+    if (canvas && ctx && imageRef.current) {
+      // 画像をクリアして再描画
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(imageRef.current, 0, 0);
+
+      // 新しい履歴を含めてすべてのパスを再描画
+      newHistory.forEach(path => {
+        drawPath(ctx, path);
+      });
     }
 
     // 状態をクリア
@@ -772,7 +785,17 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     if (history.length === 0) return;
     const newHistory = history.slice(0, -1);
     setHistory(newHistory);
-    setTimeout(() => redrawCanvas(), 0);
+
+    // 即座にCanvasに再描画（新しい履歴を使って）
+    if (imageRef.current) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(imageRef.current, 0, 0);
+
+      // 新しい履歴を使ってすべてのパスを再描画
+      newHistory.forEach(path => {
+        drawPath(ctx, path);
+      });
+    }
   };
 
   // 保存
