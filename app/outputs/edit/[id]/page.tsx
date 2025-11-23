@@ -107,39 +107,41 @@ export default function EditOutputPage() {
   return (
     <ImageEditor
       imageUrl={getImageSrc(output.content_url)}
-      onSave={async (blob, saveMode = 'overwrite') => {
+      onSave={async (blob, saveMode?: 'overwrite' | 'new') => {
         try {
           const formData = new FormData();
           formData.append('file', blob, 'edited-image.png');
 
-          if (saveMode === 'overwrite') {
-            // 上書き保存: 元のoutputを更新
-            formData.append('originalOutputId', id);
+          let response;
+          let successMessage;
 
-            const response = await fetch('/api/outputs/save-edited', {
-              method: 'POST',
-              body: formData,
-            });
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              console.error('Save error:', errorData);
-              throw new Error(errorData.error || 'Failed to save image');
-            }
-          } else {
+          if (saveMode === 'new') {
             // 新規保存: 元のoutputの情報をコピーして新しいoutputとして保存
-            const response = await fetch('/api/outputs/save-edited', {
+            formData.append('originalOutputId', id);
+            formData.append('prompt', output.prompt ? `${output.prompt} (編集済み)` : 'Edited image');
+
+            response = await fetch('/api/outputs/save-edited', {
               method: 'POST',
               body: formData,
             });
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              console.error('Save error:', errorData);
-              throw new Error(errorData.error || 'Failed to save image');
-            }
+            successMessage = '新しい画像として保存しました';
+          } else {
+            // 上書き保存（デフォルト）: 既存のoutputを更新
+            response = await fetch(`/api/outputs/${id}/replace-image`, {
+              method: 'PUT',
+              body: formData,
+            });
+            successMessage = '画像を更新しました';
           }
 
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            console.error('Save error:', data);
+            throw new Error(data.error || 'Failed to save image');
+          }
+
+          alert(successMessage);
           router.push('/outputs');
         } catch (err) {
           console.error('Error saving image:', err);
