@@ -55,8 +55,11 @@ export default function ConversationGeneratorDialogWithScene({
   useEffect(() => {
     if (open) {
       loadCharacters();
+      if (sceneId) {
+        loadSceneCharacters();
+      }
     }
-  }, [open]);
+  }, [open, sceneId]);
 
   const loadCharacters = async () => {
     setLoadingCharacters(true);
@@ -75,6 +78,25 @@ export default function ConversationGeneratorDialogWithScene({
       setError('キャラクターの読み込みに失敗しました');
     } finally {
       setLoadingCharacters(false);
+    }
+  };
+
+  const loadSceneCharacters = async () => {
+    if (!sceneId) return;
+
+    try {
+      const response = await fetch(`/api/scenes/${sceneId}/characters`);
+      const result = await response.json();
+
+      if (result.success && result.data?.characters) {
+        // シーンに登録されたキャラクターIDを自動選択
+        const sceneCharacterIds = result.data.characters.map((c: any) => c.character_sheet_id);
+        setSelectedCharacters(sceneCharacterIds);
+        console.log('[ConversationGenerator] Auto-selected scene characters:', sceneCharacterIds);
+      }
+    } catch (error) {
+      console.error('Failed to load scene characters:', error);
+      // エラーは無視して続行（シーンキャラクターは必須ではない）
     }
   };
 

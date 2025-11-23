@@ -10,7 +10,7 @@ import {
   parseScenePromptResponse
 
 } from '@/lib/conversation/prompt-builder';
-import { getAllCameraAngles, getAllShotDistances } from '@/lib/db'; // Still needed for random scene generation
+import { getAllCameraAngles, getAllShotDistances, addCharacterToMessage } from '@/lib/db'; // Still needed for random scene generation
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**
@@ -302,6 +302,35 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Failed to save messages' },
         { status: 500 }
       );
+    }
+
+    // Register scene characters to each message
+    console.log('[Generate Conversation] Registering scene characters to messages...');
+    for (let idx = 0; idx < messages.length; idx++) {
+      const msg = parsed.messages[idx];
+      const insertedMsg = messages[idx];
+
+      if (msg.sceneCharacterIds && msg.sceneCharacterIds.length > 0) {
+        console.log(
+          `[Generate Conversation] Registering ${msg.sceneCharacterIds.length} characters to message ${insertedMsg.id}`
+        );
+
+        for (let i = 0; i < Math.min(msg.sceneCharacterIds.length, 4); i++) {
+          const characterId = msg.sceneCharacterIds[i];
+          try {
+            await addCharacterToMessage(insertedMsg.id, characterId, { displayOrder: i + 1 });
+            console.log(
+              `[Generate Conversation] Registered character ${characterId} to message ${insertedMsg.id} (order: ${i + 1})`
+            );
+          } catch (error) {
+            console.error(
+              `[Generate Conversation] Failed to register character ${characterId} to message ${insertedMsg.id}:`,
+              error
+            );
+            // Continue with other characters
+          }
+        }
+      }
     }
 
     // Generate conversation scenes

@@ -67,6 +67,7 @@ ${previousMessagesSection}
 
 \`\`\`json
 {
+  "characterIds": [このシーンに登場する全てのキャラクターIDの配列（数値、上記のキャラクター情報のIDを使用）],
   "messages": [
     {
       "speakerId": キャラクターID（数値、上記のキャラクター情報のIDを使用）,
@@ -75,7 +76,8 @@ ${previousMessagesSection}
       "emotionTag": "感情を表すタグ（下記の利用可能な感情タグから1つ選択）",
       "scene": "このメッセージが発せられた具体的な場面の描写（キャラクターの表情、動作、周囲の状況など）",
       "scenePromptJa": "シーンを画像生成するための日本語プロンプト（100-150文字程度、視覚的な要素を詳細に描写）",
-      "scenePromptEn": "シーンを画像生成するための英語プロンプト（Stable Diffusion/DALL-E形式、high quality, detailed, anime styleなどの品質タグを含む）"
+      "scenePromptEn": "シーンを画像生成するための英語プロンプト（Stable Diffusion/DALL-E形式、high quality, detailed, anime styleなどの品質タグを含む）",
+      "sceneCharacterIds": [このメッセージのシーンに登場するキャラクターIDの配列（数値）]
     }
   ]
 }
@@ -83,6 +85,9 @@ ${previousMessagesSection}
 
 ## 重要な注意事項
 - 各キャラクターの性格と話し方の特徴を必ず反映してください
+- **【必須】characterIdsフィールドには、このシーンに登場する全てのキャラクターIDを配列で記載してください（例: [${input.characters.map(c => c.id).join(', ')}]）**
+  - 会話に登場したキャラクターを全て含めてください
+  - 登場しなかったキャラクターは含めないでください
 - **【必須】speakerIdフィールドには、上記のキャラクター情報に記載されているID（数値）を正確に使用してください（例: ${input.characters.map(c => c.id).join(', ')}）**
 - **【オプション】speakerフィールドには、キャラクター名を記載してください（例: "${input.characters.map(c => c.name).join('", "')}"）**
   - speakerIdが正しく設定されていれば、speakerフィールドは省略可能です
@@ -103,6 +108,11 @@ ${emotionTagsSection}
   - Stable Diffusion/DALL-E形式で、high quality, detailed, anime styleなどの品質タグを含める
   - シーンの視覚的な要素を英語で具体的に記述
   - 例: "rooftop scene at sunset, male student leaning on fence, looking into distance, orange sky background, gentle breeze, anime style, high quality, detailed, cinematic lighting"
+- **【必須】sceneCharacterIds（シーンキャラクターID）には、このメッセージのシーンに登場する全てのキャラクターIDを配列で記載してください**
+  - 話者（speakerId）だけでなく、シーンに映り込む全てのキャラクターを含めてください
+  - 例: 話者が「ミオ」で、背景に「カジカ」と「メスガキ」も映っている場合 → sceneCharacterIds: [12, 13, 14]
+  - シーンプロンプト（scenePromptJa/En）に記載されているキャラクターを全て含めてください
+  - 最大4人まで登録可能（画像生成の制約）
 - メッセージ数は正確に${input.messageCount}個生成してください
 
 自然で魅力的な会話を生成してください。

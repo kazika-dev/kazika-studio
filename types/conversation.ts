@@ -139,6 +139,7 @@ export interface ConversationMessageWithCharacter extends ConversationMessage {
     name: string;
     image_url: string | null;
   } | null;
+  scene_characters?: ConversationMessageCharacterWithDetails[];  // シーンに登場するキャラクター
 }
 
 export interface RegenerateMessageRequest {
@@ -234,10 +235,33 @@ export interface GeneratedMessage {
   scene?: string;
   scenePromptJa?: string;
   scenePromptEn?: string;
+  sceneCharacterIds?: number[];  // このメッセージのシーンに登場するキャラクターID（AIが返す）
 }
 
 export interface ConversationGenerationAIResponse {
+  characterIds?: number[];  // シーンに登場するキャラクターID（AIが返す）
   messages: GeneratedMessage[];
+}
+
+// Conversation Message Characters types
+export interface ConversationMessageCharacter {
+  id: number;
+  conversation_message_id: number;
+  character_sheet_id: number;
+  display_order: number;
+  created_at: string;
+  metadata: Record<string, any>;
+}
+
+export interface ConversationMessageCharacterWithDetails extends ConversationMessageCharacter {
+  character_sheets: {
+    id: number;
+    name: string;
+    image_url: string | null;
+    description: string | null;
+    personality: string | null;
+    speaking_style: string | null;
+  };
 }
 
 // Story API types
@@ -296,4 +320,67 @@ export interface StoryTreeNode {
     scene: StoryScene;
     conversations: Conversation[];
   }>;
+}
+
+// Story Scene Characters types
+export interface StorySceneCharacter {
+  id: number;
+  story_scene_id: number;
+  character_sheet_id: number;
+  display_order: number;
+  is_main_character: boolean;
+  created_at: string;
+  metadata: Record<string, any>;
+}
+
+export interface StorySceneCharacterWithDetails extends StorySceneCharacter {
+  character_id: number;
+  character_name: string;
+  image_url: string | null;
+  description: string | null;
+  personality: string | null;
+  speaking_style: string | null;
+  sample_dialogues: Array<{
+    situation: string;
+    line: string;
+  }>;
+}
+
+export interface StorySceneWithCharacters extends StoryScene {
+  characters?: StorySceneCharacterWithDetails[];
+}
+
+// API Request/Response for Scene Characters
+export interface AddCharacterToSceneRequest {
+  characterId: number;
+  displayOrder?: number;
+  isMainCharacter?: boolean;
+}
+
+export interface AddCharacterToSceneResponse {
+  success: boolean;
+  data?: {
+    sceneCharacter: StorySceneCharacter;
+  };
+  error?: string;
+}
+
+export interface ListSceneCharactersResponse {
+  success: boolean;
+  data?: {
+    characters: StorySceneCharacterWithDetails[];
+  };
+  error?: string;
+}
+
+export interface UpdateSceneCharacterOrderRequest {
+  characterOrders: Array<{
+    characterId: number;
+    displayOrder: number;
+  }>;
+}
+
+export interface UpdateSceneMainCharacterRequest {
+  characterId: number;
+  isMainCharacter: boolean;
 }
