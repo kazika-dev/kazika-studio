@@ -19,8 +19,51 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[Canvas画像エディタのテキスト機能修正](/docs/image-editor-text-feature-fix.md)** - テキスト挿入時の位置ずれ、即座描画、Undo機能の不具合を修正
 - **[ImageEditor共通コンポーネント化](/docs/image-editor-common-component.md)** - ImageEditorを `/components/outputs` から `/components/common` に移動し、プロジェクト全体で再利用可能に
 - **[メッセージごとのシーンキャラクターシート設定機能](/docs/message-scene-character-sheets.md)** - 会話メッセージのシーンプロンプトごとに登場キャラクターのキャラクターシートを設定
+- **[Workflow Outputs スキーマ修正](/docs/workflow-outputs-schema-fix.md)** - 本番環境と開発環境のスキーマ差異を解消し、後方互換性を維持
 
 ## 最近の主要な変更
+
+### 2025-11-23: workflow_outputs テーブルのスキーマ差異を解消
+
+**目的**: 本番環境と開発環境で異なる `workflow_outputs` テーブルのスキーマに対応し、ステップ実行時のエラーを解消
+
+**問題**:
+- 本番環境: `content_url` カラムを使用、`step_id` と `node_id` カラムが存在しない
+- 開発環境想定: `output_url`, `step_id`, `node_id` カラムを使用
+- エラー: `column "step_id" of relation "workflow_outputs" does not exist`
+
+**解決策**:
+- `/lib/db.ts` の `createWorkflowOutput()` 関数を本番環境スキーマに合わせて修正
+- `step_id` と `node_id` を `metadata` JSONB フィールドに格納（後方互換性を維持）
+- `output_url` を `content_url` に変更
+- `getWorkflowOutputsByStepId()` を `metadata->>'step_id'` で検索するように更新
+
+**技術的詳細**:
+```typescript
+// 修正後: metadata に step_id と node_id を格納
+const enrichedMetadata = {
+  ...(data.metadata || {}),
+  step_id: data.step_id,
+  node_id: data.node_id,
+};
+
+await query(
+  `INSERT INTO kazikastudio.workflow_outputs
+   (user_id, workflow_id, output_type, content_url, metadata)
+   VALUES ($1, $2, $3, $4, $5)`,
+  [user_id, workflow_id, output_type, output_url, enrichedMetadata]
+);
+```
+
+**影響範囲**:
+- ✅ ステップ実行時のエラーが解消される
+- ✅ 既存の `/outputs` ページは影響を受けない
+- ✅ 将来的なマイグレーション適用時も後方互換性を維持
+- ✅ `metadata` から `step_id` と `node_id` を検索可能
+
+**詳細**: [/docs/workflow-outputs-schema-fix.md](/docs/workflow-outputs-schema-fix.md)
+
+---
 
 ### 2025-11-23: ImageEditor共通コンポーネント化とm_image_materials統合（保存モード選択機能付き）
 

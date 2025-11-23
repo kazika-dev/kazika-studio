@@ -569,6 +569,9 @@ export async function resetBoardSteps(boardId: number) {
 
 /**
  * ワークフロー出力を作成
+ *
+ * NOTE: This function uses the production schema with content_url instead of output_url.
+ * step_id and node_id are stored in metadata for backward compatibility.
  */
 export async function createWorkflowOutput(data: {
   user_id: string;
@@ -580,20 +583,24 @@ export async function createWorkflowOutput(data: {
   output_data?: any;
   metadata?: any;
 }) {
+  // Merge step_id and node_id into metadata for backward compatibility
+  const enrichedMetadata = {
+    ...(data.metadata || {}),
+    step_id: data.step_id,
+    node_id: data.node_id,
+  };
+
   const result = await query(
     `INSERT INTO kazikastudio.workflow_outputs
-     (user_id, workflow_id, step_id, output_type, node_id, output_url, output_data, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     (user_id, workflow_id, output_type, content_url, metadata)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
     [
       data.user_id,
       data.workflow_id,
-      data.step_id || null,
       data.output_type,
-      data.node_id,
       data.output_url || null,
-      data.output_data || null,
-      data.metadata || {},
+      enrichedMetadata,
     ]
   );
   return result.rows[0];
@@ -601,13 +608,15 @@ export async function createWorkflowOutput(data: {
 
 /**
  * ステップIDでワークフロー出力を取得
+ *
+ * NOTE: step_id is stored in metadata for backward compatibility with production schema
  */
 export async function getWorkflowOutputsByStepId(stepId: number) {
   const result = await query(
     `SELECT * FROM kazikastudio.workflow_outputs
-     WHERE step_id = $1
+     WHERE metadata->>'step_id' = $1
      ORDER BY created_at ASC`,
-    [stepId]
+    [stepId.toString()]
   );
   return result.rows;
 }
