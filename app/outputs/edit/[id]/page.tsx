@@ -110,7 +110,7 @@ export default function EditOutputPage() {
       onSave={async (blob) => {
         try {
           const formData = new FormData();
-          formData.append('image', blob);
+          formData.append('file', blob, 'edited-image.png');
           formData.append('originalOutputId', id);
 
           const response = await fetch('/api/outputs/save-edited', {
@@ -119,13 +119,15 @@ export default function EditOutputPage() {
           });
 
           if (!response.ok) {
-            throw new Error('Failed to save image');
+            const errorData = await response.json();
+            console.error('Save error:', errorData);
+            throw new Error(errorData.error || 'Failed to save image');
           }
 
           router.push('/outputs');
         } catch (err) {
           console.error('Error saving image:', err);
-          alert('画像の保存に失敗しました');
+          alert('画像の保存に失敗しました: ' + (err instanceof Error ? err.message : ''));
         }
       }}
       onClose={() => {
