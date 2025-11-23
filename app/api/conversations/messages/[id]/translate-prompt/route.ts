@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getConversationMessageById } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
 
 // Gemini APIを初期化
@@ -45,67 +44,46 @@ export async function POST(
       );
     }
 
-    const message = await getConversationMessageById(messageId);
+    // メッセージと会話情報を取得
+    const { data: message, error: msgError } = await supabase
+      .from('conversation_messages')
+      .select(`
+        id,
+        conversation_id,
+        conversation:conversations(
+          id,
+          studio_id,
+          story_scene_id,
+          studio:studios(user_id),
+          story_scene:story_scenes(
+            id,
+            story:stories(user_id)
+          )
+        )
+      `)
+      .eq('id', messageId)
+      .single();
 
-    if (!message) {
+    if (msgError || !message) {
       return NextResponse.json(
         { error: 'Message not found' },
         { status: 404 }
       );
     }
 
-    // 会話 → スタジオ/ストーリー → ユーザーの所有権チェック
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('id, studio_id, story_scene_id')
-      .eq('id', message.conversation_id)
-      .single();
+    // 所有権チェック
+    let isOwner = false;
+    if (message.conversation.studio_id && message.conversation.studio) {
+      isOwner = message.conversation.studio.user_id === user.id;
+    } else if (message.conversation.story_scene_id && message.conversation.story_scene) {
+      isOwner = message.conversation.story_scene.story.user_id === user.id;
+    }
 
-    if (!conversation) {
+    if (!isOwner) {
       return NextResponse.json(
-        { error: 'Conversation not found' },
-        { status: 404 }
+        { error: 'Unauthorized: Message does not belong to user' },
+        { status: 403 }
       );
-    }
-
-    // スタジオ経由の所有権チェック
-    if (conversation.studio_id) {
-      const { data: studio } = await supabase
-        .from('studios')
-        .select('user_id')
-        .eq('id', conversation.studio_id)
-        .single();
-
-      if (!studio || studio.user_id !== user.id) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 403 }
-        );
-      }
-    }
-
-    // ストーリー経由の所有権チェック
-    if (conversation.story_scene_id) {
-      const { data: scene } = await supabase
-        .from('story_scenes')
-        .select('story_id')
-        .eq('id', conversation.story_scene_id)
-        .single();
-
-      if (scene) {
-        const { data: story } = await supabase
-          .from('stories')
-          .select('user_id')
-          .eq('id', scene.story_id)
-          .single();
-
-        if (!story || story.user_id !== user.id) {
-          return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 403 }
-          );
-        }
-      }
     }
 
     // Gemini APIを使って翻訳
