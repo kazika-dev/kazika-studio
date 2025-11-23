@@ -83,6 +83,12 @@ export async function PATCH(
         updates.speaker_name = character.name;
       }
     }
+    if (body.scenePromptJa !== undefined) {
+      updates.scene_prompt_ja = body.scenePromptJa;
+    }
+    if (body.scenePromptEn !== undefined) {
+      updates.scene_prompt_en = body.scenePromptEn;
+    }
     if (body.metadata !== undefined) {
       updates.metadata = body.metadata;
     }

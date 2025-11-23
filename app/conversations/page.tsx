@@ -150,7 +150,7 @@ export default function ConversationsPage() {
     }
   };
 
-  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number }) => {
+  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number; scenePromptJa?: string; scenePromptEn?: string }) => {
     try {
       const response = await fetch(`/api/conversations/messages/${messageId}`, {
         method: 'PATCH',

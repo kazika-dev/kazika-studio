@@ -158,6 +158,8 @@ export interface RegenerateMessageResponse {
 export interface UpdateMessageRequest {
   messageText?: string;
   characterId?: number;
+  scenePromptJa?: string;
+  scenePromptEn?: string;
   metadata?: ConversationMessage['metadata'];
 }
 

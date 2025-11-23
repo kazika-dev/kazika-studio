@@ -23,6 +23,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import TranslateIcon from '@mui/icons-material/Translate';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
@@ -54,7 +56,7 @@ interface Character {
 interface ConversationViewerProps {
   messages: ConversationMessageWithCharacter[];
   characters?: Character[];
-  onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number }) => Promise<void>;
+  onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number; scenePromptJa?: string; scenePromptEn?: string }) => Promise<void>;
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
@@ -67,9 +69,13 @@ interface SortableMessageProps {
   isEditing: boolean;
   editText: string;
   editCharacterId: number | null;
+  editingScenePrompts: boolean;
+  editScenePromptJa: string;
+  editScenePromptEn: string;
   characters?: Character[];
   saving: boolean;
   reanalyzing: boolean;
+  translating: boolean;
   readonly?: boolean;
   showInsertButton?: boolean;
   onEditClick: (message: ConversationMessageWithCharacter) => void;
@@ -81,6 +87,12 @@ interface SortableMessageProps {
   onCharacterChange: (characterId: number) => void;
   onOpenTagSelector: () => void;
   onInsertAfter?: (messageId: number) => void;
+  onEditScenePrompts: (message: ConversationMessageWithCharacter) => void;
+  onScenePromptJaChange: (text: string) => void;
+  onScenePromptEnChange: (text: string) => void;
+  onTranslatePrompt: (messageId: number) => void;
+  onSaveScenePrompts: (messageId: number) => void;
+  onCancelScenePromptEdit: () => void;
   textFieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -89,9 +101,13 @@ function SortableMessage({
   isEditing,
   editText,
   editCharacterId,
+  editingScenePrompts,
+  editScenePromptJa,
+  editScenePromptEn,
   characters,
   saving,
   reanalyzing,
+  translating,
   readonly,
   showInsertButton,
   onEditClick,
@@ -103,6 +119,12 @@ function SortableMessage({
   onCharacterChange,
   onOpenTagSelector,
   onInsertAfter,
+  onEditScenePrompts,
+  onScenePromptJaChange,
+  onScenePromptEnChange,
+  onTranslatePrompt,
+  onSaveScenePrompts,
+  onCancelScenePromptEdit,
   textFieldRef
 }: SortableMessageProps) {
   const {
@@ -295,38 +317,133 @@ function SortableMessage({
               {message.message_text}
             </Typography>
             {/* Scene Prompts */}
-            {(message.scene_prompt_ja || message.scene_prompt_en) && (
+            {(message.scene_prompt_ja || message.scene_prompt_en || editingScenePrompts) && (
               <Box sx={{ mt: 2 }}>
-                {message.scene_prompt_ja && (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      mb: 1,
-                      padding: 1,
-                      backgroundColor: 'action.hover',
-                      borderRadius: 1,
-                      fontStyle: 'italic',
-                      color: 'text.secondary',
-                      borderLeft: '3px solid #2196f3'
-                    }}
-                  >
-                    <strong>日本語プロンプト:</strong> {message.scene_prompt_ja}
-                  </Typography>
+                {!readonly && !editingScenePrompts && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                    <Tooltip title="シーンプロンプトを編集">
+                      <IconButton
+                        size="small"
+                        onClick={() => onEditScenePrompts(message)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 )}
-                {message.scene_prompt_en && (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      padding: 1,
-                      backgroundColor: 'action.hover',
-                      borderRadius: 1,
-                      fontStyle: 'italic',
-                      color: 'text.secondary',
-                      borderLeft: '3px solid #4caf50'
-                    }}
-                  >
-                    <strong>English Prompt:</strong> {message.scene_prompt_en}
-                  </Typography>
+
+                {editingScenePrompts ? (
+                  <Box>
+                    {/* 日本語プロンプト編集 */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 'bold' }}>
+                        日本語プロンプト
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        value={editScenePromptJa}
+                        onChange={(e) => onScenePromptJaChange(e.target.value)}
+                        disabled={saving || translating}
+                        placeholder="シーンの説明を日本語で入力してください"
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderLeft: '3px solid #2196f3'
+                          }
+                        }}
+                      />
+                    </Box>
+
+                    {/* 英語プロンプト編集 + 翻訳ボタン */}
+                    <Box sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                          English Prompt
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<TranslateIcon />}
+                          onClick={() => onTranslatePrompt(message.id)}
+                          disabled={saving || translating || !editScenePromptJa.trim()}
+                          sx={{ fontSize: '0.7rem', py: 0.3 }}
+                        >
+                          {translating ? '翻訳中...' : '日本語から翻訳'}
+                        </Button>
+                      </Box>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        value={editScenePromptEn}
+                        onChange={(e) => onScenePromptEnChange(e.target.value)}
+                        disabled={saving || translating}
+                        placeholder="Scene description in English (for image generation)"
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderLeft: '3px solid #4caf50'
+                          }
+                        }}
+                      />
+                    </Box>
+
+                    {/* 保存・キャンセルボタン */}
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={onCancelScenePromptEdit}
+                        disabled={saving || translating}
+                      >
+                        キャンセル
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<SaveIcon />}
+                        onClick={() => onSaveScenePrompts(message.id)}
+                        disabled={saving || translating}
+                      >
+                        保存
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box>
+                    {message.scene_prompt_ja && (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          mb: 1,
+                          padding: 1,
+                          backgroundColor: 'action.hover',
+                          borderRadius: 1,
+                          fontStyle: 'italic',
+                          color: 'text.secondary',
+                          borderLeft: '3px solid #2196f3'
+                        }}
+                      >
+                        <strong>日本語プロンプト:</strong> {message.scene_prompt_ja}
+                      </Typography>
+                    )}
+                    {message.scene_prompt_en && (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          padding: 1,
+                          backgroundColor: 'action.hover',
+                          borderRadius: 1,
+                          fontStyle: 'italic',
+                          color: 'text.secondary',
+                          borderLeft: '3px solid #4caf50'
+                        }}
+                      >
+                        <strong>English Prompt:</strong> {message.scene_prompt_en}
+                      </Typography>
+                    )}
+                  </Box>
                 )}
               </Box>
             )}
@@ -459,8 +576,12 @@ export default function ConversationViewer({
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [editCharacterId, setEditCharacterId] = useState<number | null>(null);
+  const [editingScenePromptMessageId, setEditingScenePromptMessageId] = useState<number | null>(null);
+  const [editScenePromptJa, setEditScenePromptJa] = useState('');
+  const [editScenePromptEn, setEditScenePromptEn] = useState('');
   const [saving, setSaving] = useState(false);
   const [reanalyzingId, setReanalyzingId] = useState<number | null>(null);
+  const [translating, setTranslating] = useState(false);
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
@@ -670,6 +791,100 @@ export default function ConversationViewer({
     setAddDialogOpen(true);
   };
 
+  const handleEditScenePrompts = (message: ConversationMessageWithCharacter) => {
+    setEditingScenePromptMessageId(message.id);
+    setEditScenePromptJa(message.scene_prompt_ja || '');
+    setEditScenePromptEn(message.scene_prompt_en || '');
+  };
+
+  const handleCancelScenePromptEdit = () => {
+    setEditingScenePromptMessageId(null);
+    setEditScenePromptJa('');
+    setEditScenePromptEn('');
+  };
+
+  const handleSaveScenePrompts = async (messageId: number) => {
+    if (!onUpdateMessage) return;
+
+    const originalMessage = localMessages.find(m => m.id === messageId);
+    const updates: { scenePromptJa?: string; scenePromptEn?: string } = {};
+
+    if (editScenePromptJa.trim() !== (originalMessage?.scene_prompt_ja || '')) {
+      updates.scenePromptJa = editScenePromptJa.trim();
+    }
+
+    if (editScenePromptEn.trim() !== (originalMessage?.scene_prompt_en || '')) {
+      updates.scenePromptEn = editScenePromptEn.trim();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      handleCancelScenePromptEdit();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onUpdateMessage(messageId, updates);
+
+      // Update local state
+      setLocalMessages(prev =>
+        prev.map(msg => {
+          if (msg.id === messageId) {
+            const updatedMsg = { ...msg };
+            if (updates.scenePromptJa !== undefined) {
+              updatedMsg.scene_prompt_ja = updates.scenePromptJa;
+            }
+            if (updates.scenePromptEn !== undefined) {
+              updatedMsg.scene_prompt_en = updates.scenePromptEn;
+            }
+            return updatedMsg;
+          }
+          return msg;
+        })
+      );
+
+      handleCancelScenePromptEdit();
+    } catch (error) {
+      console.error('Failed to update scene prompts:', error);
+      alert('シーンプロンプトの更新に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTranslatePrompt = async (messageId: number) => {
+    if (!editScenePromptJa.trim()) {
+      alert('日本語プロンプトを入力してください');
+      return;
+    }
+
+    setTranslating(true);
+    try {
+      const response = await fetch(`/api/conversations/messages/${messageId}/translate-prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          japanesePrompt: editScenePromptJa.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Translation failed');
+      }
+
+      const data = await response.json();
+      setEditScenePromptEn(data.data.englishPrompt);
+    } catch (error) {
+      console.error('Failed to translate prompt:', error);
+      alert('翻訳に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'));
+    } finally {
+      setTranslating(false);
+    }
+  };
+
   if (localMessages.length === 0) {
     return (
       <Box
@@ -704,9 +919,13 @@ export default function ConversationViewer({
               isEditing={editingMessageId === message.id}
               editText={editText}
               editCharacterId={editCharacterId}
+              editingScenePrompts={editingScenePromptMessageId === message.id}
+              editScenePromptJa={editScenePromptJa}
+              editScenePromptEn={editScenePromptEn}
               characters={characters}
               saving={saving}
               reanalyzing={reanalyzingId === message.id}
+              translating={translating}
               readonly={readonly}
               showInsertButton={!readonly && !!onAddMessage && !!characters && characters.length > 0}
               onEditClick={handleEditClick}
@@ -718,6 +937,12 @@ export default function ConversationViewer({
               onCharacterChange={setEditCharacterId}
               onOpenTagSelector={handleOpenTagSelector}
               onInsertAfter={handleOpenAddDialog}
+              onEditScenePrompts={handleEditScenePrompts}
+              onScenePromptJaChange={setEditScenePromptJa}
+              onScenePromptEnChange={setEditScenePromptEn}
+              onTranslatePrompt={handleTranslatePrompt}
+              onSaveScenePrompts={handleSaveScenePrompts}
+              onCancelScenePromptEdit={handleCancelScenePromptEdit}
               textFieldRef={textFieldRef}
             />
           ))}
