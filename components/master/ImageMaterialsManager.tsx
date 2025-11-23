@@ -40,10 +40,12 @@ import {
   ArrowBack as ArrowBackIcon,
   CloudUpload as CloudUploadIcon,
   Image as ImageIcon,
+  Brush as BrushIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 import { ImageMaterial, IMAGE_MATERIAL_CATEGORIES } from '@/types/image-material';
+import ImageEditor from '@/components/common/ImageEditor';
 
 export default function ImageMaterialsManager() {
   const router = useRouter();
@@ -55,6 +57,8 @@ export default function ImageMaterialsManager() {
   const [selectedMaterial, setSelectedMaterial] = useState<ImageMaterial | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -268,6 +272,63 @@ export default function ImageMaterialsManager() {
     setDeleteDialogOpen(true);
   };
 
+  const openImageEditor = (material: ImageMaterial) => {
+    // GCP署名付きURLではなく、/api/storage経由のURLを使用
+    const proxyUrl = `/api/storage/${material.file_name}`;
+    setEditingImageUrl(proxyUrl);
+    setImageEditorOpen(true);
+  };
+
+  const handleSaveEditedImage = async (blob: Blob, saveMode?: 'overwrite' | 'new') => {
+    if (!selectedMaterial) {
+      toast.error('素材が選択されていません');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('image', blob);
+
+      let response;
+      let successMessage;
+
+      if (saveMode === 'new') {
+        // 新規保存: 元の素材情報をコピーして新規作成
+        formData.append('name', `${selectedMaterial.name} (編集済み)`);
+        formData.append('description', selectedMaterial.description);
+        formData.append('category', selectedMaterial.category);
+        formData.append('tags', JSON.stringify(selectedMaterial.tags));
+
+        response = await fetch('/api/image-materials', {
+          method: 'POST',
+          body: formData,
+        });
+        successMessage = '新しい素材として保存しました';
+      } else {
+        // 上書き保存（デフォルト）
+        response = await fetch(`/api/image-materials/${selectedMaterial.id}/replace-image`, {
+          method: 'PUT',
+          body: formData,
+        });
+        successMessage = '画像を更新しました';
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(successMessage);
+        setImageEditorOpen(false);
+        setEditingImageUrl(null);
+        loadMaterials();
+      } else {
+        toast.error(data.error || '画像の保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to save edited image:', error);
+      toast.error('画像の保存に失敗しました');
+    }
+  };
+
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return '-';
     if (bytes < 1024) return `${bytes} B`;
@@ -388,8 +449,20 @@ export default function ImageMaterialsManager() {
                     <TableCell align="right">
                       <IconButton
                         size="small"
+                        onClick={() => {
+                          setSelectedMaterial(material);
+                          openImageEditor(material);
+                        }}
+                        color="secondary"
+                        title="画像を編集"
+                      >
+                        <BrushIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
                         onClick={() => openEditDialog(material)}
                         color="primary"
+                        title="メタデータを編集"
                       >
                         <EditIcon />
                       </IconButton>
@@ -397,6 +470,7 @@ export default function ImageMaterialsManager() {
                         size="small"
                         onClick={() => openDeleteDialog(material)}
                         color="error"
+                        title="削除"
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -538,8 +612,21 @@ export default function ImageMaterialsManager() {
                     borderRadius: '8px',
                   }}
                 />
+                <Box mt={2}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<BrushIcon />}
+                    onClick={() => {
+                      setEditDialogOpen(false);
+                      openImageEditor(selectedMaterial);
+                    }}
+                    size="small"
+                  >
+                    画像を編集
+                  </Button>
+                </Box>
                 <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                  画像の変更はできません。変更する場合は削除して再作成してください。
+                  画像エディタで編集できます（描画、テキスト追加、選択範囲の移動・削除など）
                 </Typography>
               </Box>
             )}
@@ -629,6 +716,19 @@ export default function ImageMaterialsManager() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 画像エディタ */}
+      {imageEditorOpen && editingImageUrl && (
+        <ImageEditor
+          imageUrl={editingImageUrl}
+          onSave={handleSaveEditedImage}
+          onClose={() => {
+            setImageEditorOpen(false);
+            setEditingImageUrl(null);
+          }}
+          enableSaveModeSelection={true}
+        />
+      )}
     </Container>
   );
 }

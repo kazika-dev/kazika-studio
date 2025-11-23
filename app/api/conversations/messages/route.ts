@@ -115,20 +115,40 @@ export async function POST(request: NextRequest) {
       sequenceOrder = afterMessage.sequence_order + 1;
 
       // Increment sequence_order for all messages after this position
-      const { error: updateError } = await supabase
+      // Fetch all affected messages
+      const { data: affectedMessages, error: fetchError } = await supabase
         .from('conversation_messages')
-        .update({
-          sequence_order: supabase.raw('sequence_order + 1') as any
-        })
+        .select('id, sequence_order')
         .eq('conversation_id', body.conversationId)
         .gte('sequence_order', sequenceOrder);
 
-      if (updateError) {
-        console.error('Failed to update sequence orders:', updateError);
+      if (fetchError) {
+        console.error('Failed to fetch affected messages:', fetchError);
         return NextResponse.json(
           { success: false, error: 'Failed to adjust message positions' },
           { status: 500 }
         );
+      }
+
+      // Update each message individually
+      if (affectedMessages && affectedMessages.length > 0) {
+        const updatePromises = affectedMessages.map(msg =>
+          supabase
+            .from('conversation_messages')
+            .update({ sequence_order: msg.sequence_order + 1 })
+            .eq('id', msg.id)
+        );
+
+        const results = await Promise.all(updatePromises);
+        const updateError = results.find(r => r.error)?.error;
+
+        if (updateError) {
+          console.error('Failed to update sequence orders:', updateError);
+          return NextResponse.json(
+            { success: false, error: 'Failed to adjust message positions' },
+            { status: 500 }
+          );
+        }
       }
     } else {
       // Insert at the end

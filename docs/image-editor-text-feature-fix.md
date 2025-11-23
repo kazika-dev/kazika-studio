@@ -201,7 +201,8 @@ y: clickY + fontSize  // ベースライン調整
 
 ## 修正ファイル
 
-- `/components/outputs/ImageEditor.tsx` (291-327行目、533-545行目、731-740行目)
+- `/components/common/ImageEditor.tsx` (291-327行目、533-545行目、731-740行目)
+  - **注**: 2025-11-23に `/components/outputs/ImageEditor.tsx` から `/components/common/ImageEditor.tsx` に移動し、共通コンポーネント化しました
 
 ## 参考情報
 

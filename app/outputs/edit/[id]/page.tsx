@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import ImageEditor from '@/components/outputs/ImageEditor';
+import { useParams, useRouter } from 'next/navigation';
+import ImageEditor from '@/components/common/ImageEditor';
 import { CircularProgress, Box, Typography } from '@mui/material';
 
 export default function EditOutputPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [output, setOutput] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -106,7 +107,30 @@ export default function EditOutputPage() {
   return (
     <ImageEditor
       imageUrl={getImageSrc(output.content_url)}
-      originalOutputId={id}
+      onSave={async (blob) => {
+        try {
+          const formData = new FormData();
+          formData.append('image', blob);
+          formData.append('originalOutputId', id);
+
+          const response = await fetch('/api/outputs/save-edited', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to save image');
+          }
+
+          router.push('/outputs');
+        } catch (err) {
+          console.error('Error saving image:', err);
+          alert('画像の保存に失敗しました');
+        }
+      }}
+      onClose={() => {
+        router.push('/outputs');
+      }}
     />
   );
 }

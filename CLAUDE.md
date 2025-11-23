@@ -17,9 +17,102 @@ DBへのマイグレーションやdeleteは確認なしで行わないでくだ
 - **[画像素材マスタ機能](/docs/image-materials-master.md)** - ワークフローで使用する画像素材を管理するマスタ機能
 - **[Canvas画像編集機能 - 選択・移動・削除](/docs/canvas-selection-feature.md)** - Canvas上で画像の一部を選択して移動または削除する機能
 - **[Canvas画像エディタのテキスト機能修正](/docs/image-editor-text-feature-fix.md)** - テキスト挿入時の位置ずれ、即座描画、Undo機能の不具合を修正
+- **[ImageEditor共通コンポーネント化](/docs/image-editor-common-component.md)** - ImageEditorを `/components/outputs` から `/components/common` に移動し、プロジェクト全体で再利用可能に
 - **[メッセージごとのシーンキャラクターシート設定機能](/docs/message-scene-character-sheets.md)** - 会話メッセージのシーンプロンプトごとに登場キャラクターのキャラクターシートを設定
 
 ## 最近の主要な変更
+
+### 2025-11-23: ImageEditor共通コンポーネント化とm_image_materials統合（保存モード選択機能付き）
+
+**目的**: ImageEditorを `/components/outputs` から `/components/common` に移動し、m_image_materials で画像素材を編集できるようにする。さらに、上書き保存と新規保存を選べるようにする
+
+**変更内容**:
+- **ファイル移動**: `/components/outputs/ImageEditor.tsx` → `/components/common/ImageEditor.tsx`
+- **Props の汎用化**:
+  - `originalOutputId` プロップを削除（output 固有の依存を排除）
+  - `onSave` を完全に親コンポーネントの制御下に（async 対応 + 保存モード対応）
+  - `disableDefaultSave` プロップを追加（柔軟性向上）
+  - `enableSaveModeSelection` プロップを追加（保存モード選択ダイアログを有効化）
+- **デフォルト保存処理の削除**: `/api/outputs/save-edited` へのハードコードされたリクエストを削除
+- **ナビゲーション処理の削除**: `useRouter` を削除し、`onClose` プロップ経由で親に委譲
+- **m_image_materials 統合**:
+  - テーブルに「画像を編集」ボタン（筆アイコン）を追加
+  - 編集ダイアログ内にも「画像を編集」ボタンを追加
+  - `/api/image-materials/[id]/replace-image` エンドポイントを作成（画像差し替え機能）
+- **保存モード選択機能**:
+  - `enableSaveModeSelection` プロップで保存モード選択ダイアログを有効化
+  - 保存時に「上書き保存」または「新規保存」を選択可能
+  - 上書き保存: 元の画像を置き換え（既存の `/api/image-materials/[id]/replace-image`）
+  - 新規保存: 元の画像を残して新しい素材として保存（既存の `/api/image-materials` POST）
+
+**技術的詳細**:
+```typescript
+// 変更前（output 固有）
+interface ImageEditorProps {
+  imageUrl: string;
+  originalOutputId?: string;  // 削除
+  onSave?: (imageBlob: Blob) => void;
+  onClose?: () => void;
+}
+
+// 変更後（汎用化 + 保存モード選択対応）
+interface ImageEditorProps {
+  imageUrl: string;
+  onSave?: (imageBlob: Blob, saveMode?: 'overwrite' | 'new') => void | Promise<void>;  // async + 保存モード
+  onClose?: () => void;
+  disableDefaultSave?: boolean;  // 追加
+  enableSaveModeSelection?: boolean;  // 保存モード選択ダイアログを有効化
+}
+```
+
+**m_image_materials での使用例**:
+```typescript
+// ImageMaterialsManager.tsx
+<ImageEditor
+  imageUrl={editingImageUrl}
+  onSave={async (blob, saveMode) => {
+    const formData = new FormData();
+    formData.append('image', blob);
+
+    if (saveMode === 'new') {
+      // 新規保存: 元の素材情報をコピーして新規作成
+      formData.append('name', `${selectedMaterial.name} (編集済み)`);
+      formData.append('description', selectedMaterial.description);
+      formData.append('category', selectedMaterial.category);
+      formData.append('tags', JSON.stringify(selectedMaterial.tags));
+      await fetch('/api/image-materials', { method: 'POST', body: formData });
+    } else {
+      // 上書き保存（デフォルト）
+      await fetch(`/api/image-materials/${selectedMaterial.id}/replace-image`, {
+        method: 'PUT',
+        body: formData,
+      });
+    }
+    loadMaterials();
+  }}
+  onClose={() => {
+    setImageEditorOpen(false);
+    setEditingImageUrl(null);
+  }}
+  enableSaveModeSelection={true}  // 保存モード選択を有効化
+/>
+```
+
+**画像差し替えAPI（`/api/image-materials/[id]/replace-image`）**:
+- 既存の画像を GCP Storage から削除
+- 新しい画像をアップロード
+- Sharp で画像メタデータ（width, height）を自動取得
+- データベースを更新（storage_path, width, height, file_size_bytes）
+- 遅延初期化パターンでビルドエラーを回避
+
+**影響範囲**:
+- `/app/outputs/edit/[id]/page.tsx` の import パスを更新（機能は変更なし）
+- `/app/master/m_image_materials` で画像素材を Canvas エディタで編集可能に
+- 完全に制御された（Controlled）コンポーネントとして、異なるコンテキストで異なる保存処理を実装可能
+
+**詳細**: [/docs/image-editor-common-component.md](/docs/image-editor-common-component.md)
+
+---
 
 ### 2025-11-23: Canvas画像エディタのテキスト機能修正
 

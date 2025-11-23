@@ -1,15 +1,17 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton, TextField } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree, FileCopy, SaveAs } from '@mui/icons-material';
 
 interface ImageEditorProps {
   imageUrl: string;
-  originalOutputId?: string;
-  onSave?: (imageBlob: Blob) => void;
+  onSave?: (imageBlob: Blob, saveMode?: 'overwrite' | 'new') => void | Promise<void>;
   onClose?: () => void;
+  // デフォルトの保存処理を無効化（onSaveが必須になる）
+  disableDefaultSave?: boolean;
+  // 保存モード選択を有効化（true: 保存時にモード選択ダイアログを表示）
+  enableSaveModeSelection?: boolean;
 }
 
 type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text' | 'move' | 'select';
@@ -39,7 +41,7 @@ interface DrawingPath {
   fontStyle?: 'normal' | 'italic';
 }
 
-export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultSave = false, enableSaveModeSelection = false }: ImageEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawingMode, setDrawingMode] = useState<DrawingMode>('marker');
@@ -52,7 +54,6 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const [saving, setSaving] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageHistory, setImageHistory] = useState<HTMLImageElement[]>([]);  // 画像の履歴（Undo用）
-  const router = useRouter();
   const [isEditingText, setIsEditingText] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [textPosition, setTextPosition] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
@@ -66,6 +67,8 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   const [isCreatingSelection, setIsCreatingSelection] = useState(false);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const [redrawTrigger, setRedrawTrigger] = useState(0);  // Canvas再描画のトリガー
+  const [saveModeDialogOpen, setSaveModeDialogOpen] = useState(false);
+  const [pendingSaveBlob, setPendingSaveBlob] = useState<Blob | null>(null);
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -76,7 +79,13 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     if (!ctx) return;
 
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+
+    // /api/storage プロキシ経由の場合は同じオリジンなのでcrossOriginは不要
+    // 外部URLの場合のみcrossOriginを設定
+    if (imageUrl.startsWith('http') && !imageUrl.startsWith(window.location.origin)) {
+      img.crossOrigin = 'anonymous';
+    }
+
     img.onload = () => {
       // キャンバスサイズを画像に合わせる
       canvas.width = img.width;
@@ -85,6 +94,13 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       imageRef.current = img;
       setImageLoaded(true);
     };
+
+    img.onerror = (error) => {
+      console.error('Failed to load image:', error);
+      console.error('Image URL:', imageUrl);
+      alert('画像の読み込みに失敗しました。URLを確認してください。');
+    };
+
     img.src = imageUrl;
   }, [imageUrl]);
 
@@ -93,9 +109,14 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     if (redrawTrigger > 0) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
       redrawCanvas();
+      // 選択範囲がある場合は枠線も再描画
+      if (selection) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        drawSelectionOverlay();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [redrawTrigger]);
+  }, [redrawTrigger, selection]);
 
   // テキストの境界ボックスを計算
   const getTextBoundingBox = (path: DrawingPath, ctx: CanvasRenderingContext2D) => {
@@ -159,40 +180,44 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         }
       }
     });
+  };
 
-    // 選択範囲を描画
-    if (selection) {
-      const { startX, startY, endX, endY } = selection;
-      const x = Math.min(startX, endX);
-      const y = Math.min(startY, endY);
-      const width = Math.abs(endX - startX);
-      const height = Math.abs(endY - startY);
+  // 選択範囲の枠線を描画（一時的な表示用、実際のcanvasには焼き込まない）
+  const drawSelectionOverlay = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !selection) return;
 
-      // 移動中の場合は画像データを表示
-      if (isDraggingSelection && selection.imageData) {
-        ctx.putImageData(selection.imageData, x, y);
-      }
+    const { startX, startY, endX, endY } = selection;
+    const x = Math.min(startX, endX);
+    const y = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
 
-      // 選択範囲の枠線を描画（点線）
-      ctx.strokeStyle = '#1976d2';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(x, y, width, height);
-      ctx.setLineDash([]);
-
-      // コーナーのハンドルを描画
-      ctx.fillStyle = '#1976d2';
-      const handleSize = 8;
-      const corners = [
-        { x: x, y: y },
-        { x: x + width, y: y },
-        { x: x, y: y + height },
-        { x: x + width, y: y + height },
-      ];
-      corners.forEach(corner => {
-        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
-      });
+    // 移動中の場合は画像データを表示
+    if (isDraggingSelection && selection.imageData) {
+      ctx.putImageData(selection.imageData, x, y);
     }
+
+    // 選択範囲の枠線を描画（点線）
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(x, y, width, height);
+    ctx.setLineDash([]);
+
+    // コーナーのハンドルを描画
+    ctx.fillStyle = '#1976d2';
+    const handleSize = 8;
+    const corners = [
+      { x: x, y: y },
+      { x: x + width, y: y },
+      { x: x, y: y + height },
+      { x: x + width, y: y + height },
+    ];
+    corners.forEach(corner => {
+      ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+    });
   };
 
   // パスを描画
@@ -517,6 +542,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         endY: newY + height,
       });
       redrawCanvas();
+      drawSelectionOverlay(); // 点線を一時的に表示
       return;
     }
 
@@ -528,6 +554,7 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
         endY: y,
       });
       redrawCanvas();
+      drawSelectionOverlay(); // 点線を一時的に表示
       return;
     }
 
@@ -577,8 +604,8 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       if (width > 0 && height > 0 && imageRef.current) {
         // 一時Canvasに点線を含まない状態を再構築
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
+        tempCanvas.width = canvas?.width ?? 0;
+        tempCanvas.height = canvas?.height ?? 0;
         const tempCtx = tempCanvas.getContext('2d');
 
         if (tempCtx) {
@@ -599,6 +626,10 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
             originalX: x,  // 元の位置を記録
             originalY: y,
           });
+
+          // 選択範囲の枠線を表示
+          redrawCanvas();
+          drawSelectionOverlay();
         }
       }
       setIsCreatingSelection(false);
@@ -730,6 +761,14 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
+        // 画像が読み込まれたら再描画
+        if (ctx && imageRef.current) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(imageRef.current, 0, 0);
+          history.forEach(path => {
+            drawPath(ctx, path);
+          });
+        }
       };
       img.src = tempCanvas.toDataURL();
     }
@@ -779,6 +818,14 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
+        // 画像が読み込まれたら再描画
+        if (ctx && imageRef.current) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(imageRef.current, 0, 0);
+          history.forEach(path => {
+            drawPath(ctx, path);
+          });
+        }
       };
       img.src = tempCanvas.toDataURL();
     }
@@ -805,7 +852,9 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
 
     // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(imageRef.current, 0, 0);
+    if (imageRef.current) {
+      ctx.drawImage(imageRef.current, 0, 0);
+    }
 
     // すべてのパスを再描画
     history.forEach(path => {
@@ -887,44 +936,81 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
   // 保存
   const handleSave = async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !imageRef.current) return;
+
+    if (!onSave && !disableDefaultSave) {
+      alert('保存処理が設定されていません');
+      return;
+    }
 
     setSaving(true);
     try {
+      // 一時Canvasを作成して点線を含まない状態を生成
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      if (!tempCtx) {
+        throw new Error('Failed to get 2d context');
+      }
+
+      // 元の画像を描画
+      tempCtx.drawImage(imageRef.current, 0, 0);
+
+      // 描画履歴を再描画
+      history.forEach(path => {
+        drawPath(tempCtx, path);
+      });
+
+      // 選択範囲がドラッグ中の場合は、画像データを現在位置に貼り付け
+      if (selection && isDraggingSelection && selection.imageData) {
+        const x = Math.min(selection.startX, selection.endX);
+        const y = Math.min(selection.startY, selection.endY);
+        tempCtx.putImageData(selection.imageData, x, y);
+      }
+
+      // 一時Canvasからblobを作成（点線は含まれない）
       const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(blob => {
+        tempCanvas.toBlob(blob => {
           if (blob) resolve(blob);
           else reject(new Error('Failed to create blob'));
         }, 'image/png');
       });
 
-      if (onSave) {
-        await onSave(blob);
+      // 保存モード選択が有効な場合はダイアログを表示
+      if (enableSaveModeSelection) {
+        setPendingSaveBlob(blob);
+        setSaveModeDialogOpen(true);
+        setSaving(false);
       } else {
-        // デフォルトの保存処理
-        const formData = new FormData();
-        formData.append('file', blob, 'edited-image.png');
-        if (originalOutputId) {
-          formData.append('originalOutputId', originalOutputId);
+        // デフォルトは上書き保存
+        if (onSave) {
+          await onSave(blob, 'overwrite');
         }
-
-        const response = await fetch('/api/outputs/save-edited', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to save image');
-        }
-
-        alert('画像を保存しました！');
-        router.push('/outputs');
+        setSaving(false);
       }
+    } catch (error) {
+      console.error('Failed to save image:', error);
+      alert('画像の保存に失敗しました');
+      setSaving(false);
+    }
+  };
+
+  // 保存モード確定後の処理
+  const handleConfirmSaveMode = async (mode: 'overwrite' | 'new') => {
+    if (!pendingSaveBlob || !onSave) return;
+
+    setSaveModeDialogOpen(false);
+    setSaving(true);
+    try {
+      await onSave(pendingSaveBlob, mode);
     } catch (error) {
       console.error('Failed to save image:', error);
       alert('画像の保存に失敗しました');
     } finally {
       setSaving(false);
+      setPendingSaveBlob(null);
     }
   };
 
@@ -1204,6 +1290,68 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
           </>
         )}
       </Box>
+
+      {/* 保存モード選択ダイアログ */}
+      <Dialog
+        open={saveModeDialogOpen}
+        onClose={() => {
+          setSaveModeDialogOpen(false);
+          setPendingSaveBlob(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>保存方法を選択</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            編集した画像をどのように保存しますか？
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<Save />}
+              onClick={() => handleConfirmSaveMode('overwrite')}
+              sx={{ justifyContent: 'flex-start', py: 2 }}
+            >
+              <Box sx={{ textAlign: 'left', flex: 1 }}>
+                <Typography variant="body1" fontWeight="bold">
+                  上書き保存
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  元の画像を編集後の画像で置き換えます
+                </Typography>
+              </Box>
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<FileCopy />}
+              onClick={() => handleConfirmSaveMode('new')}
+              sx={{ justifyContent: 'flex-start', py: 2 }}
+            >
+              <Box sx={{ textAlign: 'left', flex: 1 }}>
+                <Typography variant="body1" fontWeight="bold">
+                  新規保存
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  元の画像を残したまま、新しい素材として保存します
+                </Typography>
+              </Box>
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setSaveModeDialogOpen(false);
+              setPendingSaveBlob(null);
+            }}
+          >
+            キャンセル
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
