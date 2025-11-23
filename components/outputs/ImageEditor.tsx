@@ -361,17 +361,25 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
           const width = Math.abs(selection.endX - selection.startX);
           const height = Math.abs(selection.endY - selection.startY);
 
-          // 元の位置を白で塗りつぶす
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(selection.originalX, selection.originalY, width, height);
-
-          // 画像参照を更新
+          // 一時Canvasに点線を含まない状態を再構築
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = canvas.width;
           tempCanvas.height = canvas.height;
           const tempCtx = tempCanvas.getContext('2d');
           if (tempCtx) {
-            tempCtx.drawImage(canvas, 0, 0);
+            // 元の画像を描画
+            tempCtx.drawImage(imageRef.current, 0, 0);
+
+            // 描画履歴を再描画
+            history.forEach(path => {
+              drawPath(tempCtx, path);
+            });
+
+            // 元の位置を白で塗りつぶす
+            tempCtx.fillStyle = '#FFFFFF';
+            tempCtx.fillRect(selection.originalX, selection.originalY, width, height);
+
+            // 画像参照を非同期で更新
             const img = new Image();
             img.onload = () => {
               imageRef.current = img;
@@ -392,6 +400,57 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
           y: y - Math.min(selection.startY, selection.endY),
         });
       } else {
+        // 既存の選択範囲があれば、移動されているかチェック
+        if (selection) {
+          const currentX = Math.min(selection.startX, selection.endX);
+          const currentY = Math.min(selection.startY, selection.endY);
+          const hasMoved = selection.originalX !== undefined &&
+                          selection.originalY !== undefined &&
+                          (currentX !== selection.originalX || currentY !== selection.originalY);
+
+          // 移動されている場合は確定してから新しい選択範囲を作成
+          if (hasMoved && selection.imageData) {
+            // 確定処理（handleConfirmSelection と同じ）
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx && imageRef.current) {
+              // 元の画像を描画
+              tempCtx.drawImage(imageRef.current, 0, 0);
+
+              // 描画履歴を再描画
+              history.forEach(path => {
+                drawPath(tempCtx, path);
+              });
+
+              // 現在の位置に画像データを貼り付け
+              tempCtx.putImageData(selection.imageData, currentX, currentY);
+
+              // 画像参照を非同期で更新
+              const img = new Image();
+              img.onload = () => {
+                imageRef.current = img;
+              };
+              img.src = tempCanvas.toDataURL();
+            }
+
+            // 選択範囲をクリア
+            setSelection(null);
+          } else {
+            // 移動されていない場合は単にクリア
+            setSelection(null);
+            // 即座に再描画（選択範囲の枠線を消す）
+            if (ctx && imageRef.current) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(imageRef.current, 0, 0);
+              history.forEach(path => {
+                drawPath(ctx, path);
+              });
+            }
+          }
+        }
+
         // 新しい選択範囲を作成
         setIsCreatingSelection(true);
         setSelection({
@@ -515,16 +574,32 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
       const width = Math.abs(selection.endX - selection.startX);
       const height = Math.abs(selection.endY - selection.startY);
 
-      if (width > 0 && height > 0) {
-        // 選択範囲の画像データを保存
-        const imageData = ctx.getImageData(x, y, width, height);
+      if (width > 0 && height > 0 && imageRef.current) {
+        // 一時Canvasに点線を含まない状態を再構築
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
 
-        setSelection({
-          ...selection,
-          imageData,
-          originalX: x,  // 元の位置を記録
-          originalY: y,
-        });
+        if (tempCtx) {
+          // 元の画像を描画
+          tempCtx.drawImage(imageRef.current, 0, 0);
+
+          // 描画履歴を再描画
+          history.forEach(path => {
+            drawPath(tempCtx, path);
+          });
+
+          // 点線を含まない状態から選択範囲の画像データを取得
+          const imageData = tempCtx.getImageData(x, y, width, height);
+
+          setSelection({
+            ...selection,
+            imageData,
+            originalX: x,  // 元の位置を記録
+            originalY: y,
+          });
+        }
       }
       setIsCreatingSelection(false);
       return;
@@ -618,37 +693,43 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     // Undo用に履歴を保存
     saveImageToHistory();
 
-    // 選択範囲を白で塗りつぶす
+    // 選択範囲の座標を取得
     const x = Math.min(selection.startX, selection.endX);
     const y = Math.min(selection.startY, selection.endY);
     const width = Math.abs(selection.endX - selection.startX);
     const height = Math.abs(selection.endY - selection.startY);
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(x, y, width, height);
-
-    // 選択範囲をクリア（再描画の前に）
-    setSelection(null);
-
-    // 画像参照を更新
+    // 一時Canvasに点線を含まない状態を再構築
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx && imageRef.current) {
+      // 元の画像を描画
+      tempCtx.drawImage(imageRef.current, 0, 0);
+
+      // 描画履歴を再描画
+      history.forEach(path => {
+        drawPath(tempCtx, path);
+      });
+
+      // 選択範囲を白で塗りつぶす
+      tempCtx.fillStyle = '#FFFFFF';
+      tempCtx.fillRect(x, y, width, height);
+    }
+
+    // 即座に選択範囲をクリアして再描画
+    setSelection(null);
     if (tempCtx) {
-      tempCtx.drawImage(canvas, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(tempCanvas, 0, 0);
+    }
+
+    // 画像参照を非同期で更新
+    if (tempCtx) {
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
-
-        // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-
-        // すべてのパスを再描画
-        history.forEach(path => {
-          drawPath(ctx, path);
-        });
       };
       img.src = tempCanvas.toDataURL();
     }
@@ -668,31 +749,36 @@ export default function ImageEditor({ imageUrl, originalOutputId, onSave, onClos
     const x = Math.min(selection.startX, selection.endX);
     const y = Math.min(selection.startY, selection.endY);
 
-    // 現在の位置に画像データを描画
-    ctx.putImageData(selection.imageData, x, y);
-
-    // 選択範囲をクリア（再描画の前に）
-    setSelection(null);
-
-    // 画像参照を更新
+    // 一時Canvasに点線を含まない状態を再構築
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx && imageRef.current) {
+      // 元の画像を描画
+      tempCtx.drawImage(imageRef.current, 0, 0);
+
+      // 描画履歴を再描画
+      history.forEach(path => {
+        drawPath(tempCtx, path);
+      });
+
+      // 現在の位置に画像データを貼り付け
+      tempCtx.putImageData(selection.imageData, x, y);
+    }
+
+    // 即座に選択範囲をクリアして再描画
+    setSelection(null);
     if (tempCtx) {
-      tempCtx.drawImage(canvas, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(tempCanvas, 0, 0);
+    }
+
+    // 画像参照を非同期で更新
+    if (tempCtx) {
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
-
-        // 即座にCanvasをクリアして画像と履歴のみを再描画（選択範囲なし）
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-
-        // すべてのパスを再描画
-        history.forEach(path => {
-          drawPath(ctx, path);
-        });
       };
       img.src = tempCanvas.toDataURL();
     }
