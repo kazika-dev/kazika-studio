@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getNodeTypeConfig } from '@/lib/workflow/formConfigGenerator';
 
 /**
  * POST /api/conversations/:id/create-studio
@@ -207,15 +208,20 @@ export async function POST(
           ? JSON.parse(workflow.nodes)
           : workflow.nodes;
 
-        // Find ElevenLabs and Nanobana nodes in the workflow
-        const elevenLabsNodes = workflowNodes.filter(
-          (node: any) => node.data?.type === 'elevenlabs' || node.type === 'elevenlabs'
-        );
-        const nanobanaNodes = workflowNodes.filter(
-          (node: any) => node.data?.type === 'nanobana' || node.type === 'nanobana'
-        );
+        // Categorize nodes by type
+        const nodesByType = new Map<string, any[]>();
+        workflowNodes.forEach((node: any) => {
+          const nodeType = node.data?.type || node.type;
+          if (!nodeType) return;
 
-        console.log('[POST /api/conversations/:id/create-studio] Found', elevenLabsNodes.length, 'ElevenLabs nodes,', nanobanaNodes.length, 'Nanobana nodes');
+          if (!nodesByType.has(nodeType)) {
+            nodesByType.set(nodeType, []);
+          }
+          nodesByType.get(nodeType)!.push(node);
+        });
+
+        console.log('[POST /api/conversations/:id/create-studio] Found nodes by type:',
+          Array.from(nodesByType.entries()).map(([type, nodes]) => `${type}:${nodes.length}`).join(', '));
 
         // Create workflow steps for each board
         const workflowStepsToInsert = boards.map((board, idx) => {
@@ -238,38 +244,73 @@ export async function POST(
           // Build workflowInputs in the same format as normal workflow execution
           const workflowInputs: Record<string, any> = {};
 
-          // For each ElevenLabs node, set text, voiceId, and modelId
-          elevenLabsNodes.forEach((node: any) => {
-            const nodeId = node.id;
-            workflowInputs[`elevenlabs_text_${nodeId}`] = message.message_text;
-            workflowInputs[`elevenlabs_voiceId_${nodeId}`] = voiceId;
-            workflowInputs[`elevenlabs_modelId_${nodeId}`] = node.data?.config?.modelId || 'eleven_turbo_v2_5';
-          });
+          // Get scene characters from the map (characters registered in conversation_message_characters)
+          const sceneCharacterIds = messageCharactersMap.get(message.id) || [];
 
-          // For each Nanobana node, set prompt, model, and character sheets
-          nanobanaNodes.forEach((node: any) => {
-            const nodeId = node.id;
-            // 英語プロンプトを優先、なければ日本語、それもなければシーン説明
-            const prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
+          // Process each node type dynamically
+          nodesByType.forEach((nodes, nodeType) => {
+            try {
+              const nodeConfig = getNodeTypeConfig(nodeType);
 
-            if (!prompt) {
-              console.warn(`[Board ${idx}] Warning: No prompt available for Nanobana node. scene_prompt_en: ${!!message.scene_prompt_en}, scene_prompt_ja: ${!!message.scene_prompt_ja}, metadata.scene: ${!!message.metadata?.scene}`);
-            }
+              nodes.forEach((node: any) => {
+                const nodeId = node.id;
 
-            workflowInputs[`nanobana_prompt_${nodeId}`] = prompt;
-            workflowInputs[`nanobana_model_${nodeId}`] = node.data?.config?.model || 'gemini-3-pro-image-preview';
+                // Apply node-specific field values based on node type configuration
+                nodeConfig.fields.forEach((field) => {
+                  const fieldKey = `${nodeType}_${field.name}_${nodeId}`;
 
-            // Get scene characters from the map (characters registered in conversation_message_characters)
-            const sceneCharacterIds = messageCharactersMap.get(message.id) || [];
+                  // Handle special cases for specific field types
+                  if (field.name === 'text' && nodeType === 'elevenlabs') {
+                    // ElevenLabs text field: use message text
+                    workflowInputs[fieldKey] = message.message_text;
+                  } else if (field.name === 'voiceId' && nodeType === 'elevenlabs') {
+                    // ElevenLabs voiceId field: use character voice ID
+                    workflowInputs[fieldKey] = voiceId;
+                  } else if (field.name === 'modelId' && nodeType === 'elevenlabs') {
+                    // ElevenLabs modelId field: use node config or default
+                    workflowInputs[fieldKey] = node.data?.config?.modelId || 'eleven_turbo_v2_5';
+                  } else if (field.name === 'prompt') {
+                    // Prompt field: use scene prompt (priority varies by node type)
+                    let prompt = '';
+                    if (nodeType === 'nanobana') {
+                      // Nanobana: prefer English prompt for image generation
+                      prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
+                    } else if (nodeType === 'gemini') {
+                      // Gemini: prefer Japanese prompt for image recognition
+                      prompt = message.scene_prompt_ja || message.scene_prompt_en || message.metadata?.scene || '';
+                    } else {
+                      // Other nodes: use English then Japanese
+                      prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
+                    }
 
-            if (sceneCharacterIds.length > 0) {
-              // Use scene characters if available (up to 4 characters as per Nanobana limit)
-              workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = sceneCharacterIds.slice(0, 4).map(String);
-              console.log(`[Board ${idx}] Using scene characters for Nanobana:`, sceneCharacterIds);
-            } else if (message.character_id) {
-              // Fallback to speaker character if no scene characters registered
-              workflowInputs[`nanobana_selectedCharacterSheetIds_${nodeId}`] = [String(message.character_id)];
-              console.log(`[Board ${idx}] Falling back to speaker character for Nanobana:`, message.character_id);
+                    if (!prompt) {
+                      console.warn(`[Board ${idx}] Warning: No prompt available for ${nodeType} node`);
+                    }
+
+                    workflowInputs[fieldKey] = prompt;
+                  } else if (field.name === 'model' && field.type === 'select') {
+                    // Model field: use node config or default from field options
+                    const defaultModel = node.data?.config?.model || field.options?.[0]?.value || '';
+                    workflowInputs[fieldKey] = defaultModel;
+                  } else if (field.type === 'characterSheets' && field.name === 'selectedCharacterSheetIds') {
+                    // Character sheets field: auto-populate from conversation
+                    if (sceneCharacterIds.length > 0) {
+                      // Use scene characters if available (up to maxSelections)
+                      const maxSelections = field.maxSelections || 4;
+                      workflowInputs[fieldKey] = sceneCharacterIds.slice(0, maxSelections).map(String);
+                      console.log(`[Board ${idx}] Using scene characters for ${nodeType}:`, sceneCharacterIds);
+                    } else if (message.character_id) {
+                      // Fallback to speaker character if no scene characters registered
+                      workflowInputs[fieldKey] = [String(message.character_id)];
+                      console.log(`[Board ${idx}] Falling back to speaker character for ${nodeType}:`, message.character_id);
+                    }
+                  }
+                  // Other field types can be added here as needed
+                });
+              });
+            } catch (error) {
+              console.warn(`[Board ${idx}] Warning: Could not get config for node type "${nodeType}":`, error);
+              // Continue processing other node types
             }
           });
 

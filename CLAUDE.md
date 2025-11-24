@@ -26,6 +26,92 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 
 ## 最近の主要な変更
 
+### 2025-11-24: 会話からスタジオ作成時のキャラクターシート設定を完全自動化（汎用的実装）
+
+**目的**: 会話からスタジオを作成する際、ワークフロー内の**すべてのキャラクターシート対応ノード**に自動的にキャラクターシートを反映させる。将来新しいノードタイプが追加されても自動対応できるようにする。
+
+**変更内容**:
+
+1. **動的なノードタイプ検出**
+   - `getNodeTypeConfig()` を使用して、各ノードタイプの設定を動的に取得
+   - ワークフロー内のすべてのノードをタイプごとに分類（`nodesByType` Map）
+   - ノードタイプの増加に自動対応
+
+2. **汎用的なフィールド設定処理**
+   - 各フィールドタイプに応じて自動的に値を設定：
+     - `characterSheets` タイプ → シーン登場キャラクターを自動設定（最大 `maxSelections`）
+     - `prompt` → シーンプロンプト（ノードタイプに応じて日本語/英語を優先）
+     - `model` → ノード設定またはデフォルト値
+     - `text` (ElevenLabs) → メッセージテキスト
+     - `voiceId` (ElevenLabs) → キャラクター音声ID
+
+3. **完全な拡張性**
+   - 新しいノードタイプを `getNodeTypeConfig()` に追加するだけで自動対応
+   - キャラクターシート入力を持つノード（Nanobana, Gemini, Seedream4など）すべてに適用
+   - ノードタイプ固有の処理は最小限（ElevenLabsのvoiceIdなど）
+
+**技術的詳細**:
+```typescript
+// Before: 各ノードタイプを個別に処理（保守性が低い）
+const elevenLabsNodes = workflowNodes.filter(...);
+const nanobanaNodes = workflowNodes.filter(...);
+const geminiNodes = workflowNodes.filter(...);
+elevenLabsNodes.forEach(...);
+nanobanaNodes.forEach(...);
+geminiNodes.forEach(...);
+
+// After: 動的に処理（新しいノードタイプに自動対応）
+const nodesByType = new Map<string, any[]>();
+workflowNodes.forEach((node) => {
+  const nodeType = node.data?.type || node.type;
+  nodesByType.set(nodeType, [...]);
+});
+
+nodesByType.forEach((nodes, nodeType) => {
+  const nodeConfig = getNodeTypeConfig(nodeType);
+  nodes.forEach((node) => {
+    nodeConfig.fields.forEach((field) => {
+      if (field.type === 'characterSheets') {
+        // 自動的にキャラクターシートを設定
+      }
+      // その他のフィールドタイプも自動処理
+    });
+  });
+});
+```
+
+**データフロー**:
+```
+会話メッセージ
+  ↓
+conversation_message_characters テーブル
+  ↓
+sceneCharacterIds を取得（最大4人）
+  ↓
+ワークフロー内のすべてのノードをスキャン
+  ↓
+getNodeTypeConfig() で各ノードタイプの設定を取得
+  ↓
+characterSheets タイプのフィールドを持つノードを自動検出
+  ↓
+すべての対応ノードに設定
+  ├─ Nanobana: `nanobana_selectedCharacterSheetIds_${nodeId}`
+  ├─ Gemini: `gemini_selectedCharacterSheetIds_${nodeId}`
+  ├─ Seedream4: `seedream4_selectedCharacterSheetIds_${nodeId}`
+  └─ 将来追加されるノード: 自動対応
+```
+
+**影響範囲**:
+- ✅ 新しいノードタイプを追加しても、`getNodeTypeConfig()` に定義するだけで自動対応
+- ✅ キャラクターシート入力を持つすべてのノード（Nanobana, Gemini, Seedream4など）に適用
+- ✅ ノードタイプ固有のロジック（プロンプトの優先順位など）も柔軟に設定可能
+- ✅ 保守性と拡張性が大幅に向上
+- ✅ 既存の会話→スタジオ作成フローとの完全な後方互換性を維持
+
+**詳細**: [/docs/conversation-to-studio-workflow.md](/docs/conversation-to-studio-workflow.md)
+
+---
+
 ### 2025-11-24: ノードセクションの再構成とワークフロー入力の統合
 
 **目的**: ノード実行結果の表示を「ノード」として再構成し、各ノードでワークフロー入力・ノード入力・実行結果をすべて確認できるようにする
