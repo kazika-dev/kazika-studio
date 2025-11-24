@@ -206,15 +206,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
 
       if (data.success) {
         // ステップデータをリフレッシュ
-        const updatedStepResponse = await fetch(`/api/studios/steps/${step.id}`);
-        const updatedStepData = await updatedStepResponse.json();
-
-        if (updatedStepData.success && updatedStepData.step) {
-          setDetailedStep(updatedStepData.step);
-          if (onUpdate) {
-            onUpdate(updatedStepData.step);
-          }
-        }
+        await fetchStepDetails();
       } else {
         console.error('Node execution failed:', data.error);
         alert(`ノード実行に失敗しました: ${data.error}`);
@@ -222,6 +214,31 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
     } catch (error) {
       console.error('Failed to execute node:', error);
       alert('ノード実行に失敗しました');
+    }
+  };
+
+  const handleNodeInputsEdit = async (nodeId: string, inputs: Record<string, any>) => {
+    try {
+      const response = await fetch(`/api/studios/steps/${step.id}/update-node-inputs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId, inputs }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // ステップデータをリフレッシュ
+        await fetchStepDetails();
+      } else {
+        console.error('Failed to update node inputs:', data.error);
+        alert(`入力の更新に失敗しました: ${data.error}`);
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Failed to update node inputs:', error);
+      alert('入力の更新に失敗しました');
+      throw error;
     }
   };
 
@@ -595,6 +612,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                           canExecute={nodeExecutableStates[nodeId]}
                           onExecute={handleExecuteNode}
                           stepId={step.id.toString()}
+                          onInputsEdit={handleNodeInputsEdit}
                         />
 
                         {/* 次のノードへの接続を表示 */}

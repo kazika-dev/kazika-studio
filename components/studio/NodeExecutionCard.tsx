@@ -26,8 +26,10 @@ import AudiotrackIcon from '@mui/icons-material/Audiotrack';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import InputIcon from '@mui/icons-material/Input';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
 
 import OutputDataDisplay from './OutputDataDisplay';
+import NodeInputEditDialog from './NodeInputEditDialog';
 
 interface Node {
   id: string;
@@ -49,6 +51,7 @@ interface NodeExecutionCardProps {
   canExecute?: boolean;  // 依存ノードが完了しているか
   onExecute?: (nodeId: string) => Promise<void>;  // 実行ハンドラー
   stepId?: string;  // ステップID
+  onInputsEdit?: (nodeId: string, inputs: Record<string, any>) => Promise<void>;  // 入力編集ハンドラー
 }
 
 // ノードタイプごとのアイコンを取得
@@ -106,9 +109,11 @@ export default function NodeExecutionCard({
   canExecute = false,
   onExecute,
   stepId,
+  onInputsEdit,
 }: NodeExecutionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const handleExecute = async () => {
     if (!onExecute || executing) return;
@@ -120,6 +125,17 @@ export default function NodeExecutionCard({
       console.error('Failed to execute node:', error);
     } finally {
       setExecuting(false);
+    }
+  };
+
+  const handleSaveInputs = async (inputs: Record<string, any>) => {
+    if (!onInputsEdit) return;
+
+    try {
+      await onInputsEdit(node.id, inputs);
+    } catch (error) {
+      console.error('Failed to save inputs:', error);
+      throw error;
     }
   };
 
@@ -223,9 +239,21 @@ export default function NodeExecutionCard({
           {/* 入力データ表示 */}
           {request && (
             <Box mb={2}>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                入力
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  入力
+                </Typography>
+                {onInputsEdit && (
+                  <Button
+                    size="small"
+                    startIcon={<EditIcon />}
+                    onClick={() => setEditDialogOpen(true)}
+                    variant="outlined"
+                  >
+                    編集
+                  </Button>
+                )}
+              </Box>
               <Box
                 sx={{
                   p: 1.5,
@@ -282,6 +310,16 @@ export default function NodeExecutionCard({
           )}
         </CardContent>
       </Collapse>
+
+      {/* 入力編集ダイアログ */}
+      <NodeInputEditDialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        onSave={handleSaveInputs}
+        nodeType={node.data.type}
+        nodeId={node.id}
+        currentInputs={request || {}}
+      />
     </Card>
   );
 }

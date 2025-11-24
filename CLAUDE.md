@@ -26,6 +26,67 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 
 ## 最近の主要な変更
 
+### 2025-11-24: ノード入力の表示・編集機能を追加
+
+**目的**: ワークフローステップ実行結果で各ノードの入力内容を表示し、編集可能にする
+
+**実装内容**:
+
+1. **NodeInputEditDialog コンポーネント** (`/components/studio/NodeInputEditDialog.tsx`)
+   - ノードタイプに応じた編集フォームを動的生成
+   - `getNodeTypeConfig()` から設定を取得して適切なフィールドを表示
+   - テキスト、セレクト、数値、その他のフィールドタイプに対応
+   - 編集不可フィールド（characterSheetSelector, imageUpload, outputSelector）の表示
+
+2. **NodeExecutionCard の拡張** (`/components/studio/NodeExecutionCard.tsx`)
+   - 入力セクションに「編集」ボタンを追加
+   - `onInputsEdit` プロップで編集ハンドラーを受け取る
+   - 編集ダイアログの統合と状態管理
+
+3. **入力更新API** (`/app/api/studios/steps/[id]/update-node-inputs/route.ts`)
+   - `PATCH /api/studios/steps/[id]/update-node-inputs` エンドポイント
+   - `metadata.execution_requests[nodeId]` に入力設定を保存
+   - 編集後はステップの `updated_at` を更新
+
+4. **WorkflowStepCard の拡張**
+   - `handleNodeInputsEdit()` ハンドラーを追加
+   - 編集後に `fetchStepDetails()` でデータを再取得して UI を更新
+   - NodeExecutionCard に `onInputsEdit` プロップを渡す
+
+**UI フロー**:
+```
+ノードカードを展開
+  ↓
+入力セクションの「編集」ボタンをクリック
+  ↓
+NodeInputEditDialog が開く
+  （ノードタイプに応じたフォームが表示される）
+  ↓
+フィールドを編集して「保存」
+  ↓
+PATCH /api/studios/steps/{stepId}/update-node-inputs
+  Body: { nodeId, inputs }
+  ↓
+metadata.execution_requests[nodeId] を更新
+  ↓
+ステップデータを再取得
+  ↓
+UI が自動更新され、編集内容が反映される
+```
+
+**技術的詳細**:
+- **動的フォーム生成**: `getNodeTypeConfig()` で定義されたフィールド設定から自動的にフォームを生成
+- **データ保存場所**: `step.metadata.execution_requests[nodeId]` に保存（実行時にこの値が使用される）
+- **編集後の反映**: `fetchStepDetails()` でステップ全体を再取得し、すべてのノードカードが最新の入力を表示
+
+**影響範囲**:
+- ✅ ノード入力の確認と編集がUI上で可能に
+- ✅ 編集後は即座に反映され、次回実行時に使用される
+- ✅ ノードタイプに応じた適切なフォームが自動生成される
+- ✅ 後方互換性を維持（既存のノードは編集ボタンが表示されない）
+
+---
+
 ### 2025-11-24: ワークフローステップでFinal Nodesのみを次のステップに渡す機能を実装（Phase 1完了）
 
 **目的**: ワークフローエディタで設定したノード接続（エッジ）情報を活用し、ステップ間で不要なデータ転送を削減する
