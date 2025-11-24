@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -12,6 +12,7 @@ import {
   CircularProgress,
   Collapse,
   Alert,
+  Divider,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -25,6 +26,10 @@ import ImageIcon from '@mui/icons-material/Image';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import AudiotrackIcon from '@mui/icons-material/Audiotrack';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+
+import NodeExecutionCard from './NodeExecutionCard';
+import { topologicalSort } from '@/lib/workflow/topologicalSort';
 
 interface WorkflowStep {
   id: number;
@@ -69,6 +74,9 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
   const [detailsLoaded, setDetailsLoaded] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailedStep, setDetailedStep] = useState<WorkflowStep>(step);
+  const [workflowNodes, setWorkflowNodes] = useState<any[]>([]);
+  const [workflowEdges, setWorkflowEdges] = useState<any[]>([]);
+  const [loadingWorkflow, setLoadingWorkflow] = useState(false);
 
   // stepプロパティが更新された時にdetailedStepも更新
   useEffect(() => {
@@ -106,6 +114,63 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
 
     loadDetails();
   }, [expanded, detailsLoaded, loadingDetails, step.id, onUpdate]);
+
+  // ワークフロー情報を取得
+  useEffect(() => {
+    const loadWorkflow = async () => {
+      if (expanded && step.workflow_id && !loadingWorkflow && workflowNodes.length === 0) {
+        setLoadingWorkflow(true);
+        try {
+          const response = await fetch(`/api/workflows/${step.workflow_id}`);
+          const data = await response.json();
+
+          if (data.workflow) {
+            let nodes = data.workflow.nodes;
+            let edges = data.workflow.edges;
+
+            // JSON文字列の場合はパース
+            if (typeof nodes === 'string') {
+              nodes = JSON.parse(nodes);
+            }
+            if (typeof edges === 'string') {
+              edges = JSON.parse(edges);
+            }
+
+            setWorkflowNodes(nodes || []);
+            setWorkflowEdges(edges || []);
+          }
+        } catch (error) {
+          console.error('Failed to load workflow:', error);
+        } finally {
+          setLoadingWorkflow(false);
+        }
+      }
+    };
+
+    loadWorkflow();
+  }, [expanded, step.workflow_id, loadingWorkflow, workflowNodes.length]);
+
+  // トポロジカルソートで実行順序を取得
+  const sortedNodeIds = useMemo(() => {
+    if (workflowNodes.length === 0) return [];
+    return topologicalSort(workflowNodes, workflowEdges);
+  }, [workflowNodes, workflowEdges]);
+
+  // ノードのステータスを判定
+  const getNodeStatus = (nodeId: string): 'pending' | 'running' | 'completed' | 'failed' => {
+    // 出力がある = 完了
+    if (detailedStep.output_data && detailedStep.output_data[nodeId]) {
+      return 'completed';
+    }
+
+    // ステップ全体が失敗している場合
+    if (step.execution_status === 'failed') {
+      return 'failed';
+    }
+
+    // それ以外は待機中
+    return 'pending';
+  };
 
   const getStatusIcon = () => {
     switch (step.execution_status) {
@@ -439,8 +504,63 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                 </Box>
               )}
 
-              {/* 出力データ */}
-              {!loadingDetails && hasOutput && (
+              {/* ノード実行結果セクション */}
+              {!loadingDetails && sortedNodeIds.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <Typography variant="h6" fontWeight={600}>
+                      ノード実行結果
+                    </Typography>
+                    <Chip
+                      label={`${sortedNodeIds.length}個のノード`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Box>
+
+                  <Divider sx={{ mb: 2 }} />
+
+                  {sortedNodeIds.map((nodeId, index) => {
+                    const node = workflowNodes.find((n) => n.id === nodeId);
+                    if (!node) return null;
+
+                    const output = detailedStep.output_data?.[nodeId];
+                    const request = detailedStep.metadata?.execution_requests?.[nodeId];
+                    const nodeStatus = getNodeStatus(nodeId);
+
+                    return (
+                      <Box key={nodeId}>
+                        <NodeExecutionCard
+                          node={node}
+                          output={output}
+                          request={request}
+                          status={nodeStatus}
+                          error={
+                            nodeStatus === 'failed' ? step.error_message || undefined : undefined
+                          }
+                        />
+
+                        {/* 次のノードへの接続を表示 */}
+                        {index < sortedNodeIds.length - 1 && (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'center',
+                              my: 1,
+                            }}
+                          >
+                            <ArrowDownwardIcon color="action" fontSize="small" />
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
+
+              {/* 出力データ（従来の表示） */}
+              {!loadingDetails && hasOutput && sortedNodeIds.length === 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     出力

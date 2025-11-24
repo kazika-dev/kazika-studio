@@ -21,8 +21,132 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 - **[ImageEditor共通コンポーネント化](/docs/image-editor-common-component.md)** - ImageEditorを `/components/outputs` から `/components/common` に移動し、プロジェクト全体で再利用可能に
 - **[メッセージごとのシーンキャラクターシート設定機能](/docs/message-scene-character-sheets.md)** - 会話メッセージのシーンプロンプトごとに登場キャラクターのキャラクターシートを設定
 - **[Workflow Outputs スキーマ修正](/docs/workflow-outputs-schema-fix.md)** - 本番環境と開発環境のスキーマ差異を解消し、後方互換性を維持
+- **[ワークフローステップとノード接続の統合計画](/docs/workflow-step-node-integration.md)** - ワークフローのノード接続情報をステップ実行に活用する移行計画
+- **[ワークフローステップのノード単位実行・結果表示機能](/docs/workflow-step-node-execution.md)** - ステップ内で各ノードを個別に実行し、結果を確認できる機能の設計
 
 ## 最近の主要な変更
+
+### 2025-11-24: ワークフローステップでFinal Nodesのみを次のステップに渡す機能を実装（Phase 1完了）
+
+**目的**: ワークフローエディタで設定したノード接続（エッジ）情報を活用し、ステップ間で不要なデータ転送を削減する
+
+**問題**:
+- ワークフロー内ではエッジ情報を使って正しくノードを接続していた
+- しかし、ステップ実行時は前のステップの**全ノード出力**（中間ノード含む）を次のステップに渡していた
+- 結果: TextInputノードのプロンプトなど、不要なデータも転送される
+
+**実装内容**:
+
+1. **Final Nodes 抽出関数を追加** (`/app/api/studios/steps/[id]/execute/route.ts:497-514`)
+   - 出力エッジがないノード（Final Nodes）を特定する関数
+   - エッジのソースになっていないノードを抽出
+
+2. **getPreviousStepOutputs() を完全リニューアル** (516-600行)
+   - 前のステップのワークフロー情報（nodes, edges）を取得
+   - `getFinalNodeIds()` で Final Nodes を特定
+   - **Final Nodes の出力のみ**を `previousOutputs` に追加
+   - 中間ノード（TextInput など）の出力を除外
+   - ステップIDを含めたキー（`${stepId}_${nodeId}`）で重複を防止
+
+3. **buildInputs() にメタデータ追加** (931-1001行)
+   - `previousImageMetadata`, `previousVideoMetadata` などのマップを作成
+   - ノードID → データ のマッピングを保存してトレーサビリティを向上
+
+4. **詳細なログ出力**
+   - `✓ Final Node nanobana-1: has image` - 次のステップに渡される
+   - `✗ Intermediate Node textinput-1: skipped` - 除外される
+
+**技術的詳細**:
+```typescript
+// Before: 全ノード出力を無条件に追加
+Object.assign(previousOutputs, step.output_data);
+
+// After: Final Nodes のみを追加
+const finalNodeIds = getFinalNodeIds(nodes, edges);
+if (finalNodeIds.includes(nodeId)) {
+  previousOutputs[`${step.id}_${nodeId}`] = output;
+}
+```
+
+**影響範囲**:
+- ✅ ワークフローのノード接続がステップ間で正しく反映される
+- ✅ 不要なデータ転送を削減（中間ノード出力を除外）
+- ✅ デバッグとトレーサビリティが大幅に向上
+- ✅ 既存のステップ実行との完全な後方互換性を維持
+
+**詳細**: [/docs/workflow-step-node-integration.md](/docs/workflow-step-node-integration.md) の「実装履歴」セクション
+
+**次のステップ**: Phase 2（ユーザーが入力ノードを明示的に選択できるUI）の実装
+
+---
+
+### 2025-11-24: ワークフローステップのノード単位実行・結果表示機能を実装（Phase 1完了）
+
+**目的**: ステップ内で各ノードの実行結果を個別に確認できるようにし、ノード接続を視覚化する
+
+**実装内容**:
+
+1. **NodeExecutionCard コンポーネント** (`/components/studio/NodeExecutionCard.tsx`)
+   - ノードごとの実行結果を表示するカード
+   - ノードタイプ別のアイコン表示（Gemini, Nanobana, ElevenLabsなど）
+   - ステータスチップ（完了/実行中/待機中/失敗）
+   - 展開可能な入力・出力・エラー表示
+
+2. **OutputDataDisplay コンポーネント** (`/components/studio/OutputDataDisplay.tsx`)
+   - 出力データタイプに応じた適切な表示
+   - 画像 → サムネイル + クリックで拡大ダイアログ
+   - 動画/音声 → プレーヤーコントロール
+   - テキスト → プレーンテキスト表示
+
+3. **トポロジカルソート** (`/lib/workflow/topologicalSort.ts`)
+   - Kahnアルゴリズムによる実行順序の計算
+   - 循環参照の検出とフォールバック
+
+4. **WorkflowStepCard の拡張**
+   - ワークフロー情報（nodes, edges）の動的取得
+   - トポロジカルソート順でノードを表示
+   - ノードステータスの判定ロジック
+   - 「ノード実行結果」セクションの追加
+
+**UI構成**:
+```
+WorkflowStepCard（展開時）
+  └─ ノード実行結果
+      ├─ NodeExecutionCard (TextInput-1) ✓ 完了
+      ├─ ↓
+      ├─ NodeExecutionCard (Gemini-1) ✓ 完了
+      ├─ ↓
+      └─ NodeExecutionCard (Nanobana-1) ⏸ 待機中
+```
+
+**データフロー**:
+```
+ステップカード展開
+  ↓
+GET /api/workflows/{workflow_id}
+  → nodes, edges を取得
+  ↓
+topologicalSort(nodes, edges)
+  → 実行順序を計算
+  ↓
+各ノードの状態判定
+  output_data[nodeId] で完了/待機中を判定
+  ↓
+NodeExecutionCard を順番に表示
+```
+
+**効果**:
+- ✅ ワークフローのノード接続が視覚的に確認できる
+- ✅ 各ノードの入力・出力・ステータスを個別に表示
+- ✅ トポロジカルソート順で依存関係が明確
+- ✅ 画像・動画・音声の出力を適切に表示
+- ✅ 既存の「出力データ」セクションも後方互換性を維持
+
+**詳細**: [/docs/workflow-step-node-execution.md](/docs/workflow-step-node-execution.md) の「実装履歴」セクション
+
+**次のステップ**: Phase 2（ノード単位の実行制御）の実装
+
+---
 
 ### 2025-11-23: workflow_outputs テーブルのスキーマ差異を解消
 

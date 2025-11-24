@@ -495,7 +495,26 @@ export async function POST(
 }
 
 /**
- * 前のステップの出力を取得
+ * ワークフローの Final Nodes（出力エッジがないノード）を特定
+ */
+function getFinalNodeIds(nodes: any[], edges: any[]): string[] {
+  if (!nodes || nodes.length === 0) {
+    return [];
+  }
+
+  // エッジのソースになっているノードIDを収集
+  const sourceNodeIds = new Set(edges.map((e: any) => e.source));
+
+  // ソースになっていないノード = Final Nodes
+  const finalNodeIds = nodes
+    .map((n: any) => n.id)
+    .filter((id: string) => !sourceNodeIds.has(id));
+
+  return finalNodeIds;
+}
+
+/**
+ * 前のステップの出力を取得（Final Nodesのみ）
  */
 async function getPreviousStepOutputs(currentStep: any) {
   // 前のステップの出力データを取得するため、詳細を含める
@@ -505,30 +524,78 @@ async function getPreviousStepOutputs(currentStep: any) {
   console.log(`Total steps in board: ${allSteps.length}`);
   console.log(`Current step order: ${currentStep.step_order}`);
 
-  // 現在のステップより前のステップの出力を集約
+  // 現在のステップより前のステップの出力を集約（Final Nodesのみ）
   const previousOutputs: any = {};
 
   for (const step of allSteps) {
     // 現在のステップより前で、完了済みのステップのみ
     if (step.step_order < currentStep.step_order && step.execution_status === 'completed') {
       console.log(`Found previous completed step ${step.id} (order: ${step.step_order})`);
-      // 出力データをマージ
+
+      // ワークフロー情報を取得してFinal Nodesを特定
+      const workflow = await getWorkflowById(step.workflow_id);
+      if (!workflow) {
+        console.log(`Warning: Workflow ${step.workflow_id} not found for step ${step.id}`);
+        continue;
+      }
+
+      let nodes = workflow.nodes;
+      let edges = workflow.edges;
+
+      // JSON文字列の場合はパース
+      if (typeof nodes === 'string') {
+        try {
+          nodes = JSON.parse(nodes);
+        } catch (e) {
+          console.error(`Failed to parse nodes for workflow ${step.workflow_id}:`, e);
+          continue;
+        }
+      }
+      if (typeof edges === 'string') {
+        try {
+          edges = JSON.parse(edges);
+        } catch (e) {
+          console.error(`Failed to parse edges for workflow ${step.workflow_id}:`, e);
+          continue;
+        }
+      }
+
+      nodes = nodes || [];
+      edges = edges || [];
+
+      // Final Nodesを特定
+      const finalNodeIds = getFinalNodeIds(nodes, edges);
+      console.log(`Step ${step.id} workflow has ${nodes.length} nodes, ${edges.length} edges`);
+      console.log(`Final nodes (no outgoing edges): [${finalNodeIds.join(', ')}]`);
+
+      // Final Nodesの出力のみを抽出
       if (step.output_data) {
         console.log(`Step ${step.id} has output_data with ${Object.keys(step.output_data).length} nodes`);
         Object.keys(step.output_data).forEach(nodeId => {
           const output = step.output_data[nodeId];
-          if (output.imageData || output.storagePath || output.imageUrl) {
-            console.log(`  - Node ${nodeId}: has image (imageData: ${!!output.imageData}, storagePath: ${output.storagePath}, imageUrl: ${output.imageUrl})`);
+
+          // Final Nodeの出力のみを追加
+          if (finalNodeIds.includes(nodeId)) {
+            // ステップIDを含めることで、複数ステップの同じノードIDを区別
+            const outputKey = `${step.id}_${nodeId}`;
+            previousOutputs[outputKey] = output;
+
+            if (output.imageData || output.storagePath || output.imageUrl) {
+              console.log(`  ✓ Final Node ${nodeId}: has image (imageData: ${!!output.imageData}, storagePath: ${output.storagePath}, imageUrl: ${output.imageUrl})`);
+            } else {
+              console.log(`  ✓ Final Node ${nodeId}: output added`);
+            }
+          } else {
+            console.log(`  ✗ Intermediate Node ${nodeId}: skipped (not a final node)`);
           }
         });
-        Object.assign(previousOutputs, step.output_data);
       } else {
         console.log(`Step ${step.id} has no output_data`);
       }
     }
   }
 
-  console.log(`Total previous outputs nodes: ${Object.keys(previousOutputs).length}`);
+  console.log(`Total previous outputs (final nodes only): ${Object.keys(previousOutputs).length}`);
   return previousOutputs;
 }
 
@@ -864,6 +931,13 @@ function buildInputs(step: any, previousOutputs: any, board: any) {
   // 前のステップの出力から画像、動画、音声を探す
   if (config.usePreviousImage || config.usePreviousVideo || config.usePreviousAudio || config.usePreviousText) {
     console.log('Using previous step outputs');
+
+    // メタデータ用のマップを初期化
+    const previousImageMetadata: Record<string, any> = {};
+    const previousVideoMetadata: Record<string, any> = {};
+    const previousAudioMetadata: Record<string, any> = {};
+    const previousTextMetadata: Record<string, any> = {};
+
     // previousOutputsの全ノード出力を走査
     for (const [nodeId, output] of Object.entries(previousOutputs)) {
       const nodeOutput = output as any;
@@ -872,12 +946,18 @@ function buildInputs(step: any, previousOutputs: any, board: any) {
       if (config.usePreviousImage) {
         // imageDataとstoragePathの両方を保持
         if (nodeOutput.imageData || nodeOutput.storagePath) {
-          inputs.previousImages = inputs.previousImages || [];
-          inputs.previousImages.push({
+          const imageData = {
             imageData: nodeOutput.imageData,
             storagePath: nodeOutput.storagePath,
             imageUrl: nodeOutput.imageUrl,
-          });
+          };
+
+          inputs.previousImages = inputs.previousImages || [];
+          inputs.previousImages.push(imageData);
+
+          // メタデータに保存（ノードIDをキーとして）
+          previousImageMetadata[nodeId] = imageData;
+
           console.log(`Added previous image from node ${nodeId} (storagePath: ${nodeOutput.storagePath})`);
         }
       }
@@ -885,20 +965,38 @@ function buildInputs(step: any, previousOutputs: any, board: any) {
       // 動画を使用
       if (config.usePreviousVideo && nodeOutput.videoUrl) {
         inputs.videoUrl = nodeOutput.videoUrl;
+        previousVideoMetadata[nodeId] = { videoUrl: nodeOutput.videoUrl };
         console.log(`Added previous video from node ${nodeId}`);
       }
 
       // 音声を使用
       if (config.usePreviousAudio && nodeOutput.audioData) {
         inputs.audioData = nodeOutput.audioData;
+        previousAudioMetadata[nodeId] = { audioData: nodeOutput.audioData };
         console.log(`Added previous audio from node ${nodeId}`);
       }
 
       // テキストを使用
       if (config.usePreviousText && nodeOutput.text) {
         inputs.text = nodeOutput.text;
+        previousTextMetadata[nodeId] = { text: nodeOutput.text };
         console.log(`Added previous text from node ${nodeId}`);
       }
+    }
+
+    // メタデータを inputs に追加（デバッグとトレーサビリティ向上）
+    if (Object.keys(previousImageMetadata).length > 0) {
+      inputs.previousImageMetadata = previousImageMetadata;
+      console.log(`Added metadata for ${Object.keys(previousImageMetadata).length} image nodes`);
+    }
+    if (Object.keys(previousVideoMetadata).length > 0) {
+      inputs.previousVideoMetadata = previousVideoMetadata;
+    }
+    if (Object.keys(previousAudioMetadata).length > 0) {
+      inputs.previousAudioMetadata = previousAudioMetadata;
+    }
+    if (Object.keys(previousTextMetadata).length > 0) {
+      inputs.previousTextMetadata = previousTextMetadata;
     }
   }
 
