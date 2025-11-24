@@ -76,11 +76,9 @@ if (finalNodeIds.includes(nodeId)) {
 
 **詳細**: [/docs/workflow-step-node-integration.md](/docs/workflow-step-node-integration.md) の「実装履歴」セクション
 
-**次のステップ**: Phase 2（ユーザーが入力ノードを明示的に選択できるUI）の実装
-
 ---
 
-### 2025-11-24: ワークフローステップのノード単位実行・結果表示機能を実装（Phase 1完了）
+### 2025-11-24: ワークフローステップのノード単位実行・結果表示機能を実装（Phase 1 & 2 完了）
 
 **目的**: ステップ内で各ノードの実行結果を個別に確認できるようにし、ノード接続を視覚化する
 
@@ -135,16 +133,70 @@ topologicalSort(nodes, edges)
 NodeExecutionCard を順番に表示
 ```
 
+5. **ノード単位実行API** (`/app/api/studios/steps/[id]/execute-node/route.ts`)
+   - 特定のノードのみを実行するAPIエンドポイント
+   - エッジベースの入力収集（`collectNodeInputs()` 関数）
+   - 実行結果を部分更新（既存の出力データを保持）
+
+6. **ノード実行ロジック** (`/lib/workflow/nodeExecutor.ts`)
+   - 各ノードタイプの実行ロジックを抽出
+   - 全7種類のノードタイプに対応（textInput, imageInput, gemini, nanobana, elevenlabs, higgsfield, seedream4）
+
+7. **依存関係チェックと実行制御** (WorkflowStepCardの拡張)
+   - `nodeExecutableStates` で各ノードの実行可否を判定
+   - 依存ノードが完了している場合のみ実行ボタンを有効化
+   - `handleExecuteNode()` で個別ノード実行とUI更新
+
+**UI構成（Phase 2対応後）**:
+```
+WorkflowStepCard（展開時）
+  └─ ノード実行結果
+      ├─ NodeExecutionCard (TextInput-1) ✓ 完了
+      ├─ ↓
+      ├─ NodeExecutionCard (Gemini-1) [実行ボタン] ← 実行可能
+      ├─ ↓
+      └─ NodeExecutionCard (Nanobana-1) ⏸ 待機中（Gemini完了待ち）
+```
+
+**データフロー**:
+```
+ステップカード展開
+  ↓
+GET /api/workflows/{workflow_id}
+  → nodes, edges を取得
+  ↓
+topologicalSort(nodes, edges)
+  → 実行順序を計算
+  ↓
+各ノードの状態判定と実行可否チェック
+  output_data[nodeId] で完了/待機中を判定
+  依存ノードの完了状態で実行可否を判定
+  ↓
+NodeExecutionCard を順番に表示
+  実行可能なノードには実行ボタンを表示
+  ↓
+ユーザーが実行ボタンをクリック
+  ↓
+POST /api/studios/steps/{stepId}/execute-node
+  → ノードを実行
+  → 結果を保存
+  ↓
+UI自動更新
+  → 次のノードの実行ボタンが有効化
+```
+
 **効果**:
 - ✅ ワークフローのノード接続が視覚的に確認できる
 - ✅ 各ノードの入力・出力・ステータスを個別に表示
 - ✅ トポロジカルソート順で依存関係が明確
 - ✅ 画像・動画・音声の出力を適切に表示
 - ✅ 既存の「出力データ」セクションも後方互換性を維持
+- ✅ **ノード単位で実行ボタンが表示され、個別に実行可能**
+- ✅ **依存関係を自動チェック（依存ノードが未完了の場合は実行不可）**
+- ✅ **実行中はローディング表示、完了後は自動的に次のノードが実行可能に**
+- ✅ **エッジベースの入力収集で正確なデータフローを実現**
 
-**詳細**: [/docs/workflow-step-node-execution.md](/docs/workflow-step-node-execution.md) の「実装履歴」セクション
-
-**次のステップ**: Phase 2（ノード単位の実行制御）の実装
+**詳細**: [/docs/workflow-step-node-execution.md](/docs/workflow-step-node-execution.md) - Phase 1とPhase 2の完全な実装履歴
 
 ---
 

@@ -8,6 +8,7 @@ import {
   CardContent,
   Collapse,
   IconButton,
+  Button,
   Chip,
   Typography,
   Avatar,
@@ -24,6 +25,7 @@ import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import AudiotrackIcon from '@mui/icons-material/Audiotrack';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import InputIcon from '@mui/icons-material/Input';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 import OutputDataDisplay from './OutputDataDisplay';
 
@@ -44,6 +46,9 @@ interface NodeExecutionCardProps {
   request?: any;
   status: 'pending' | 'running' | 'completed' | 'failed';
   error?: string;
+  canExecute?: boolean;  // 依存ノードが完了しているか
+  onExecute?: (nodeId: string) => Promise<void>;  // 実行ハンドラー
+  stepId?: string;  // ステップID
 }
 
 // ノードタイプごとのアイコンを取得
@@ -98,8 +103,25 @@ export default function NodeExecutionCard({
   request,
   status,
   error,
+  canExecute = false,
+  onExecute,
+  stepId,
 }: NodeExecutionCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [executing, setExecuting] = useState(false);
+
+  const handleExecute = async () => {
+    if (!onExecute || executing) return;
+
+    setExecuting(true);
+    try {
+      await onExecute(node.id);
+    } catch (error) {
+      console.error('Failed to execute node:', error);
+    } finally {
+      setExecuting(false);
+    }
+  };
 
   const getStatusIcon = () => {
     switch (status) {
@@ -163,6 +185,22 @@ export default function NodeExecutionCard({
         subheader={getNodeTypeName(node.data.type)}
         action={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* 実行ボタン */}
+            {status === 'pending' && canExecute && onExecute && (
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                startIcon={executing ? <CircularProgress size={16} color="inherit" /> : <PlayArrowIcon />}
+                onClick={handleExecute}
+                disabled={executing}
+                sx={{ minWidth: 80 }}
+              >
+                {executing ? '実行中' : '実行'}
+              </Button>
+            )}
+
+            {/* ステータスチップ */}
             <Chip
               icon={getStatusIcon()}
               label={getStatusLabel()}
@@ -170,6 +208,8 @@ export default function NodeExecutionCard({
               size="small"
               variant="outlined"
             />
+
+            {/* 展開ボタン */}
             <IconButton size="small" onClick={() => setExpanded(!expanded)}>
               {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
             </IconButton>

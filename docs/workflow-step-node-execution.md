@@ -735,4 +735,258 @@ const getNodeStatus = (nodeId: string) => {
 - ✅ 画像・動画・音声の出力を適切に表示
 - ✅ 既存の「出力データ」セクションも後方互換性を維持
 
-**次のステップ**: Phase 2（ノード単位の実行制御）の実装に進むことができます。
+---
+
+## Phase 2: ノード単位の実行制御（実装完了）
+
+**実装日**: 2025-11-24
+
+### 実装内容
+
+#### 1. ノード単位実行API (`/app/api/studios/steps/[id]/execute-node/route.ts`)
+
+特定のステップ内の特定のノードのみを実行するAPIエンドポイントを作成しました。
+
+**主要機能**:
+- ノードIDを指定して個別に実行
+- エッジベースの入力収集（`collectNodeInputs()` 関数）
+- 実行結果を `step.output_data[nodeId]` に部分更新
+- 実行リクエストを `step.metadata.execution_requests[nodeId]` に保存
+- 実行時間を `step.metadata.node_execution_times[nodeId]` に記録
+
+**`collectNodeInputs()` 関数**:
+```typescript
+function collectNodeInputs(
+  nodeId: string,
+  edges: any[],
+  outputData: Record<string, any>
+): any {
+  const inputs: any = {};
+
+  // このノードへの入力エッジを取得
+  const incomingEdges = edges.filter((e: any) => e.target === nodeId);
+
+  for (const edge of incomingEdges) {
+    const sourceNodeId = edge.source;
+    const sourceOutput = outputData[sourceNodeId];
+
+    if (!sourceOutput) continue;
+
+    // sourceHandle に応じて入力を分類
+    const sourceHandle = edge.sourceHandle;
+
+    if (sourceHandle === 'image' || sourceOutput.imageData || sourceOutput.imageUrl) {
+      inputs.previousImages = inputs.previousImages || [];
+      inputs.previousImages.push({
+        imageData: sourceOutput.imageData,
+        imageUrl: sourceOutput.imageUrl,
+        storagePath: sourceOutput.storagePath,
+      });
+    } else if (sourceHandle === 'prompt' || sourceOutput.text || sourceOutput.prompt) {
+      const promptText = sourceOutput.text || sourceOutput.prompt || sourceOutput.response;
+      if (!inputs.prompt) {
+        inputs.prompt = promptText;
+      } else {
+        inputs.prompt += '\n' + promptText;
+      }
+    }
+    // video, audio も同様に処理
+  }
+
+  return inputs;
+}
+```
+
+#### 2. ノード実行ロジック (`/lib/workflow/nodeExecutor.ts`)
+
+各ノードタイプの実行ロジックを `/lib/workflow/executor.ts` から抽出し、単一ノード実行に対応しました。
+
+**対応ノードタイプ**:
+- `textInput` - テキスト入力ノード
+- `imageInput` - 画像入力ノード
+- `gemini` - Gemini AIノード
+- `nanobana` - Nanobana画像生成ノード
+- `elevenlabs` - ElevenLabs音声生成ノード
+- `higgsfield` - Higgsfield動画生成ノード
+- `seedream4` - Seedream4動画生成ノード
+
+**実行結果インターフェース**:
+```typescript
+interface NodeExecutionResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  requestBody?: any;
+}
+```
+
+#### 3. 実行ボタンとUI更新 (`NodeExecutionCard.tsx`)
+
+NodeExecutionCardコンポーネントに実行ボタンとローディング状態を追加しました。
+
+**追加したプロップス**:
+```typescript
+interface NodeExecutionCardProps {
+  node: Node;
+  output?: any;
+  request?: any;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  error?: string;
+  canExecute?: boolean;  // 依存ノードが完了しているか
+  onExecute?: (nodeId: string) => Promise<void>;  // 実行ハンドラー
+  stepId?: string;  // ステップID
+}
+```
+
+**実行ボタン**:
+```typescript
+{status === 'pending' && canExecute && onExecute && (
+  <Button
+    size="small"
+    variant="contained"
+    color="primary"
+    startIcon={executing ? <CircularProgress size={16} color="inherit" /> : <PlayArrowIcon />}
+    onClick={handleExecute}
+    disabled={executing}
+    sx={{ minWidth: 80 }}
+  >
+    {executing ? '実行中' : '実行'}
+  </Button>
+)}
+```
+
+#### 4. 依存関係チェック (`WorkflowStepCard.tsx`)
+
+各ノードの実行可否を判定する `nodeExecutableStates` を追加しました。
+
+**依存関係チェックロジック**:
+```typescript
+const nodeExecutableStates = useMemo(() => {
+  const states: Record<string, boolean> = {};
+
+  for (const nodeId of sortedNodeIds) {
+    // このノードへの入力エッジを取得
+    const dependencies = workflowEdges
+      .filter((e) => e.target === nodeId)
+      .map((e) => e.source);
+
+    // すべての依存ノードが完了しているかチェック
+    const allDependenciesCompleted = dependencies.every(
+      (depId) => detailedStep.output_data?.[depId]
+    );
+
+    states[nodeId] = allDependenciesCompleted;
+  }
+
+  return states;
+}, [sortedNodeIds, workflowEdges, detailedStep.output_data]);
+```
+
+**実行ハンドラー**:
+```typescript
+const handleExecuteNode = async (nodeId: string) => {
+  try {
+    const response = await fetch(`/api/studios/steps/${step.id}/execute-node`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodeId }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      console.error('Node execution failed:', data.error);
+      return;
+    }
+
+    console.log('Node execution succeeded:', data);
+
+    // ステップ詳細を再取得して表示を更新
+    await fetchStepDetails();
+  } catch (error) {
+    console.error('Error executing node:', error);
+  }
+};
+```
+
+**NodeExecutionCardに渡すプロップス**:
+```typescript
+<NodeExecutionCard
+  node={node}
+  output={output}
+  request={request}
+  status={nodeStatus}
+  error={nodeStatus === 'failed' ? step.error_message || undefined : undefined}
+  canExecute={nodeExecutableStates[nodeId]}
+  onExecute={handleExecuteNode}
+  stepId={step.id.toString()}
+/>
+```
+
+### データフロー
+
+```
+ユーザーが「実行」ボタンをクリック
+  ↓
+1. handleExecuteNode(nodeId) が呼び出される
+  ↓
+2. POST /api/studios/steps/{stepId}/execute-node
+   Body: { nodeId: "nanobana-1" }
+  ↓
+3. API側の処理:
+   a. ステップ情報を取得
+   b. ワークフロー情報（nodes, edges）を取得
+   c. collectNodeInputs() で依存ノードの出力を収集
+   d. executeNode() でノードを実行
+   e. 結果を step.output_data[nodeId] に保存
+   f. メタデータ（request, execution_time）を保存
+  ↓
+4. 成功レスポンス:
+   {
+     success: true,
+     nodeId: "nanobana-1",
+     output: { imageUrl: "...", storagePath: "..." },
+     executionTime: { start: "...", end: "..." }
+   }
+  ↓
+5. fetchStepDetails() でステップ情報を再取得
+  ↓
+6. UI更新:
+   - ノードステータスが 'pending' → 'completed' に変化
+   - 出力データが表示される
+   - 次のノードの実行ボタンが有効化される
+```
+
+### 効果
+
+- ✅ ノード単位で実行ボタンが表示される
+- ✅ 依存関係を自動チェック（依存ノードが未完了の場合は実行不可）
+- ✅ 実行中はローディング表示
+- ✅ 実行後は自動的に結果が表示される
+- ✅ 次のノードの実行ボタンが自動的に有効化される
+- ✅ エッジベースの入力収集で正確なデータフローを実現
+- ✅ 部分更新により既存の出力データを保持
+
+### 使用例
+
+**ワークフロー構成**: TextInput → Gemini → Nanobana
+
+1. **初期状態**:
+   - TextInput: 完了済み（入力データあり）
+   - Gemini: 実行可能（依存ノードが完了）
+   - Nanobana: 実行不可（Geminiが未完了）
+
+2. **Geminiを実行**:
+   - ユーザーが「実行」ボタンをクリック
+   - TextInputの出力（prompt）を使用してGemini APIを呼び出し
+   - 生成されたテキストを `output_data["gemini-1"]` に保存
+   - Geminiのステータスが「完了」に変化
+
+3. **Nanobanaが実行可能に**:
+   - Geminiが完了したため、Nanobanaの実行ボタンが有効化
+   - ユーザーが「実行」ボタンをクリック
+   - Geminiの出力（prompt）を使用してNanobana APIを呼び出し
+   - 生成された画像を `output_data["nanobana-1"]` に保存
+   - Nanobanaのステータスが「完了」に変化
+
+**実装完了**: Phase 2のノード単位実行制御機能が完全に実装され、動作可能な状態になりました。

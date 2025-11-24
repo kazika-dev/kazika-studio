@@ -172,6 +172,59 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
     return 'pending';
   };
 
+  // ノードの実行可能状態を計算（依存関係チェック）
+  const nodeExecutableStates = useMemo(() => {
+    const states: Record<string, boolean> = {};
+
+    for (const nodeId of sortedNodeIds) {
+      // 依存ノード（入力エッジのソース）を取得
+      const dependencies = workflowEdges
+        .filter((e) => e.target === nodeId)
+        .map((e) => e.source);
+
+      // すべての依存ノードが完了しているか
+      const allDependenciesCompleted = dependencies.every(
+        (depId) => detailedStep.output_data?.[depId]
+      );
+
+      states[nodeId] = allDependenciesCompleted;
+    }
+
+    return states;
+  }, [sortedNodeIds, workflowEdges, detailedStep.output_data]);
+
+  // ノード実行ハンドラー
+  const handleExecuteNode = async (nodeId: string) => {
+    try {
+      const response = await fetch(`/api/studios/steps/${step.id}/execute-node`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // ステップデータをリフレッシュ
+        const updatedStepResponse = await fetch(`/api/studios/steps/${step.id}`);
+        const updatedStepData = await updatedStepResponse.json();
+
+        if (updatedStepData.success && updatedStepData.step) {
+          setDetailedStep(updatedStepData.step);
+          if (onUpdate) {
+            onUpdate(updatedStepData.step);
+          }
+        }
+      } else {
+        console.error('Node execution failed:', data.error);
+        alert(`ノード実行に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to execute node:', error);
+      alert('ノード実行に失敗しました');
+    }
+  };
+
   const getStatusIcon = () => {
     switch (step.execution_status) {
       case 'completed':
@@ -539,6 +592,9 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                           error={
                             nodeStatus === 'failed' ? step.error_message || undefined : undefined
                           }
+                          canExecute={nodeExecutableStates[nodeId]}
+                          onExecute={handleExecuteNode}
+                          stepId={step.id.toString()}
                         />
 
                         {/* 次のノードへの接続を表示 */}
