@@ -84,10 +84,15 @@ function executeTextInputNode(node: any, config: any): NodeExecutionResult {
 function executeImageInputNode(node: any, config: any): NodeExecutionResult {
   const imageData = config.imageData;
 
+  // 画像がない場合も成功として扱う（空の出力）
   if (!imageData) {
     return {
-      success: false,
-      error: 'No image data provided',
+      success: true,
+      output: {
+        imageData: null,
+        storagePath: null,
+      },
+      requestBody: { imageData: null },
     };
   }
 
