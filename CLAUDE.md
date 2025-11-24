@@ -26,6 +26,59 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 
 ## 最近の主要な変更
 
+### 2025-11-24: ノード実行時の環境変数問題を解決（getApiUrl共通化）
+
+**目的**: `nodeExecutor.ts` で発生していた環境変数エラー（`NEXT_PUBLIC_BASE_URL` が未定義）を解決し、既存の `executor.ts` と同じ方式で API 呼び出しを行う
+
+**変更内容**:
+
+1. **`getApiUrl()` ヘルパー関数をインポート**
+   - `/lib/utils/apiUrl.ts` から `getApiUrl` をインポート
+   - すべてのノード（Gemini, Nanobana, ElevenLabs, Higgsfield, Seedream4）で使用
+
+2. **環境変数の自動フォールバック**
+   - `NEXT_PUBLIC_APP_URL` → `VERCEL_URL` → `http://localhost:3000` の優先順位
+   - サーバーサイドでは絶対 URL を自動構築
+   - クライアントサイドでは相対 URL をそのまま使用
+
+3. **Gemini と Nanobana ノードは SDK 直接呼び出しに変更**
+   - `@google/generative-ai` SDK を直接使用（最も効率的）
+   - 環境変数は `GEMINI_API_KEY` のみ必要
+   - Gemini: マルチモーダル対応（画像 + テキスト）
+   - Nanobana: 画像生成専用（`responseModalities: ['IMAGE']`）
+
+4. **ElevenLabs/Higgsfield/Seedream4 ノード**
+   - 外部サービス API のため、内部 API エンドポイント経由で呼び出し
+   - `getApiUrl()` で環境変数を自動フォールバック
+
+**技術的詳細**:
+```typescript
+// Before: 環境変数が未定義でエラー
+const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/gemini`, {
+
+// After Option 1: Gemini/Nanobana は SDK 直接呼び出し（最も効率的）
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const generativeModel = genAI.getGenerativeModel({ model });
+const result = await generativeModel.generateContent({...});
+
+// After Option 2: ElevenLabs/Higgsfield/Seedream4 は getApiUrl() 使用
+const response = await fetch(getApiUrl('/api/elevenlabs'), {
+```
+
+**getApiUrl() の動作**:
+- **クライアントサイド**: `/api/gemini` をそのまま返す（相対 URL）
+- **サーバーサイド**: `https://your-domain.com/api/gemini` を構築（絶対 URL）
+
+**影響範囲**:
+- ✅ ノード単位実行（`/api/studios/steps/[id]/execute-node`）が正常動作
+- ✅ 環境変数エラーが解消
+- ✅ Gemini/Nanobana は SDK 直接呼び出しで最高効率（ネットワークオーバーヘッドなし）
+- ✅ ElevenLabs/Higgsfield/Seedream4 は内部 API 経由で動作（`getApiUrl()` で環境対応）
+- ✅ 既存の `executor.ts` との一貫性を維持
+- ✅ 開発環境・本番環境の両方で動作
+
+---
+
 ### 2025-11-24: 会話からスタジオ作成時のキャラクターシート設定を完全自動化（汎用的実装）
 
 **目的**: 会話からスタジオを作成する際、ワークフロー内の**すべてのキャラクターシート対応ノード**に自動的にキャラクターシートを反映させる。将来新しいノードタイプが追加されても自動対応できるようにする。

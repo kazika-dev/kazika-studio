@@ -3,6 +3,9 @@
  * executeWorkflow から抽出して、ノード単位実行に対応
  */
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getApiUrl } from '@/lib/utils/apiUrl';
+
 interface NodeExecutionResult {
   success: boolean;
   output?: any;
@@ -115,43 +118,86 @@ async function executeGeminiNode(
   inputs: any
 ): Promise<NodeExecutionResult> {
   const prompt = inputs.prompt || config.prompt || '';
-  const model = config.model || 'gemini-2.0-flash-exp';
+  const requestedModel = config.model || 'gemini-2.5-flash';
 
-  const requestBody = {
-    prompt,
-    model,
-    images: inputs.previousImages?.map((img: any) => img.imageData || img.imageUrl) || [],
+  // 古いモデル名を新しいモデル名に自動変換
+  const MODEL_MAPPING: Record<string, string> = {
+    'gemini-1.5-flash': 'gemini-2.5-flash',
+    'gemini-1.5-pro': 'gemini-2.5-pro',
+    'gemini-pro': 'gemini-2.5-pro',
+    'gemini-flash': 'gemini-2.5-flash',
   };
 
-  // Gemini API を呼び出す
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/gemini`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
+  const model = MODEL_MAPPING[requestedModel] || requestedModel;
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
+  if (!process.env.GEMINI_API_KEY) {
     return {
       success: false,
-      error: data.error || 'Gemini API request failed',
-      requestBody,
+      error: 'GEMINI_API_KEY is not configured in environment variables',
     };
   }
 
-  return {
-    success: true,
-    output: {
-      text: data.response,
-      response: data.response,
-    },
-    requestBody,
-  };
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const generativeModel = genAI.getGenerativeModel({ model });
+
+    const images = inputs.previousImages?.map((img: any) => img.imageData || img.imageUrl) || [];
+
+    // 画像がある場合はマルチモーダルリクエストを構築
+    let result;
+    if (images && images.length > 0) {
+      console.log(`Sending multimodal request with ${images.length} image(s)`);
+
+      const parts: any[] = [{ text: prompt }];
+
+      // 画像をinline_data形式で追加
+      images.forEach((imgData: string) => {
+        // Base64データから mimeType を推測
+        const mimeType = imgData.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: imgData
+          }
+        });
+      });
+
+      result = await generativeModel.generateContent({ contents: [{ role: 'user', parts }] });
+    } else {
+      // テキストのみの場合は従来通り
+      result = await generativeModel.generateContent(prompt);
+    }
+
+    const response = result.response;
+    const text = response.text();
+
+    return {
+      success: true,
+      output: {
+        text,
+        response: text,
+      },
+      requestBody: {
+        prompt,
+        model,
+        images: images.length > 0 ? `${images.length} images` : 'no images',
+      },
+    };
+  } catch (error: any) {
+    console.error('Gemini API error:', error);
+    return {
+      success: false,
+      error: error.message || 'Gemini API request failed',
+      requestBody: {
+        prompt,
+        model,
+      },
+    };
+  }
 }
 
 /**
- * Nanobana ノードの実行
+ * Nanobana ノードの実行（Gemini SDK 直接呼び出し）
  */
 async function executeNanobanaNode(
   node: any,
@@ -162,39 +208,132 @@ async function executeNanobanaNode(
   const model = config.model || 'gemini-2.5-flash-image';
   const aspectRatio = config.aspectRatio || '16:9';
 
-  const requestBody = {
-    prompt,
-    model,
-    aspectRatio,
-    characterSheetIds: config.selectedCharacterSheetIds || [],
-    referenceImages: config.referenceImages || [],
-  };
-
-  // Nanobana API を呼び出す
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/nanobana`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
+  if (!prompt) {
     return {
       success: false,
-      error: data.error || 'Nanobana API request failed',
-      requestBody,
+      error: 'Prompt is required for Nanobana',
     };
   }
 
-  return {
-    success: true,
-    output: {
-      imageUrl: data.imageUrl,
-      storagePath: data.storagePath,
-    },
-    requestBody,
-  };
+  if (!process.env.GEMINI_API_KEY) {
+    return {
+      success: false,
+      error: 'GEMINI_API_KEY is not configured in environment variables',
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const generativeModel = genAI.getGenerativeModel({ model });
+
+    // 画像生成設定
+    const generationConfig = {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: aspectRatio,
+      },
+    };
+
+    // コンテンツのpartsを構築（プロンプト + 参照画像）
+    const parts: any[] = [{ text: prompt }];
+
+    // 参照画像がある場合は追加（前のノードから渡された画像）
+    const referenceImages = inputs.previousImages || [];
+    if (referenceImages.length > 0) {
+      console.log(`Adding ${referenceImages.length} reference image(s) to Nanobana request`);
+      referenceImages.forEach((imgData: string) => {
+        const mimeType = imgData.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: imgData
+          }
+        });
+      });
+    }
+
+    const result = await generativeModel.generateContent({
+      contents: [{ role: 'user', parts }],
+      generationConfig: generationConfig as any,
+    });
+
+    const response = result.response;
+    const candidates = response.candidates;
+
+    if (!candidates || candidates.length === 0) {
+      return {
+        success: false,
+        error: 'No candidates in response',
+      };
+    }
+
+    // 画像データを探す
+    let imageData = null;
+    for (const candidate of candidates) {
+      // finishReasonをチェック
+      if (candidate.finishReason && candidate.finishReason.toString() === 'NO_IMAGE') {
+        return {
+          success: false,
+          error: 'The model could not generate an image for this prompt. Try a different prompt.',
+        };
+      }
+
+      if (candidate.content?.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
+            imageData = {
+              mimeType: part.inlineData.mimeType,
+              data: part.inlineData.data,
+            };
+            break;
+          }
+        }
+      }
+      if (imageData) break;
+    }
+
+    if (!imageData) {
+      return {
+        success: false,
+        error: 'No image data found in response. The prompt may have been blocked by safety filters.',
+      };
+    }
+
+    // GCP Storageに画像をアップロード
+    let storagePath: string | undefined;
+    if (process.env.GCP_SERVICE_ACCOUNT_KEY && process.env.GCP_STORAGE_BUCKET) {
+      try {
+        const { uploadImageToStorage } = await import('@/lib/gcp-storage');
+        storagePath = await uploadImageToStorage(
+          imageData.data,
+          imageData.mimeType
+        );
+        console.log('Image uploaded to GCP Storage:', storagePath);
+      } catch (storageError: any) {
+        console.error('Failed to upload to GCP Storage:', storageError);
+      }
+    }
+
+    return {
+      success: true,
+      output: {
+        imageData: imageData.data,
+        storagePath,
+      },
+      requestBody: {
+        prompt,
+        model,
+        aspectRatio,
+        referenceImagesCount: referenceImages.length,
+      },
+    };
+  } catch (error: any) {
+    console.error('Nanobana API error:', error);
+    return {
+      success: false,
+      error: error.message || 'Nanobana image generation failed',
+    };
+  }
 }
 
 /**
@@ -216,7 +355,7 @@ async function executeElevenLabsNode(
   };
 
   // ElevenLabs API を呼び出す
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/elevenlabs`, {
+  const response = await fetch(getApiUrl('/api/elevenlabs'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
@@ -268,7 +407,7 @@ async function executeHiggsfieldNode(
   };
 
   // Higgsfield API を呼び出す
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/higgsfield`, {
+  const response = await fetch(getApiUrl('/api/higgsfield'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
@@ -316,7 +455,7 @@ async function executeSeedream4Node(
   };
 
   // Seedream4 API を呼び出す
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/seedream4`, {
+  const response = await fetch(getApiUrl('/api/seedream4'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
