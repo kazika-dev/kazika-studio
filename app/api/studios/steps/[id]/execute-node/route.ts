@@ -5,9 +5,9 @@ import { getStepById, updateStep, getWorkflowById } from '@/lib/db';
 import { executeNode } from '@/lib/workflow/nodeExecutor';
 
 interface Context {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**
@@ -37,7 +37,8 @@ export async function POST(request: NextRequest, context: Context) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const stepId = context.params.id;
+    const params = await context.params;
+    const stepId = params.id;
     const body = await request.json();
     const { nodeId } = body;
 

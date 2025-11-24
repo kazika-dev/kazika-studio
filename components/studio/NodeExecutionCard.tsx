@@ -52,6 +52,7 @@ interface NodeExecutionCardProps {
   onExecute?: (nodeId: string) => Promise<void>;  // 実行ハンドラー
   stepId?: string;  // ステップID
   onInputsEdit?: (nodeId: string, inputs: Record<string, any>) => Promise<void>;  // 入力編集ハンドラー
+  workflowInputs?: Record<string, any>;  // ワークフロー全体の入力
 }
 
 // ノードタイプごとのアイコンを取得
@@ -110,6 +111,7 @@ export default function NodeExecutionCard({
   onExecute,
   stepId,
   onInputsEdit,
+  workflowInputs = {},
 }: NodeExecutionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -138,6 +140,27 @@ export default function NodeExecutionCard({
       throw error;
     }
   };
+
+  // このノードに関連するワークフロー入力をフィルタリング
+  const getRelatedWorkflowInputs = () => {
+    const nodeType = node.data.type;
+    const nodeIdPrefix = `${nodeType}_`;
+    const related: Record<string, any> = {};
+
+    Object.entries(workflowInputs).forEach(([key, value]) => {
+      // このノードIDを含むキーのみを抽出
+      // 例: "gemini_prompt_node-123" -> node.id が "node-123" の場合
+      if (key.includes(`_${node.id}`)) {
+        // キーから "_nodeId" 部分を削除してフィールド名のみを表示
+        const fieldName = key.replace(`_${node.id}`, '').replace(`${nodeType}_`, '');
+        related[fieldName] = value;
+      }
+    });
+
+    return related;
+  };
+
+  const relatedWorkflowInputs = getRelatedWorkflowInputs();
 
   const getStatusIcon = () => {
     switch (status) {
@@ -236,12 +259,65 @@ export default function NodeExecutionCard({
 
       <Collapse in={expanded}>
         <CardContent sx={{ pt: 0 }}>
-          {/* 入力データ表示 */}
+          {/* ワークフロー入力セクション */}
+          {Object.keys(relatedWorkflowInputs).length > 0 && (
+            <Box mb={2}>
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                ワークフロー入力（読み取り専用）
+              </Typography>
+              <Box
+                sx={{
+                  p: 1.5,
+                  bgcolor: 'info.50',
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: 'info.200',
+                }}
+              >
+                {Object.entries(relatedWorkflowInputs).map(([key, value]) => (
+                  <Box key={key} sx={{ mb: 1, '&:last-child': { mb: 0 } }}>
+                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">
+                      {key}:
+                    </Typography>
+                    {/* 画像データの場合 */}
+                    {value && typeof value === 'object' && value.mimeType && value.data ? (
+                      <Box sx={{ mt: 0.5 }}>
+                        <img
+                          src={`data:${value.mimeType};base64,${value.data}`}
+                          alt={key}
+                          style={{ maxWidth: '150px', maxHeight: '100px', objectFit: 'contain', borderRadius: '4px' }}
+                        />
+                      </Box>
+                    ) : /* 画像配列の場合 */
+                    Array.isArray(value) && value.length > 0 && value[0].mimeType && value[0].data ? (
+                      <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {value.map((img: any, idx: number) => (
+                          <img
+                            key={idx}
+                            src={`data:${img.mimeType};base64,${img.data}`}
+                            alt={`${key}-${idx}`}
+                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }}
+                          />
+                        ))}
+                      </Box>
+                    ) : /* その他のデータ */
+                    (
+                      <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', fontSize: '0.75rem' }}>
+                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {/* ノード入力データ表示 */}
           {request && (
             <Box mb={2}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="subtitle2" fontWeight={600}>
-                  入力
+                  ノード入力（編集可能）
                 </Typography>
                 {onInputsEdit && (
                   <Button
@@ -274,7 +350,7 @@ export default function NodeExecutionCard({
           {output && (
             <Box>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                出力
+                実行結果
               </Typography>
               <OutputDataDisplay output={output} nodeType={node.data.type} />
             </Box>

@@ -8,10 +8,11 @@ import { query } from '@/lib/db';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const stepId = parseInt(params.id, 10);
+    const resolvedParams = await params;
+    const stepId = parseInt(resolvedParams.id, 10);
     if (isNaN(stepId)) {
       return NextResponse.json(
         { success: false, error: 'Invalid step ID' },

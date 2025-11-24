@@ -521,65 +521,12 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                 </Box>
               )}
 
-              {/* 実行時のリクエストプロンプト */}
-              {!loadingDetails && detailedStep.metadata?.execution_requests && step.execution_status === 'completed' && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                    実行時のAPIリクエスト
-                  </Typography>
-                  <Stack spacing={1.5}>
-                    {Object.entries(detailedStep.metadata.execution_requests).map(([nodeId, request]: [string, any]) => (
-                      <Box key={nodeId} sx={{ p: 1.5, bgcolor: 'primary.50', borderRadius: 1, border: '1px solid', borderColor: 'primary.200' }}>
-                        <Typography variant="caption" fontWeight={600} color="primary.main" display="block" gutterBottom>
-                          ノード: {nodeId}
-                        </Typography>
-                        {request.prompt && (
-                          <Box sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              プロンプト:
-                            </Typography>
-                            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                              {request.prompt}
-                            </Typography>
-                          </Box>
-                        )}
-                        {request.text && (
-                          <Box sx={{ mb: 1 }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              テキスト:
-                            </Typography>
-                            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                              {request.text}
-                            </Typography>
-                          </Box>
-                        )}
-                        {request.aspectRatio && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            アスペクト比: {request.aspectRatio}
-                          </Typography>
-                        )}
-                        {request.model && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            モデル: {request.model}
-                          </Typography>
-                        )}
-                        {request.voiceId && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            音声ID: {request.voiceId}
-                          </Typography>
-                        )}
-                      </Box>
-                    ))}
-                  </Stack>
-                </Box>
-              )}
-
-              {/* ノード実行結果セクション */}
+              {/* ノードセクション */}
               {!loadingDetails && sortedNodeIds.length > 0 && (
                 <Box sx={{ mb: 3 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <Typography variant="h6" fontWeight={600}>
-                      ノード実行結果
+                      ノード
                     </Typography>
                     <Chip
                       label={`${sortedNodeIds.length}個のノード`}
@@ -613,6 +560,7 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
                           onExecute={handleExecuteNode}
                           stepId={step.id.toString()}
                           onInputsEdit={handleNodeInputsEdit}
+                          workflowInputs={step.input_config?.workflowInputs || {}}
                         />
 
                         {/* 次のノードへの接続を表示 */}
