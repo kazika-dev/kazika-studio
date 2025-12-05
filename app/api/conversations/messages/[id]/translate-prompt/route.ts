@@ -70,10 +70,17 @@ export async function POST(
 
     // 所有権チェック
     let isOwner = false;
-    if (message.conversation.studio_id && message.conversation.studio) {
-      isOwner = message.conversation.studio.user_id === user.id;
-    } else if (message.conversation.story_scene_id && message.conversation.story_scene) {
-      isOwner = message.conversation.story_scene.story.user_id === user.id;
+    const conversation = Array.isArray(message.conversation)
+      ? message.conversation[0]
+      : message.conversation;
+
+    if (conversation?.studio_id && conversation?.studio) {
+      const studio = Array.isArray(conversation.studio) ? conversation.studio[0] : conversation.studio;
+      isOwner = studio?.user_id === user.id;
+    } else if (conversation?.story_scene_id && conversation?.story_scene) {
+      const storyScene = Array.isArray(conversation.story_scene) ? conversation.story_scene[0] : conversation.story_scene;
+      const story = Array.isArray(storyScene?.story) ? storyScene.story[0] : storyScene?.story;
+      isOwner = story?.user_id === user.id;
     }
 
     if (!isOwner) {

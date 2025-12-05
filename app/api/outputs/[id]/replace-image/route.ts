@@ -7,7 +7,7 @@ import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage'
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -20,7 +20,8 @@ export async function PUT(
       );
     }
 
-    const outputId = parseInt(params.id, 10);
+    const { id } = await params;
+    const outputId = parseInt(id, 10);
     if (isNaN(outputId)) {
       return NextResponse.json(
         { success: false, error: 'Invalid output ID' },
