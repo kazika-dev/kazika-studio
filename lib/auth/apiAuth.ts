@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import type { User } from '@supabase/supabase-js';
@@ -8,8 +9,9 @@ import type { User } from '@supabase/supabase-js';
  * API リクエストを認証する
  *
  * 以下の認証方法をサポート:
- * 1. Authorization: Bearer <api-key> ヘッダー（Chrome Extension用）
- * 2. Cookie セッション（既存のブラウザ認証）
+ * 1. Authorization: Bearer <api-key> ヘッダー（APIキー認証、sk_で始まる）
+ * 2. Authorization: Bearer <jwt> ヘッダー（Supabase JWT認証、Chrome Extension用）
+ * 3. Cookie セッション（既存のブラウザ認証）
  *
  * @param request Next.js Request オブジェクト
  * @returns 認証されたユーザー情報、または null
@@ -19,15 +21,29 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
   const authHeader = request.headers.get('authorization');
 
   if (authHeader?.startsWith('Bearer ')) {
-    console.log('[API Auth] Using API key authentication');
-    const apiKey = authHeader.substring(7); // "Bearer " を除去
-    const user = await authenticateWithApiKey(apiKey);
+    const token = authHeader.substring(7); // "Bearer " を除去
 
-    if (user) {
-      console.log('[API Auth] API key authentication successful:', user.id);
-      return user;
+    if (token.startsWith('sk_')) {
+      // APIキー認証（sk_で始まる）
+      console.log('[API Auth] Using API key authentication');
+      const user = await authenticateWithApiKey(token);
+
+      if (user) {
+        console.log('[API Auth] API key authentication successful:', user.id);
+        return user;
+      }
+      console.log('[API Auth] API key authentication failed');
+    } else {
+      // JWT認証（Supabaseトークン）
+      console.log('[API Auth] Using JWT authentication');
+      const user = await authenticateWithJwt(token);
+
+      if (user) {
+        console.log('[API Auth] JWT authentication successful:', user.id);
+        return user;
+      }
+      console.log('[API Auth] JWT authentication failed');
     }
-    console.log('[API Auth] API key authentication failed');
   }
 
   // 2. Cookie セッションで認証（既存の方法）
@@ -50,6 +66,45 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
     return user;
   } catch (error) {
     console.error('[API Auth] Cookie session authentication exception:', error);
+    return null;
+  }
+}
+
+/**
+ * Supabase JWT トークンで認証する
+ *
+ * @param token Supabase の access_token（JWT）
+ * @returns 認証されたユーザー情報、または null
+ */
+async function authenticateWithJwt(token: string): Promise<User | null> {
+  try {
+    // Supabase Admin クライアントを使用してJWTを検証
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[API Auth] Missing Supabase configuration for JWT validation');
+      return null;
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // JWTからユーザー情報を取得（Supabaseが署名を検証する）
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+
+    if (error) {
+      console.error('[API Auth] JWT validation error:', error.message);
+      return null;
+    }
+
+    if (!data.user) {
+      console.log('[API Auth] JWT validation failed - no user');
+      return null;
+    }
+
+    return data.user;
+  } catch (error) {
+    console.error('[API Auth] JWT authentication exception:', error);
     return null;
   }
 }

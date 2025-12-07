@@ -15,7 +15,7 @@ kazika-studio の API は、Chrome Extension などの外部クライアント�
 
 ## 認証方法
 
-kazika-studio は2つの認証方法をサポートしています：
+kazika-studio は3つの認証方法をサポートしています：
 
 ### 1. Cookie セッション認証（ブラウザ用）
 
@@ -28,9 +28,9 @@ fetch('/api/workflows')
   .then(data => console.log(data));
 ```
 
-### 2. Authorization ヘッダー認証（Chrome Extension 用）
+### 2. API キー認証（`sk_` プレフィックス）
 
-Chrome Extension などの外部クライアントから API を利用する場合は、API キーを使用します。
+長期間有効なアクセスが必要な場合は、API キーを使用します。
 
 ```javascript
 fetch('https://your-domain.com/api/workflows', {
@@ -41,7 +41,29 @@ fetch('https://your-domain.com/api/workflows', {
 });
 ```
 
-**重要**: 両方の認証方法が同時にサポートされており、どちらか一方が有効であれば API にアクセスできます。
+### 3. JWT 認証（Supabase トークン）
+
+Chrome Extension などで Supabase にログイン済みの場合、JWT トークンを使用できます。
+
+```javascript
+// Supabase でログイン後、access_token を取得
+const { data: { session } } = await supabase.auth.getSession();
+const accessToken = session?.access_token;
+
+// JWT トークンで API にアクセス
+fetch('https://your-domain.com/api/storage/images/xxx.png', {
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+  }
+});
+```
+
+**JWT 認証のメリット**:
+- ユーザーごとの権限管理（RLS ポリシー適用）
+- 自動期限切れ（通常1時間）
+- リフレッシュトークンで更新可能
+
+**重要**: 3つの認証方法すべてが同時にサポートされており、いずれか1つが有効であれば API にアクセスできます。トークンの種類は自動的に判別されます（`sk_` で始まる場合は API キー、それ以外は JWT）。
 
 ---
 
