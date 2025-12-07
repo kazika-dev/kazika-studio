@@ -25,6 +25,19 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const offset = (page - 1) * limit;
 
+    console.log('[GET /api/outputs] Query params:', { id, outputType, workflowId, limit, page, offset, userId: user.id });
+
+    // デバッグ: データベース内の output_type の値を確認
+    const { data: distinctTypes, error: distinctError } = await supabase
+      .from('workflow_outputs')
+      .select('output_type')
+      .limit(100);
+
+    if (!distinctError && distinctTypes) {
+      const uniqueTypes = [...new Set(distinctTypes.map(d => d.output_type))];
+      console.log('[GET /api/outputs] Distinct output_types in DB:', uniqueTypes);
+    }
+
     // 特定のIDで取得する場合
     if (id) {
       const { data, error } = await supabase
