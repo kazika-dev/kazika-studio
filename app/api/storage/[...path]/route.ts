@@ -1,34 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getFileFromStorage } from '@/lib/gcp-storage';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * 認証済みユーザーのみがアクセスできるストレージプロキシ
  * パス: /api/storage/images/output-xxx.png
+ *
+ * Cookie セッション認証と API キー認証の両方をサポート
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const supabase = await createClient();
+    // Cookie または Authorization ヘッダーで認証
+    console.log('[Storage Proxy] Authenticating request for:', request.url);
+    console.log('[Storage Proxy] Authorization header:', request.headers.get('authorization') ? 'Present' : 'None');
+    console.log('[Storage Proxy] Cookies:', request.headers.get('cookie') ? 'Present' : 'None');
 
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await authenticateRequest(request);
 
     if (!user) {
-      console.error('Storage proxy: Unauthorized access attempt');
+      console.error('[Storage Proxy] Authentication failed - no user found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    console.log('[Storage Proxy] Authenticated user:', user.id, user.email);
 
     // paramsを解決
     const resolvedParams = await params;
 
     // ファイルパスを構築
     const filePath = resolvedParams.path.join('/');
-    console.log('Storage proxy: Fetching file:', filePath);
+    console.log('[Storage Proxy] Fetching file:', filePath);
 
     if (!filePath) {
       return NextResponse.json({ error: 'File path is required' }, { status: 400 });

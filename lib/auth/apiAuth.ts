@@ -19,19 +19,39 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
   const authHeader = request.headers.get('authorization');
 
   if (authHeader?.startsWith('Bearer ')) {
+    console.log('[API Auth] Using API key authentication');
     const apiKey = authHeader.substring(7); // "Bearer " を除去
     const user = await authenticateWithApiKey(apiKey);
 
     if (user) {
+      console.log('[API Auth] API key authentication successful:', user.id);
       return user;
     }
+    console.log('[API Auth] API key authentication failed');
   }
 
   // 2. Cookie セッションで認証（既存の方法）
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  console.log('[API Auth] Using Cookie session authentication');
+  try {
+    const supabase = await createServerClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-  return user;
+    if (error) {
+      console.error('[API Auth] Cookie session authentication error:', error);
+      return null;
+    }
+
+    if (user) {
+      console.log('[API Auth] Cookie session authentication successful:', user.id);
+    } else {
+      console.log('[API Auth] Cookie session authentication failed - no user');
+    }
+
+    return user;
+  } catch (error) {
+    console.error('[API Auth] Cookie session authentication exception:', error);
+    return null;
+  }
 }
 
 /**
