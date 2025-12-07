@@ -4,16 +4,19 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { LogOut, User, Workflow, Home, Image, Video, Users, MessageCircle, Database } from 'lucide-react';
+import { LogOut, User, Workflow, Home, Image, Video, Users, MessageCircle, Database, Key } from 'lucide-react';
 
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { Menu, MenuItem } from '@mui/material';
 
 export default function Header() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
+  const menuOpen = Boolean(anchorEl);
 
   useEffect(() => {
     // 初期ユーザー取得
@@ -31,10 +34,24 @@ export default function Header() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
   const handleLogout = async () => {
+    handleMenuClose();
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
+  };
+
+  const handleNavigateToSettings = () => {
+    handleMenuClose();
+    router.push('/settings/api-keys');
   };
 
   if (!user) return null;
@@ -121,21 +138,38 @@ export default function Header() {
             </nav>
           </div>
 
-          {/* ユーザー情報とログアウト */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <User size={20} className="text-gray-600 dark:text-gray-400" />
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                {user.email}
-              </span>
-            </div>
+          {/* ユーザー情報とメニュー */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleLogout}
+              onClick={handleMenuOpen}
               className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              <LogOut size={16} />
-              ログアウト
+              <User size={20} className="text-gray-600 dark:text-gray-400" />
+              <span className="text-sm">{user.email}</span>
             </button>
+
+            <Menu
+              anchorEl={anchorEl}
+              open={menuOpen}
+              onClose={handleMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+            >
+              <MenuItem onClick={handleNavigateToSettings}>
+                <Key size={16} className="mr-2" />
+                API キー管理
+              </MenuItem>
+              <MenuItem onClick={handleLogout}>
+                <LogOut size={16} className="mr-2" />
+                ログアウト
+              </MenuItem>
+            </Menu>
           </div>
         </div>
       </div>
