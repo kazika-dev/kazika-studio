@@ -77,8 +77,11 @@ export async function GET(request: NextRequest) {
       params
     );
 
-    const total = parseInt(countResult.rows[0].count) || 0;
-    const totalPages = Math.ceil(total / limit);
+    const countRow = countResult.rows[0];
+    console.log('[GET /api/outputs] Count result:', countRow);
+    const total = Number(countRow?.count) || 0;
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+    console.log('[GET /api/outputs] Calculated:', { total, totalPages, limit });
 
     // データを取得（ページネーション適用）
     const dataResult = await query(
