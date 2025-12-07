@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 // アウトプット一覧取得
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Supabaseクライアントを取得（RLSを適用するため）
+    const supabase = await createClient();
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
@@ -87,16 +87,15 @@ export async function GET(request: NextRequest) {
 // アウトプット保存
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Supabaseクライアントを取得（RLSを適用するため）
+    const supabase = await createClient();
 
     const body = await request.json();
     const { workflowId, outputType, content, prompt, metadata } = body;
@@ -217,16 +216,15 @@ export async function POST(request: NextRequest) {
 // アウトプット削除
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Supabaseクライアントを取得（RLSを適用するため）
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
