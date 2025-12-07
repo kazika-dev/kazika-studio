@@ -80,6 +80,9 @@ export default function UnifiedNodeSettings({
               defaultValue = 'JBFqnCBsd6RMkjVDRZzb';
             } else if (field.name === 'modelId') {
               defaultValue = 'eleven_turbo_v2_5';
+            } else if (field.name === 'resolution') {
+              // 解像度のデフォルトは2K
+              defaultValue = '2K';
             } else if (field.name === 'aspectRatio') {
               // Seedream4の場合は4:3がデフォルト
               defaultValue = nodeType === 'seedream4' ? '4:3' : '1:1';

@@ -21,6 +21,7 @@ import {
   VolumeUp as VolumeUpIcon,
   Image as ImageIcon,
   EditNote as EditNoteIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -91,6 +92,14 @@ const masterTables: MasterTable[] = [
     description: '会話生成AIに渡すプロンプトテンプレートの管理',
     icon: <EditNoteIcon />,
     color: '#7b1fa2',
+  },
+  {
+    id: 'm_text_templates',
+    name: 'm_text_templates',
+    displayName: 'テキストテンプレート',
+    description: 'テキスト入力フォームに挿入可能なテンプレート文の管理',
+    icon: <DescriptionIcon />,
+    color: '#00897b',
   },
 ];
 

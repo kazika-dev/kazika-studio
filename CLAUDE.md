@@ -11,6 +11,7 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 
 プロジェクトの詳細なドキュメントは `/docs` ディレクトリにあります:
 
+- **[API 認証機能（Authorization ヘッダー対応）](/docs/API_AUTHENTICATION.md)** - Chrome Extension などの外部クライアントから API を利用するための Authorization ヘッダー認証
 - **[ワークフローノード設定フォームの共通化](/docs/workflow-form-unification.md)** - ノード設定UIの統一アーキテクチャ
 - **[ワークフロー設定値のデフォルト値反映機能](/docs/workflow-config-default-values.md)** - ワークフローエディタの設定値を `/form` ページのデフォルト値として反映
 - **[会話からスタジオ作成時のワークフロー設定自動化](/docs/conversation-to-studio-workflow.md)** - 会話データからワークフローノード設定を自動生成
@@ -23,8 +24,258 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 - **[Workflow Outputs スキーマ修正](/docs/workflow-outputs-schema-fix.md)** - 本番環境と開発環境のスキーマ差異を解消し、後方互換性を維持
 - **[ワークフローステップとノード接続の統合計画](/docs/workflow-step-node-integration.md)** - ワークフローのノード接続情報をステップ実行に活用する移行計画
 - **[ワークフローステップのノード単位実行・結果表示機能](/docs/workflow-step-node-execution.md)** - ステップ内で各ノードを個別に実行し、結果を確認できる機能の設計
+- **[テキストテンプレートマスタ機能](/docs/text-template-master.md)** - テキスト入力フォームに挿入可能なテンプレート文を管理するマスタ機能
 
 ## 最近の主要な変更
+
+### 2025-12-07: API 認証機能（Chrome Extension 対応）を追加
+
+**目的**: Chrome Extension などの外部クライアントから kazika-studio の API を利用できるように、Authorization ヘッダー認証（API キー方式）を追加
+
+**実装内容**:
+
+1. **データベース準備** ✅
+   - `/supabase/migrations/20251207000001_create_api_keys.sql` を作成
+   - `kazikastudio.api_keys` テーブルを作成（SHA-256 ハッシュでキーを保存）
+   - RLS ポリシー: 自分の API キーのみ参照・作成・削除可能
+   - `last_used_at`, `expires_at`, `is_active` フィールドでキー管理
+
+2. **認証ミドルウェア** ✅
+   - `/lib/auth/apiAuth.ts` を作成
+   - `authenticateRequest()` 関数で Cookie と Authorization ヘッダーの両方をサポート
+   - `generateApiKey()` 関数で `sk_xxxxxxxx` 形式のキーを生成
+   - `hashApiKey()` 関数で SHA-256 ハッシュ化
+
+3. **API キー管理エンドポイント** ✅
+   - `/app/api/api-keys/route.ts` - 一覧取得・作成・削除
+   - `/app/api/api-keys/[id]/route.ts` - 個別更新（有効化/無効化）
+   - API キーは作成時に1回のみ平文で返される（セキュリティ）
+
+4. **API キー管理 UI** ✅
+   - `/app/settings/api-keys/page.tsx` を作成
+   - API キー一覧、作成、削除機能
+   - 作成したキーをクリップボードにコピー可能
+   - 最終使用日時と有効期限を表示
+
+5. **既存 API への適用** ✅
+   - `/app/api/workflows/route.ts` をサンプルとして修正
+   - `authenticateRequest()` で Cookie と API キー両方をサポート
+   - 後方互換性を維持（既存のブラウザ認証も引き続き動作）
+
+6. **Chrome Extension サンプル** ✅
+   - `/docs/chrome-extension-example/` にサンプルコードを作成
+   - `manifest.json`, `popup.html`, `popup.js`, `background.js`
+   - ワークフロー一覧取得のデモを実装
+
+**技術的詳細**:
+- **認証フロー**: `Authorization: Bearer <api-key>` → SHA-256 ハッシュ → データベース検索 → ユーザー取得
+- **セキュリティ**: API キーは平文で保存せず、SHA-256 ハッシュのみ保存
+- **後方互換性**: Cookie セッション認証も引き続きサポート
+- **自動更新**: API 使用時に `last_used_at` を自動更新
+
+**使用例**:
+```javascript
+// Chrome Extension から API を呼び出す
+fetch('https://your-domain.com/api/workflows', {
+  headers: {
+    'Authorization': 'Bearer sk_xxxxxxxxxxxxxxxx',
+    'Content-Type': 'application/json',
+  }
+});
+```
+
+**影響範囲**:
+- `/api/workflows` が Authorization ヘッダー認証に対応
+- 他の API エンドポイントも同様のパターンで対応可能
+- `/settings/api-keys` で API キーを簡単に管理できる
+
+**詳細**: [/docs/API_AUTHENTICATION.md](/docs/API_AUTHENTICATION.md)
+
+---
+
+### 2025-12-06: テキストテンプレートマスタ機能の実装完了
+
+**目的**: よく使うプロンプトやテキストパターンをテンプレートとして登録・管理し、テキスト入力フォームに簡単に挿入できるようにする
+
+**実装内容**:
+
+1. **データベース準備** ✅
+   - `/supabase/migrations/20251206014713_create_text_templates.sql` を作成
+   - `kazikastudio.m_text_templates` テーブルを作成（name, content, category, tags, user_id）
+   - RLSポリシー: 共有テンプレート（user_id IS NULL）と自分のテンプレートを参照可能
+   - `/app/api/master-tables/[table]/route.ts` の ALLOWED_TABLES に `m_text_templates` を追加
+
+2. **マスタ管理UI** ✅
+   - `/components/master/TextTemplateManager.tsx` を作成
+   - テンプレート一覧をテーブル形式で表示（カテゴリ、タグ、内容プレビュー）
+   - カテゴリフィルター（Chipで選択）
+   - 新規作成・編集・削除機能
+   - タグ入力・表示機能
+   - `/app/master/m_text_templates/page.tsx` を作成
+   - `/app/master/page.tsx` に「テキストテンプレート」カードを追加
+
+3. **テンプレート挿入機能** ✅
+   - `/components/form/DynamicFormField.tsx` に `templates` フィールドタイプを追加
+   - テンプレート選択ボタン → ダイアログUI（検索、カテゴリフィルター）
+   - 挿入モード: replace（置換）、append（追記）、prepend（プレフィックス）
+   - `FormFieldConfig` に `targetFieldName`, `category`, `insertMode` プロパティを追加
+
+**技術的詳細**:
+- 既存の master-tables API パターンを再利用（GET/POST/PUT/DELETE）
+- DynamicFormField の `tags` タイプと同じUIパターンで実装
+- カテゴリ: general, prompt, scene, character, narration, system
+- 挿入時は `onFieldChange` で他のフィールドを更新（`targetFieldName` で指定）
+   - カテゴリ、タグでインデックス
+
+4. **UI実装**
+   - `/components/master/TextTemplateManager.tsx` - マスタ管理UI
+   - `/components/form/DynamicFormField.tsx` - `templates` フィールドタイプ追加
+   - `/app/master/m_text_templates/page.tsx` - マスタページ
+
+**使用例**:
+```typescript
+// formConfigGenerator.ts でのノード設定
+{
+  type: 'templates',
+  name: 'templateInsert',
+  label: 'テンプレート挿入',
+  targetFieldName: 'prompt',  // 挿入先フィールド
+  category: 'prompt',          // フィルタするカテゴリ
+  insertMode: 'append',        // 挿入モード
+  helperText: 'クリックしてプロンプトテンプレートを挿入',
+}
+```
+
+**ElevenLabs Tagsとの違い**:
+- ElevenLabs Tags: 短い固定タグ（`[friendly]`）、タグ名のみ挿入
+- Text Templates: 長文テンプレート、テンプレート本文全体を挿入、汎用的
+
+**詳細**: [/docs/text-template-master.md](/docs/text-template-master.md)
+
+---
+
+### 2025-12-06: Gemini AIノードのモデル選択肢を拡充（テキスト生成用）
+
+**目的**: Gemini AIノード（テキスト生成・マルチモーダル）で選択できるモデルを増やし、用途に応じた最適なモデルを選択可能にする
+
+**変更内容**:
+
+- `/lib/gemini/constants.ts` の `GEMINI_MODEL_OPTIONS` を更新
+  - `gemini-3-pro-image-preview` を削除（画像生成専用のため、Nanobanaで使用）
+  - テキスト生成に適したモデルを追加：
+    - `gemini-3-pro-preview` - 最新のGemini 3 Proプレビューモデル
+    - `gemini-2.0-flash-thinking-exp` - 推論タスクに特化した実験的モデル
+    - `gemini-1.5-flash` - 高速で低コストなテキスト生成
+    - `gemini-1.5-pro` - 高性能なテキスト生成
+
+**利用可能なモデル（Gemini AIノード）**:
+1. **Gemini 3 Pro Preview (最新)** - 最新のGemini 3モデル、高度なテキスト生成とマルチモーダル対応
+2. **Gemini 2.5 Flash (推奨)** - 高速・低コスト、マルチモーダル対応
+3. **Gemini 2.5 Pro (高性能)** - より高度なタスクに対応
+4. **Gemini 2.0 Flash Thinking (実験的)** - 推論・思考タスクに特化
+5. **Gemini 2.0 Flash** - 標準的なテキスト生成
+6. **Gemini 1.5 Flash** - 高速で低コストなテキスト生成
+7. **Gemini 1.5 Pro** - 高性能なテキスト生成
+
+**デフォルトモデル**: `gemini-2.5-flash` (変更なし)
+
+**影響範囲**:
+- ✅ ワークフローエディタと `/form` ページの両方で新しいモデルが選択可能に
+- ✅ 既存のノードは設定されたモデルを維持（変更なし）
+- ✅ `getNodeTypeConfig()` の一元管理により、1箇所の変更で両方に自動反映
+
+---
+
+### 2025-12-06: Nanobana のモデル選択を Gemini 画像生成モデルに統一
+
+**目的**: Nanobanaノードで利用可能なモデルを `gemini-2.5-flash-image` と `gemini-3-pro-image-preview` の2つに限定
+
+**変更内容**:
+
+1. **利用可能なモデル（Nanobanaノード）** - `/lib/nanobana/constants.ts`
+   - `gemini-2.5-flash-image` (推奨・高速) - $0.039/画像、最大1K ← **デフォルト**
+   - `gemini-3-pro-image-preview` (高品質・2K-4K) - 2K: $0.134/画像、4K: $0.24/画像
+
+2. **解像度選択機能**
+   - 解像度フィールド: `2K (2048px) - 推奨`、`4K (4096px) - 高品質`、`1K (1024px) - 高速`
+   - デフォルト値: `2K`
+   - `gemini-2.5-flash-image`: 最大1K解像度
+   - `gemini-3-pro-image-preview`: 最大4K解像度
+
+3. **全ファイルのデフォルト値を更新**
+   - `/lib/workflow/executor.ts`
+   - `/lib/workflow/nodeExecutor.ts`
+   - `/app/api/nanobana/route.ts`
+   - `/components/workflow/UnifiedNodeSettings.tsx`
+   - `/lib/workflow/migration.ts`
+   - `/components/workflow/ExecutionPanel.tsx`
+   - すべて `gemini-2.5-flash-image` に変更
+
+**各モデルの特徴**:
+- **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`): 推奨、高速・低コスト、最大1K、$0.039/画像
+- **Gemini 3 Pro Image Preview** (`gemini-3-pro-image-preview`): 高品質、最大4K、2K: $0.134/画像、4K: $0.24/画像
+
+**影響範囲**:
+- ✅ Gemini の公式画像生成モデルのみを使用
+- ✅ ワークフローエディタと `/form` ページの両方でモデルを選択可能
+- ✅ 既存のノードはマイグレーション処理で自動的に `gemini-2.5-flash-image` に更新
+- ✅ `getNodeTypeConfig()` の一元管理により、1箇所の変更で両方に自動反映
+
+---
+
+### 2025-12-06: API送信時の画像自動圧縮機能を追加
+
+**目的**: Gemini、Nanobana、Seedream4ノードで複数の画像を送信する際、合計サイズが5MB以下になるように自動縮小し、APIエラーを防止する
+
+**変更内容**:
+
+1. **画像圧縮ユーティリティを作成** (`/lib/utils/imageCompression.ts`)
+   - `compressImagesForApi()` 関数で複数画像を合計5MB以下に自動縮小
+   - Sharp ライブラリを使用して画像をリサイズ・圧縮
+   - JPEG: 品質を段階的に下げて調整（85% → 20%）
+   - PNG: 圧縮レベルを調整（6 → 9）
+   - 最小サイズは256px×256pxを維持
+   - 詳細な圧縮ログを出力（元サイズ、最終サイズ、削減率）
+
+2. **Gemini ノードに圧縮処理を追加**
+   - `/lib/workflow/executor.ts` (465-470行目): 画像配列を圧縮してからAPI送信
+   - `/lib/workflow/nodeExecutor.ts` (153-170行目): マルチモーダルリクエスト前に圧縮
+
+3. **Nanobana ノードに圧縮処理を追加**
+   - `/lib/workflow/executor.ts` (709-714行目): 参照画像を圧縮してからAPI送信
+   - `/lib/workflow/nodeExecutor.ts` (245-262行目): 画像生成リクエスト前に圧縮
+
+4. **Seedream4 ノードに圧縮処理を追加**
+   - `/app/api/seedream4/route.ts` (48-75行目): GCP Storageから画像を取得してbase64に変換後、圧縮
+   - 署名付きURLではなくdata URIとして送信（Seedream4 API対応）
+
+**技術的詳細**:
+```typescript
+// 圧縮処理の例
+const images = [
+  { mimeType: 'image/jpeg', data: 'base64...' }, // 2MB
+  { mimeType: 'image/png', data: 'base64...' },  // 3MB
+  { mimeType: 'image/jpeg', data: 'base64...' }, // 1.5MB
+]; // 合計 6.5MB
+
+const compressedImages = await compressImagesForApi(images);
+// → 合計 5MB以下に自動縮小（各画像を約1.67MBに調整）
+```
+
+**圧縮アルゴリズム**:
+1. 各画像の現在サイズを計算
+2. 合計サイズが5MBを超える場合のみ圧縮を実行
+3. 各画像の目標サイズを計算（5MB ÷ 画像枚数）
+4. リサイズ比率を計算してSharpで画像を縮小
+5. JPEG/PNGの品質/圧縮レベルを調整して目標サイズに近づける
+
+**影響範囲**:
+- ✅ Gemini、Nanobana、Seedream4ノードで複数画像送信時のエラーを防止
+- ✅ 画像が多い場合も自動的に最適化され、API制限内に収まる
+- ✅ 圧縮ログでサイズ削減を確認可能
+- ✅ Sharp の遅延初期化により、画像がない場合はオーバーヘッドなし
+
+---
 
 ### 2025-11-24: ノード実行時の環境変数問題を解決（getApiUrl共通化）
 

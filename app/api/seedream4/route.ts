@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSignedUrl } from '@/lib/gcp-storage';
+import { getSignedUrl, getFileFromStorage } from '@/lib/gcp-storage';
+import { compressImagesForApi } from '@/lib/utils/imageCompression';
 
 // Next.jsのルートハンドラの設定
 export const maxDuration = 300; // 5分（秒単位）
@@ -44,27 +45,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 入力画像のURLを生成（GCP Storageのパスから署名付きURLを生成）
-    const inputImageUrls: string[] = [];
+    // 入力画像を取得してbase64に変換し、圧縮
+    const inputImages: Array<{ mimeType: string; data: string }> = [];
     for (const imagePath of inputImagePaths) {
       try {
-        // 署名付きURLを生成（24時間有効）
-        const signedUrl = await getSignedUrl(imagePath, 24 * 60);
-        inputImageUrls.push(signedUrl);
+        // GCP Storageから画像を取得
+        const { data: imageBuffer, contentType } = await getFileFromStorage(imagePath);
+        const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+        inputImages.push({
+          mimeType: contentType,
+          data: base64Data,
+        });
       } catch (error: any) {
-        console.error('Failed to generate signed URL:', error);
+        console.error('Failed to load image from storage:', error);
         return NextResponse.json(
-          { error: 'Failed to generate image URL', details: error.message },
+          { error: 'Failed to load image', details: error.message },
           { status: 500 }
         );
       }
     }
 
+    // 画像を合計5MB以下に圧縮
+    const compressedImages = await compressImagesForApi(inputImages);
+
+    // 圧縮後の画像からdata URIを生成（Seedream4 APIはdata URIに対応）
+    const inputImageDataUris = compressedImages.map(img =>
+      `data:${img.mimeType};base64,${img.data}`
+    );
+
     console.log('Seedream4 image generation request:', {
       promptLength: prompt.length,
       aspectRatio,
       quality,
-      inputImageCount: inputImageUrls.length,
+      inputImageCount: inputImageDataUris.length,
+      totalSize: compressedImages.reduce((sum, img) => {
+        const padding = (img.data.match(/=/g) || []).length;
+        return sum + (img.data.length * 3) / 4 - padding;
+      }, 0),
     });
 
     // リクエストボディを構築
@@ -73,9 +91,9 @@ export async function POST(request: NextRequest) {
         prompt: prompt,
         aspect_ratio: aspectRatio,
         quality: quality,
-        input_images: inputImageUrls.map(url => ({
+        input_images: inputImageDataUris.map(dataUri => ({
           type: 'image_url',
-          image_url: url,
+          image_url: dataUri,
         })),
       },
     };

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Kazika Studio API Client",
+  "version": "1.0.0",
+  "description": "Chrome Extension で kazika-studio の API を利用するサンプル",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://your-domain.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}

@@ -27,7 +27,7 @@ import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 
 export interface FormFieldConfig {
-  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags' | 'outputSelector';
+  type: 'text' | 'textarea' | 'image' | 'images' | 'prompt' | 'characterSheet' | 'characterSheets' | 'select' | 'slider' | 'switch' | 'tags' | 'outputSelector' | 'templates';
   name: string;
   label: string;
   placeholder?: string;
@@ -40,7 +40,9 @@ export interface FormFieldConfig {
   min?: number;
   max?: number;
   step?: number;
-  targetFieldName?: string; // タグ挿入先のフィールド名
+  targetFieldName?: string; // タグ挿入先のフィールド名（tags, templates用）
+  category?: string; // フィルタするカテゴリ（templates用）
+  insertMode?: 'replace' | 'append' | 'prepend'; // 挿入モード（templates用）
   defaultValue?: any; // デフォルト値（ワークフローノードの設定値）
 }
 
@@ -1179,6 +1181,224 @@ export default function DynamicFormField({ config, value, onChange, allValues, o
                         <Typography variant="caption" color="text.secondary">
                           {tag.description_ja || tag.description}
                         </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Paper>
+        </Box>
+      </Box>
+    );
+  }
+
+  // templates タイプ
+  if (config.type === 'templates') {
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState<string>(config.category || 'all');
+
+    const CATEGORIES = [
+      { value: 'all', label: 'すべて' },
+      { value: 'general', label: '汎用' },
+      { value: 'prompt', label: 'プロンプト' },
+      { value: 'scene', label: 'シーン描写' },
+      { value: 'character', label: 'キャラクター' },
+      { value: 'narration', label: 'ナレーション' },
+      { value: 'system', label: 'システムプロンプト' },
+    ];
+
+    useEffect(() => {
+      if (dialogOpen && templates.length === 0) {
+        loadTemplates();
+      }
+    }, [dialogOpen]);
+
+    const loadTemplates = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('/api/master-tables/m_text_templates');
+        if (!response.ok) throw new Error('Failed to load templates');
+        const data = await response.json();
+        setTemplates(data.data || []);
+      } catch (error) {
+        console.error('Failed to load templates:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleInsertTemplate = (template: any) => {
+      if (!config.targetFieldName || !onFieldChange || !allValues) return;
+
+      const currentValue = allValues[config.targetFieldName] || '';
+      const insertMode = config.insertMode || 'append';
+      let newValue = '';
+
+      switch (insertMode) {
+        case 'replace':
+          newValue = template.content;
+          break;
+        case 'append':
+          newValue = currentValue ? `${currentValue}\n${template.content}` : template.content;
+          break;
+        case 'prepend':
+          newValue = currentValue ? `${template.content}\n${currentValue}` : template.content;
+          break;
+      }
+
+      onFieldChange(config.targetFieldName, newValue);
+      setDialogOpen(false);
+    };
+
+    const filteredTemplates = templates.filter((t) => {
+      const matchesSearch = !searchQuery ||
+        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.name_ja?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.content.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+
+    return (
+      <Box>
+        <Button
+          variant="outlined"
+          onClick={() => setDialogOpen(true)}
+          fullWidth
+          sx={{ mb: 1 }}
+        >
+          {config.label}
+        </Button>
+        {config.helperText && (
+          <Typography variant="caption" color="text.secondary" display="block">
+            {config.helperText}
+          </Typography>
+        )}
+
+        {/* テンプレート選択ダイアログ */}
+        <Box
+          sx={{
+            display: dialogOpen ? 'flex' : 'none',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1400,
+          }}
+          onClick={() => setDialogOpen(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 700,
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ダイアログヘッダー */}
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6" fontWeight={600}>
+                  テンプレートを選択
+                </Typography>
+                <IconButton size="small" onClick={() => setDialogOpen(false)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+
+              {/* 検索フィールド */}
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="テンプレートを検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                variant="outlined"
+                sx={{ mb: 2 }}
+              />
+
+              {/* カテゴリフィルター */}
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {CATEGORIES.map((cat) => (
+                  <Chip
+                    key={cat.value}
+                    label={cat.label}
+                    onClick={() => setCategoryFilter(cat.value)}
+                    color={categoryFilter === cat.value ? 'primary' : 'default'}
+                    size="small"
+                  />
+                ))}
+              </Box>
+            </Box>
+
+            {/* テンプレートリスト */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : filteredTemplates.length === 0 ? (
+                <Alert severity="info">
+                  {searchQuery || categoryFilter !== 'all' ? '検索結果がありません' : 'テンプレートがありません'}
+                </Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {filteredTemplates.map((template) => (
+                    <Paper
+                      key={template.id}
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                      onClick={() => handleInsertTemplate(template)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {template.name_ja || template.name}
+                        </Typography>
+                        <Chip
+                          label={CATEGORIES.find((c) => c.value === template.category)?.label || template.category}
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {template.content.substring(0, 100)}
+                        {template.content.length > 100 ? '...' : ''}
+                      </Typography>
+                      {(template.description_ja || template.description) && (
+                        <Typography variant="caption" color="text.secondary">
+                          {template.description_ja || template.description}
+                        </Typography>
+                      )}
+                      {template.tags && template.tags.length > 0 && (
+                        <Box sx={{ mt: 0.5 }}>
+                          {template.tags.map((tag: string) => (
+                            <Chip
+                              key={tag}
+                              label={tag}
+                              size="small"
+                              sx={{ fontSize: '0.65rem', height: 18, mr: 0.5 }}
+                            />
+                          ))}
+                        </Box>
                       )}
                     </Paper>
                   ))}

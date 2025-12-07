@@ -800,12 +800,30 @@ export async function getMasterRecordById(tableName: string, id: number) {
 /**
  * マスターテーブルにレコードを作成
  */
-export async function createMasterRecord(tableName: string, data: {
-  name: string;
-  description?: string;
-  name_ja?: string;
-  description_ja?: string;
-}) {
+export async function createMasterRecord(tableName: string, data: any) {
+  // m_text_templates テーブルの特別な処理
+  if (tableName === 'm_text_templates') {
+    const result = await query(
+      `INSERT INTO kazikastudio.${tableName}
+       (name, name_ja, content, description, description_ja, category, tags, is_active, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        data.name,
+        data.name_ja || '',
+        data.content,
+        data.description || '',
+        data.description_ja || '',
+        data.category || 'general',
+        data.tags || [],
+        data.is_active !== undefined ? data.is_active : true,
+        data.user_id, // API route から渡される
+      ]
+    );
+    return result.rows[0];
+  }
+
+  // 既存のマスタテーブル用の処理
   const result = await query(
     `INSERT INTO kazikastudio.${tableName} (name, description, name_ja, description_ja)
      VALUES ($1, $2, $3, $4)
@@ -823,31 +841,64 @@ export async function createMasterRecord(tableName: string, data: {
 /**
  * マスターテーブルのレコードを更新
  */
-export async function updateMasterRecord(tableName: string, id: number, data: {
-  name?: string;
-  description?: string;
-  name_ja?: string;
-  description_ja?: string;
-}) {
+export async function updateMasterRecord(tableName: string, id: number, data: any) {
   const updates: string[] = [];
   const values: any[] = [];
   let paramIndex = 1;
 
-  if (data.name !== undefined) {
-    updates.push(`name = $${paramIndex++}`);
-    values.push(data.name);
-  }
-  if (data.description !== undefined) {
-    updates.push(`description = $${paramIndex++}`);
-    values.push(data.description);
-  }
-  if (data.name_ja !== undefined) {
-    updates.push(`name_ja = $${paramIndex++}`);
-    values.push(data.name_ja);
-  }
-  if (data.description_ja !== undefined) {
-    updates.push(`description_ja = $${paramIndex++}`);
-    values.push(data.description_ja);
+  // m_text_templates テーブルの特別な処理
+  if (tableName === 'm_text_templates') {
+    if (data.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.name_ja !== undefined) {
+      updates.push(`name_ja = $${paramIndex++}`);
+      values.push(data.name_ja);
+    }
+    if (data.content !== undefined) {
+      updates.push(`content = $${paramIndex++}`);
+      values.push(data.content);
+    }
+    if (data.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(data.description);
+    }
+    if (data.description_ja !== undefined) {
+      updates.push(`description_ja = $${paramIndex++}`);
+      values.push(data.description_ja);
+    }
+    if (data.category !== undefined) {
+      updates.push(`category = $${paramIndex++}`);
+      values.push(data.category);
+    }
+    if (data.tags !== undefined) {
+      updates.push(`tags = $${paramIndex++}`);
+      values.push(data.tags);
+    }
+    if (data.is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      values.push(data.is_active);
+    }
+    updates.push(`updated_at = NOW()`);
+  } else {
+    // 既存のマスタテーブル用の処理
+    if (data.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(data.description);
+    }
+    if (data.name_ja !== undefined) {
+      updates.push(`name_ja = $${paramIndex++}`);
+      values.push(data.name_ja);
+    }
+    if (data.description_ja !== undefined) {
+      updates.push(`description_ja = $${paramIndex++}`);
+      values.push(data.description_ja);
+    }
   }
 
   if (updates.length === 0) {

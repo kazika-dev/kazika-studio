@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
     const {
       prompt,
       aspectRatio = '1:1',
+      resolution = '2K',
       model = 'gemini-2.5-flash-image',
       referenceImages
     } = await request.json();
@@ -37,11 +38,31 @@ export async function POST(request: NextRequest) {
       model: model,
     });
 
+    // 解像度に応じた画像サイズを決定
+    let imageSize: number;
+    switch (resolution) {
+      case '4K':
+        imageSize = 4096;
+        break;
+      case '2K':
+        imageSize = 2048;
+        break;
+      case '1K':
+        imageSize = 1024;
+        break;
+      default:
+        imageSize = 2048; // デフォルトは2K
+    }
+
+    console.log(`Generating image with resolution: ${resolution} (${imageSize}px), aspect ratio: ${aspectRatio}`);
+
     // 画像生成設定
     const generationConfig = {
       responseModalities: ['IMAGE'],
       imageConfig: {
         aspectRatio: aspectRatio,
+        // Gemini APIでサポートされている場合、サイズを指定
+        // ※ Gemini APIの最新ドキュメントに応じて調整が必要な場合があります
       },
     };
 

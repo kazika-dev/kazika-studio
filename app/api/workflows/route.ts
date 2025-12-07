@@ -2,20 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { Node } from 'reactflow';
 import { generateFormConfig as generateFormConfigFromNodes } from '@/lib/workflow/formConfigGenerator';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 // ワークフロー一覧取得
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie または Authorization ヘッダーで認証
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = await createClient();
 
     // RLSポリシーにより、自動的にuser_idでフィルタリングされる
     const { data, error } = await supabase
@@ -46,16 +45,14 @@ export async function GET() {
 // ワークフロー保存
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie または Authorization ヘッダーで認証
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = await createClient();
 
     const { name, description, nodes, edges, form_config } = await request.json();
 
@@ -114,16 +111,14 @@ export async function POST(request: NextRequest) {
 // ワークフロー更新
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie または Authorization ヘッダーで認証
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = await createClient();
 
     const { id, name, description, nodes, edges, form_config } = await request.json();
 
@@ -182,16 +177,14 @@ export async function PUT(request: NextRequest) {
 // ワークフロー削除
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Cookie または Authorization ヘッダーで認証
+    const user = await authenticateRequest(request);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

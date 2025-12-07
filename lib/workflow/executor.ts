@@ -462,11 +462,18 @@ async function executeNode(
           throw new Error(`Geminiノード "${node.data.config?.name || node.id}" のプロンプト変数が置換できませんでした。元のプロンプト: "${node.data.config?.prompt}"`);
         }
 
+        // 画像が複数ある場合は合計5MB以下に圧縮
+        let finalGeminiImages = geminiImages;
+        if (geminiImages.length > 0) {
+          const { compressImagesForApi } = await import('@/lib/utils/imageCompression');
+          finalGeminiImages = await compressImagesForApi(geminiImages);
+        }
+
         // リクエストボディを保存（画像がある場合は含める）
         requestBody = {
           prompt: geminiPrompt,
           model: node.data.config?.model || 'gemini-2.5-flash',
-          images: geminiImages.length > 0 ? geminiImages : undefined,
+          images: finalGeminiImages.length > 0 ? finalGeminiImages : undefined,
         };
 
         const geminiResponse = await fetch(getApiUrl('/api/gemini'), {
@@ -699,12 +706,20 @@ async function executeNode(
           throw new Error(`Nanobanaノード "${node.data.config?.name || node.id}" のプロンプトが空です。プロンプトを入力するか、前のノードから値を受け取ってください。`);
         }
 
+        // 画像が複数ある場合は合計5MB以下に圧縮
+        let finalNanobanaImages = nanobanaImages;
+        if (nanobanaImages.length > 0) {
+          const { compressImagesForApi } = await import('@/lib/utils/imageCompression');
+          finalNanobanaImages = await compressImagesForApi(nanobanaImages);
+        }
+
         // リクエストボディを保存（参照画像がある場合は含める）
         requestBody = {
           prompt: nanobanaPrompt,
           aspectRatio: node.data.config?.aspectRatio || '1:1',
+          resolution: node.data.config?.resolution || '2K',
           model: node.data.config?.model || 'gemini-2.5-flash-image',
-          referenceImages: nanobanaImages.length > 0 ? nanobanaImages : undefined,
+          referenceImages: finalNanobanaImages.length > 0 ? finalNanobanaImages : undefined,
         };
 
         const nanobanaResponse = await fetch(getApiUrl('/api/nanobana'), {

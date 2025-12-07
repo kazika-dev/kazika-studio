@@ -30,6 +30,16 @@ export function migrateNodeConfig(nodes: Node[]): Node[] {
       needsUpdate = true;
     }
 
+    // gemini ノードに model フィールドを追加
+    if (nodeType === 'gemini' && config.model === undefined) {
+      console.log(`[Migration] Adding model to gemini node:`, node.id);
+      config = {
+        ...config,
+        model: 'gemini-2.5-flash',
+      };
+      needsUpdate = true;
+    }
+
     if (needsUpdate) {
       return {
         ...node,

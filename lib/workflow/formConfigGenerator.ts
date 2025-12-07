@@ -79,7 +79,19 @@ export function getNodeTypeConfig(nodeType: string): NodeTypeConfig {
             label: 'モデル',
             required: false,
             options: NANOBANA_MODEL_OPTIONS as unknown as { label: string; value: string }[],
-            helperText: 'Gemini 3 Pro Imageは高品質・最大4K、Gemini 2.5 Flash Imageは高速・低コスト',
+            helperText: 'Gemini 2.5 Flash Image (推奨・高速・1K)、Gemini 3 Pro Image Preview (高品質・2K-4K)',
+          },
+          {
+            type: 'select',
+            name: 'resolution',
+            label: '解像度',
+            required: false,
+            options: [
+              { label: '2K (2048px) - 推奨', value: '2K' },
+              { label: '4K (4096px) - 高品質', value: '4K' },
+              { label: '1K (1024px) - 高速', value: '1K' },
+            ],
+            helperText: 'Gemini 3 Pro Imageは2K/4K対応、他のモデルは自動調整されます',
           },
           {
             type: 'select',

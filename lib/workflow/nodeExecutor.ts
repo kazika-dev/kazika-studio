@@ -150,14 +150,21 @@ async function executeGeminiNode(
 
       const parts: any[] = [{ text: prompt }];
 
-      // 画像をinline_data形式で追加
-      images.forEach((imgData: string) => {
-        // Base64データから mimeType を推測
+      // 画像を圧縮（合計5MB以下に）
+      const imageDataArray = images.map((imgData: string) => {
         const mimeType = imgData.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return { mimeType, data: imgData };
+      });
+
+      const { compressImagesForApi } = await import('@/lib/utils/imageCompression');
+      const compressedImages = await compressImagesForApi(imageDataArray);
+
+      // 圧縮後の画像をinline_data形式で追加
+      compressedImages.forEach((img) => {
         parts.push({
           inline_data: {
-            mime_type: mimeType,
-            data: imgData
+            mime_type: img.mimeType,
+            data: img.data
           }
         });
       });
@@ -207,6 +214,7 @@ async function executeNanobanaNode(
   const prompt = inputs.prompt || config.prompt || '';
   const model = config.model || 'gemini-2.5-flash-image';
   const aspectRatio = config.aspectRatio || '16:9';
+  const resolution = config.resolution || '2K';
 
   if (!prompt) {
     return {
@@ -238,15 +246,24 @@ async function executeNanobanaNode(
     const parts: any[] = [{ text: prompt }];
 
     // 参照画像がある場合は追加（前のノードから渡された画像）
-    const referenceImages = inputs.previousImages || [];
+    let referenceImages = inputs.previousImages || [];
     if (referenceImages.length > 0) {
       console.log(`Adding ${referenceImages.length} reference image(s) to Nanobana request`);
-      referenceImages.forEach((imgData: string) => {
+
+      // 画像を圧縮（合計5MB以下に）
+      const imageDataArray = referenceImages.map((imgData: string) => {
         const mimeType = imgData.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        return { mimeType, data: imgData };
+      });
+
+      const { compressImagesForApi } = await import('@/lib/utils/imageCompression');
+      const compressedImages = await compressImagesForApi(imageDataArray);
+
+      compressedImages.forEach((img) => {
         parts.push({
           inline_data: {
-            mime_type: mimeType,
-            data: imgData
+            mime_type: img.mimeType,
+            data: img.data
           }
         });
       });

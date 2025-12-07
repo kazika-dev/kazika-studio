@@ -5,6 +5,7 @@ import {
   updateMasterRecord,
   deleteMasterRecord,
 } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 
 // 許可されたマスタテーブル名のリスト
 const ALLOWED_TABLES = [
@@ -12,7 +13,7 @@ const ALLOWED_TABLES = [
   'm_camera_angles',
   'm_camera_movements',
   'm_shot_distances',
-  'eleven_labs_tags',
+  'm_text_templates',
 ];
 
 // テーブル名のバリデーション
@@ -72,6 +73,55 @@ export async function POST(
     }
 
     const body = await request.json();
+
+    // m_text_templates の場合は特別な処理
+    if (table === 'm_text_templates') {
+      const { name, name_ja, content, description, description_ja, category, tags, is_active } = body;
+
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return NextResponse.json(
+          { error: 'Name is required' },
+          { status: 400 }
+        );
+      }
+
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        return NextResponse.json(
+          { error: 'Content is required' },
+          { status: 400 }
+        );
+      }
+
+      // ユーザー認証を取得
+      const supabase = await createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+
+      const data = await createMasterRecord(table, {
+        name: name.trim(),
+        name_ja: name_ja?.trim() || '',
+        content: content.trim(),
+        description: description?.trim() || '',
+        description_ja: description_ja?.trim() || '',
+        category: category || 'general',
+        tags: tags || [],
+        is_active: is_active !== undefined ? is_active : true,
+        user_id: user.id,
+      });
+
+      return NextResponse.json({
+        success: true,
+        data,
+      });
+    }
+
+    // 既存のマスタテーブル用の処理
     const { name, description, name_ja, description_ja } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
