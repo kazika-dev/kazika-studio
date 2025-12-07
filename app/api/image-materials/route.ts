@@ -7,6 +7,7 @@ import {
   uploadImageMaterial,
   getImageMaterialSignedUrl,
 } from '@/lib/gcp-storage';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import sharp from 'sharp';
 
 /**
@@ -52,6 +53,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const name = formData.get('name') as string;
     const description = formData.get('description') as string || '';

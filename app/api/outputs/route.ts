@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id');
     const outputType = searchParams.get('output_type');
     const workflowId = searchParams.get('workflow_id');
-    const limit = searchParams.get('limit') || '50';
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const page = parseInt(searchParams.get('page') || '1');
+    const offset = (page - 1) * limit;
 
     // 特定のIDで取得する場合
     if (id) {
@@ -44,15 +46,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         outputs: [data], // 配列形式で返す（フロントエンドの互換性のため）
+        pagination: {
+          page: 1,
+          limit: 1,
+          total: 1,
+          totalPages: 1,
+        },
       });
     }
 
-    // クエリ構築
+    // 総件数取得用のクエリを構築
+    let countQuery = supabase
+      .from('workflow_outputs')
+      .select('id', { count: 'exact', head: true });
+
+    if (outputType) {
+      countQuery = countQuery.eq('output_type', outputType);
+    }
+
+    if (workflowId) {
+      countQuery = countQuery.eq('workflow_id', parseInt(workflowId));
+    }
+
+    // 総件数を取得
+    const { count, error: countError } = await countQuery;
+
+    if (countError) {
+      throw countError;
+    }
+
+    const total = count || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // データ取得用のクエリを構築
     let query = supabase
       .from('workflow_outputs')
       .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
       .order('created_at', { ascending: false })
-      .limit(parseInt(limit));
+      .range(offset, offset + limit - 1);
 
     if (outputType) {
       query = query.eq('output_type', outputType);
@@ -71,6 +102,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       outputs: data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     });
   } catch (error: any) {
     console.error('Output fetch error:', error);

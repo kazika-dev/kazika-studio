@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildEmotionTagReanalysisPrompt,
@@ -15,18 +16,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const { id } = await params;
     const conversationId = parseInt(id);

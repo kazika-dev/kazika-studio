@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { createComfyUIQueueItem, getComfyUIQueueItemsByUserId } from '@/lib/db';
 
 /**
@@ -8,10 +8,9 @@ import { createComfyUIQueueItem, getComfyUIQueueItemsByUserId } from '@/lib/db';
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -87,10 +86,9 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

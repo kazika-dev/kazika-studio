@@ -5,7 +5,7 @@ import {
   updateMasterRecord,
   deleteMasterRecord,
 } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 // 許可されたマスタテーブル名のリスト
 const ALLOWED_TABLES = [
@@ -92,11 +92,9 @@ export async function POST(
         );
       }
 
-      // ユーザー認証を取得
-      const supabase = await createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
+      // Cookie、APIキー、JWT認証をサポート
+      const user = await authenticateRequest(request);
+      if (!user) {
         return NextResponse.json(
           { error: 'Unauthorized' },
           { status: 401 }

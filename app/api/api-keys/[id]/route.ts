@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { query } from '@/lib/db';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * API キー更新（有効化/無効化、名前変更）
@@ -17,9 +17,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

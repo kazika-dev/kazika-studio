@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * 既存のoutputの画像を差し替える（上書き保存）
@@ -10,15 +11,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const { id } = await params;
     const outputId = parseInt(id, 10);

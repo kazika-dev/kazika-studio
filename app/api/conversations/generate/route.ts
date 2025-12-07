@@ -11,6 +11,7 @@ import {
 
 } from '@/lib/conversation/prompt-builder';
 import { getAllCameraAngles, getAllShotDistances, addCharacterToMessage } from '@/lib/db'; // Still needed for random scene generation
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
 
 /**
@@ -19,16 +20,16 @@ import type { GenerateConversationRequest, GenerateConversationResponse } from '
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const body: GenerateConversationRequest = await request.json();
 

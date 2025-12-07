@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { Storage } from '@google-cloud/storage';
 import sharp from 'sharp';
 
@@ -25,15 +26,16 @@ export async function PUT(
 ) {
   const params = await context.params;
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const id = parseInt(params.id);
 

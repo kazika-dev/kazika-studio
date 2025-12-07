@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import {
   getMessageCharacters,
   addCharacterToMessage,
@@ -25,16 +26,16 @@ export async function GET(
       );
     }
 
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     // Ownership check: verify user owns the conversation via studio or story
     const { data: message, error: msgError } = await supabase
@@ -120,16 +121,16 @@ export async function POST(
       );
     }
 
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     // Ownership check (same as GET)
     const { data: message, error: msgError } = await supabase
@@ -215,16 +216,16 @@ export async function DELETE(
       );
     }
 
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     // Ownership check (same as GET)
     const { data: message, error: msgError } = await supabase
@@ -309,16 +310,16 @@ export async function PATCH(
       );
     }
 
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     // Ownership check (same as GET)
     const { data: message, error: msgError } = await supabase

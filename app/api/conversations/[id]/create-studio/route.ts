@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { getNodeTypeConfig } from '@/lib/workflow/formConfigGenerator';
 
 /**
@@ -20,18 +21,19 @@ export async function POST(
     const workflowIdsArray = workflowIds.length > 0 ? workflowIds : (workflowId ? [workflowId] : []);
 
     console.log('[POST /api/conversations/:id/create-studio] Creating studio from conversation ID:', id, 'with workflow IDs:', workflowIdsArray);
-    const supabase = await createClient();
 
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.log('[POST /api/conversations/:id/create-studio] Auth error:', authError);
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
+      console.log('[POST /api/conversations/:id/create-studio] Auth error: No user');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
     console.log('[POST /api/conversations/:id/create-studio] User authenticated:', user.id);
+
+    const supabase = await createClient();
 
     // Fetch conversation
     const { data: conversation, error: convError } = await supabase

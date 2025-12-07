@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import type { ListConversationsResponse } from '@/types/conversation';
 
 /**
@@ -8,16 +9,17 @@ import type { ListConversationsResponse } from '@/types/conversation';
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    // Supabaseクライアントを取得（RLSを適用するため）
+    const supabase = await createClient();
 
     // Get query parameters
     const { searchParams } = new URL(request.url);

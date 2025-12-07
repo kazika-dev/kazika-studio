@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import type { UpdateMessageRequest, UpdateMessageResponse } from '@/types/conversation';
 
 /**
@@ -12,16 +13,17 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const body: UpdateMessageRequest = await request.json();
 
@@ -141,16 +143,17 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Authentication check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     // Fetch message and verify ownership
     const { data: message, error: msgError } = await supabase

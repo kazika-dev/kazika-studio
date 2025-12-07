@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/auth/apiAuth';
 import {
   getConversationPromptTemplateById,
   updateConversationPromptTemplate,
@@ -17,10 +17,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -75,10 +75,10 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -144,10 +144,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    // Cookie、APIキー、JWT認証をサポート
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
