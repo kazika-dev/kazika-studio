@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { query } from '@/lib/db';
 
 // アウトプット一覧取得
 export async function GET(request: NextRequest) {
@@ -12,9 +12,6 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Supabaseクライアントを取得（RLSを適用するため）
-    const supabase = await createClient();
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
@@ -27,38 +24,25 @@ export async function GET(request: NextRequest) {
 
     console.log('[GET /api/outputs] Query params:', { id, outputType, workflowId, limit, page, offset, userId: user.id });
 
-    // デバッグ: データベース内の output_type の値を確認
-    const { data: distinctTypes, error: distinctError } = await supabase
-      .from('workflow_outputs')
-      .select('output_type')
-      .limit(100);
-
-    if (!distinctError && distinctTypes) {
-      const uniqueTypes = [...new Set(distinctTypes.map(d => d.output_type))];
-      console.log('[GET /api/outputs] Distinct output_types in DB:', uniqueTypes);
-    }
-
     // 特定のIDで取得する場合
     if (id) {
-      const { data, error } = await supabase
-        .from('workflow_outputs')
-        .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
-        .eq('id', parseInt(id))
-        .single();
+      const result = await query(
+        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at
+         FROM kazikastudio.workflow_outputs
+         WHERE id = $1 AND user_id = $2`,
+        [parseInt(id), user.id]
+      );
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return NextResponse.json(
-            { success: false, error: 'Output not found' },
-            { status: 404 }
-          );
-        }
-        throw error;
+      if (result.rows.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Output not found' },
+          { status: 404 }
+        );
       }
 
       return NextResponse.json({
         success: true,
-        outputs: [data], // 配列形式で返す（フロントエンドの互換性のため）
+        outputs: result.rows, // 配列形式で返す（フロントエンドの互換性のため）
         pagination: {
           page: 1,
           limit: 1,
@@ -68,53 +52,47 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 総件数取得用のクエリを構築
-    let countQuery = supabase
-      .from('workflow_outputs')
-      .select('id', { count: 'exact', head: true });
+    // 動的にWHERE句を構築
+    const conditions: string[] = ['user_id = $1'];
+    const params: any[] = [user.id];
+    let paramIndex = 2;
 
     if (outputType) {
-      countQuery = countQuery.eq('output_type', outputType);
+      conditions.push(`output_type = $${paramIndex}`);
+      params.push(outputType);
+      paramIndex++;
     }
 
     if (workflowId) {
-      countQuery = countQuery.eq('workflow_id', parseInt(workflowId));
+      conditions.push(`workflow_id = $${paramIndex}`);
+      params.push(parseInt(workflowId));
+      paramIndex++;
     }
+
+    const whereClause = conditions.join(' AND ');
 
     // 総件数を取得
-    const { count, error: countError } = await countQuery;
+    const countResult = await query(
+      `SELECT COUNT(*) as count FROM kazikastudio.workflow_outputs WHERE ${whereClause}`,
+      params
+    );
 
-    if (countError) {
-      throw countError;
-    }
-
-    const total = count || 0;
+    const total = parseInt(countResult.rows[0].count) || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // データ取得用のクエリを構築
-    let query = supabase
-      .from('workflow_outputs')
-      .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    if (outputType) {
-      query = query.eq('output_type', outputType);
-    }
-
-    if (workflowId) {
-      query = query.eq('workflow_id', parseInt(workflowId));
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
+    // データを取得（ページネーション適用）
+    const dataResult = await query(
+      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at
+       FROM kazikastudio.workflow_outputs
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...params, limit, offset]
+    );
 
     return NextResponse.json({
       success: true,
-      outputs: data,
+      outputs: dataResult.rows,
       pagination: {
         page,
         limit,
@@ -145,9 +123,6 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Supabaseクライアントを取得（RLSを適用するため）
-    const supabase = await createClient();
 
     const body = await request.json();
     const { workflowId, outputType, content, prompt, metadata } = body;
@@ -210,34 +185,25 @@ export async function POST(request: NextRequest) {
       contentText = content;
     }
 
-    // DBに保存
-    const insertData: any = {
-      user_id: user.id,
-      output_type: outputType,
-      prompt: prompt || null,
-      metadata: metadata || {},
-      favorite: false,
-    };
+    // DBに保存（直接クエリを使用）
+    const result = await query(
+      `INSERT INTO kazikastudio.workflow_outputs
+       (user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at`,
+      [
+        user.id,
+        workflowId || null,
+        outputType,
+        contentUrl,
+        contentText,
+        prompt || null,
+        JSON.stringify(metadata || {}),
+        false
+      ]
+    );
 
-    if (workflowId) {
-      insertData.workflow_id = workflowId;
-    }
-
-    if (contentUrl) {
-      insertData.content_url = contentUrl;
-    }
-
-    if (contentText) {
-      insertData.content_text = contentText;
-    }
-
-    const { data, error } = await supabase
-      .from('workflow_outputs')
-      .insert(insertData)
-      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at')
-      .single();
-
-    if (error) {
+    if (result.rows.length === 0) {
       // アップロードしたファイルがある場合は削除
       if (contentUrl) {
         try {
@@ -246,12 +212,12 @@ export async function POST(request: NextRequest) {
           console.error('Failed to cleanup uploaded file:', deleteError);
         }
       }
-      throw error;
+      throw new Error('Failed to insert output');
     }
 
     return NextResponse.json({
       success: true,
-      output: data,
+      output: result.rows[0],
     });
   } catch (error: any) {
     console.error('Output save error:', error);
@@ -275,9 +241,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Supabaseクライアントを取得（RLSを適用するため）
-    const supabase = await createClient();
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -285,32 +248,28 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    // 削除前にアウトプット情報を取得（GCPから削除するため）
-    const { data: output, error: fetchError } = await supabase
-      .from('workflow_outputs')
-      .select('id, output_type, content_url')
-      .eq('id', parseInt(id))
-      .single();
+    // 削除前にアウトプット情報を取得（GCPから削除するため、所有者確認も兼ねる）
+    const fetchResult = await query(
+      `SELECT id, output_type, content_url
+       FROM kazikastudio.workflow_outputs
+       WHERE id = $1 AND user_id = $2`,
+      [parseInt(id), user.id]
+    );
 
-    if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Output not found' },
-          { status: 404 }
-        );
-      }
-      throw fetchError;
+    if (fetchResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Output not found' },
+        { status: 404 }
+      );
     }
+
+    const output = fetchResult.rows[0];
 
     // DBから削除
-    const { error: deleteError } = await supabase
-      .from('workflow_outputs')
-      .delete()
-      .eq('id', parseInt(id));
-
-    if (deleteError) {
-      throw deleteError;
-    }
+    await query(
+      `DELETE FROM kazikastudio.workflow_outputs WHERE id = $1 AND user_id = $2`,
+      [parseInt(id), user.id]
+    );
 
     // GCPストレージからも削除（ファイル系の場合のみ）
     if (output.content_url && ['image', 'video', 'audio', 'file'].includes(output.output_type)) {
