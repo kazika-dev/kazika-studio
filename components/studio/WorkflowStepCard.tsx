@@ -87,25 +87,32 @@ export default function WorkflowStepCard({ step, onUpdate, onDelete, onEdit, onE
     }
   }, [step]);
 
+  // ステップ詳細を取得する関数（再利用可能）
+  const fetchStepDetails = async () => {
+    try {
+      const response = await fetch(`/api/studios/steps/${step.id}`);
+      const data = await response.json();
+
+      if (data.success && data.step) {
+        setDetailedStep(data.step);
+        setDetailsLoaded(true);
+        // 親コンポーネントにも通知
+        if (onUpdate) {
+          onUpdate(data.step);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load step details:', error);
+    }
+  };
+
   // アコーディオンが展開された時に詳細を読み込む
   useEffect(() => {
     const loadDetails = async () => {
       if (expanded && !detailsLoaded && !loadingDetails) {
         setLoadingDetails(true);
         try {
-          const response = await fetch(`/api/studios/steps/${step.id}`);
-          const data = await response.json();
-
-          if (data.success && data.step) {
-            setDetailedStep(data.step);
-            setDetailsLoaded(true);
-            // 親コンポーネントにも通知
-            if (onUpdate) {
-              onUpdate(data.step);
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load step details:', error);
+          await fetchStepDetails();
         } finally {
           setLoadingDetails(false);
         }

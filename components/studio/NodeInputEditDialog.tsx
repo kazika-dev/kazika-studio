@@ -136,8 +136,8 @@ export default function NodeInputEditDialog({
               );
             }
 
-            // 数値フィールド
-            if (field.type === 'number' || field.type === 'slider') {
+            // 数値フィールド（スライダー）
+            if (field.type === 'slider') {
               return (
                 <TextField
                   key={field.name}
@@ -155,10 +155,12 @@ export default function NodeInputEditDialog({
               );
             }
 
-            // 編集不可のフィールド（characterSheetSelector, imageUpload, outputSelectorなど）
+            // 編集不可のフィールド（characterSheets, images, outputSelectorなど）
             if (
-              field.type === 'characterSheetSelector' ||
-              field.type === 'imageUpload' ||
+              field.type === 'characterSheets' ||
+              field.type === 'characterSheet' ||
+              field.type === 'images' ||
+              field.type === 'image' ||
               field.type === 'outputSelector'
             ) {
               return (

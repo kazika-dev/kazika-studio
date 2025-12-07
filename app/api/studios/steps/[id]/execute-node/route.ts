@@ -38,13 +38,20 @@ export async function POST(request: NextRequest, context: Context) {
     }
 
     const params = await context.params;
-    const stepId = params.id;
+    const stepId = parseInt(params.id, 10);
     const body = await request.json();
     const { nodeId } = body;
 
     if (!nodeId) {
       return NextResponse.json(
         { error: 'nodeId is required' },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(stepId)) {
+      return NextResponse.json(
+        { error: 'Invalid step ID' },
         { status: 400 }
       );
     }
