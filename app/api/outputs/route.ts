@@ -22,12 +22,16 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const offset = (page - 1) * limit;
 
-    console.log('[GET /api/outputs] Query params:', { id, outputType, workflowId, limit, page, offset, userId: user.id });
+    // source_url フィルタリング
+    const sourceUrl = searchParams.get('source_url');
+    const sourceUrlLike = searchParams.get('source_url_like');
+
+    console.log('[GET /api/outputs] Query params:', { id, outputType, workflowId, sourceUrl, sourceUrlLike, limit, page, offset, userId: user.id });
 
     // 特定のIDで取得する場合
     if (id) {
       const result = await query(
-        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at
+        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, created_at, updated_at
          FROM kazikastudio.workflow_outputs
          WHERE id = $1 AND user_id = $2`,
         [parseInt(id), user.id]
@@ -69,6 +73,20 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
+    // source_url フィルタリング（完全一致）
+    if (sourceUrl) {
+      conditions.push(`source_url = $${paramIndex}`);
+      params.push(sourceUrl);
+      paramIndex++;
+    }
+
+    // source_url フィルタリング（部分一致）
+    if (sourceUrlLike) {
+      conditions.push(`source_url ILIKE $${paramIndex}`);
+      params.push(`%${sourceUrlLike}%`);
+      paramIndex++;
+    }
+
     const whereClause = conditions.join(' AND ');
 
     // 総件数を取得
@@ -85,7 +103,7 @@ export async function GET(request: NextRequest) {
 
     // データを取得（ページネーション適用）
     const dataResult = await query(
-      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at
+      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, created_at, updated_at
        FROM kazikastudio.workflow_outputs
        WHERE ${whereClause}
        ORDER BY created_at DESC
@@ -129,6 +147,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { workflowId, outputType, content, prompt, metadata } = body;
+
+    // metadata から source_url を抽出（専用カラムに保存）
+    const sourceUrl = (metadata?.source_url as string) || null;
 
     if (!outputType || !content) {
       return NextResponse.json(
@@ -191,9 +212,9 @@ export async function POST(request: NextRequest) {
     // DBに保存（直接クエリを使用）
     const result = await query(
       `INSERT INTO kazikastudio.workflow_outputs
-       (user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at`,
+       (user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, source_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, source_url, created_at, updated_at`,
       [
         user.id,
         workflowId || null,
@@ -202,7 +223,8 @@ export async function POST(request: NextRequest) {
         contentText,
         prompt || null,
         JSON.stringify(metadata || {}),
-        false
+        false,
+        sourceUrl
       ]
     );
 
