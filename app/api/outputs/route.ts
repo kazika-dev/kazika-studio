@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // 特定のIDで取得する場合
     if (id) {
       const result = await query(
-        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, created_at, updated_at
+        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, favorite, created_at, updated_at
          FROM kazikastudio.workflow_outputs
          WHERE id = $1 AND user_id = $2`,
         [parseInt(id), user.id]
@@ -87,6 +87,12 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
+    // お気に入りフィルタリング
+    const favoriteOnly = searchParams.get('favorite_only');
+    if (favoriteOnly === 'true') {
+      conditions.push(`favorite = true`);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     // 総件数を取得
@@ -103,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     // データを取得（ページネーション適用）
     const dataResult = await query(
-      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, created_at, updated_at
+      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, favorite, created_at, updated_at
        FROM kazikastudio.workflow_outputs
        WHERE ${whereClause}
        ORDER BY created_at DESC

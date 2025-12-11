@@ -42,6 +42,9 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
       if (filterType !== 'all') {
         params.append('output_type', filterType);
       }
+      if (showFavoritesOnly) {
+        params.append('favorite_only', 'true');
+      }
       params.append('limit', itemsPerPage.toString());
       params.append('page', page.toString());
 
@@ -59,7 +62,7 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, itemsPerPage]);
+  }, [filterType, showFavoritesOnly, itemsPerPage]);
 
   // ページまたはフィルター変更時にデータを取得
   useEffect(() => {
@@ -98,13 +101,8 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
     );
   };
 
-  // クライアントサイドフィルタリング（検索クエリとお気に入りはクライアントで処理）
+  // クライアントサイドフィルタリング（検索クエリのみ、お気に入りはサーバーサイドで処理）
   const filteredOutputs = outputs.filter((output) => {
-    // Filter by favorites
-    if (showFavoritesOnly && !output.favorite) {
-      return false;
-    }
-
     // Filter by search query
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
