@@ -3,15 +3,12 @@ import { getFileFromStorage } from '@/lib/gcp-storage';
 
 /**
  * GET /api/public-storage/[...path]
- * GCP Storage’°§ÎíÙ•‘Yç<Å˚lã¢Øªπ	
+ * GCP Storage file proxy (no authentication required)
  *
- * ã:
+ * Examples:
  * - /api/public-storage/images/output-xxx.png
  * - /api/public-storage/videos/video-xxx.mp4
  * - /api/public-storage/audio/audio-xxx.mp3
- *
- * Ïπ›Ûπ:
- * - ’°§În–§ Í«¸øContent-TypeÿM	
  */
 export async function GET(
   request: NextRequest,
@@ -20,10 +17,10 @@ export async function GET(
   try {
     const { path: pathSegments } = await params;
 
-    // —πíP
+    // Join path segments
     const filePath = pathSegments.join('/');
 
-    // –Í«¸∑ÁÛ: patho≈
+    // Validation: path is required
     if (!filePath || !filePath.trim()) {
       return NextResponse.json(
         { error: 'path is required' },
@@ -31,7 +28,7 @@ export async function GET(
       );
     }
 
-    // —πn–Í«¸∑ÁÛ«£ÏØ»Í»È–¸µÎ;É˛V	
+    // Path validation (directory traversal attack prevention)
     if (filePath.includes('..')) {
       return NextResponse.json(
         { error: 'Invalid path format' },
@@ -39,15 +36,15 @@ export async function GET(
       );
     }
 
-    // GCP StorageKâ’°§Îí÷ó
+    // Get file from GCP Storage
     const { data, contentType } = await getFileFromStorage(filePath.trim());
 
-    // BufferíUint8Arrayk	€WfÏπ›Ûπí‘Y
+    // Return file as Uint8Array
     return new NextResponse(new Uint8Array(data), {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400', // 24Bì≠„√∑Â
+        'Cache-Control': 'public, max-age=86400',
         'Content-Length': data.length.toString(),
       },
     });
@@ -56,7 +53,7 @@ export async function GET(
 
     const err = error as { code?: number; message?: string };
 
-    // ’°§ÎLX(WjD4
+    // File not found
     if (err.code === 404 || err.message?.includes('No such object')) {
       return NextResponse.json(
         { error: 'File not found' },
