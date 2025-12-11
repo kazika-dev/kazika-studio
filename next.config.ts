@@ -8,7 +8,18 @@ const nextConfig: NextConfig = {
     'pg',
     'pg-pool',
   ],
-
+ async headers() {
+      return [
+        {
+          source: '/api/:path*',
+          headers: [
+            { key: 'Access-Control-Allow-Origin', value: '*' },
+            { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, PATCH, DELETE, OPTIONS' },
+            { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+          ],
+        },
+      ];
+    },
   // Turbopack 設定（空の設定でデフォルトを使用）
   turbopack: {},
 
