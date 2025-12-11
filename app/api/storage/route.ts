@@ -36,19 +36,21 @@ export async function GET(request: NextRequest) {
     // GCP Storageからファイルを取得
     const { data, contentType } = await getFileFromStorage(path.trim());
 
-    // ファイルを直接返す
-    return new NextResponse(data, {
+    // BufferをUint8Arrayに変換してレスポンスを返す
+    return new NextResponse(new Uint8Array(data), {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600', // 1時間キャッシュ
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/storage] Failed to get file:', error);
 
+    const err = error as { code?: number; message?: string };
+
     // ファイルが存在しない場合
-    if (error.code === 404 || error.message?.includes('No such object')) {
+    if (err.code === 404 || err.message?.includes('No such object')) {
       return NextResponse.json(
         { error: 'File not found' },
         { status: 404 }
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to get file', details: error.message },
+      { error: 'Failed to get file', details: err.message },
       { status: 500 }
     );
   }
