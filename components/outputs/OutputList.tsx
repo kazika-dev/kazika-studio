@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { WorkflowOutput, OutputType } from '@/types/workflow-output';
 import OutputCard from './OutputCard';
 
@@ -10,24 +10,30 @@ interface OutputListProps {
   showFavoritesOnly: boolean;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
 export default function OutputList({ filterType, searchQuery, showFavoritesOnly }: OutputListProps) {
   const [outputs, setOutputs] = useState<WorkflowOutput[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const itemsPerPage = 12;
 
-  useEffect(() => {
-    fetchOutputs();
-    setCurrentPage(1); // フィルター変更時は1ページ目に戻る
-  }, [filterType]);
-
-  // 検索クエリまたはお気に入りフィルターが変更されたら1ページ目に戻る
+  // フィルター変更時は1ページ目に戻してデータ取得
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, showFavoritesOnly]);
+  }, [filterType, searchQuery, showFavoritesOnly]);
 
-  const fetchOutputs = async () => {
+  // ページまたはフィルターが変更されたらデータを取得
+  const fetchOutputs = useCallback(async (page: number) => {
     setIsLoading(true);
     setError(null);
 
@@ -36,7 +42,8 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
       if (filterType !== 'all') {
         params.append('output_type', filterType);
       }
-      params.append('limit', '100');
+      params.append('limit', itemsPerPage.toString());
+      params.append('page', page.toString());
 
       const response = await fetch(`/api/outputs?${params.toString()}`);
       if (!response.ok) {
@@ -45,13 +52,19 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
 
       const data = await response.json();
       setOutputs(data.outputs || []);
+      setPagination(data.pagination || null);
     } catch (err) {
       console.error('Error fetching outputs:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filterType, itemsPerPage]);
+
+  // ページまたはフィルター変更時にデータを取得
+  useEffect(() => {
+    fetchOutputs(currentPage);
+  }, [currentPage, fetchOutputs]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -63,8 +76,8 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
         throw new Error('Failed to delete output');
       }
 
-      // Remove from local state
-      setOutputs((prev) => prev.filter((output) => output.id !== id));
+      // 削除後、現在のページを再取得（削除で表示件数が減った場合に対応）
+      fetchOutputs(currentPage);
     } catch (err) {
       console.error('Error deleting output:', err);
       throw err;
@@ -85,7 +98,7 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
     );
   };
 
-  // Filter by search query and favorites
+  // クライアントサイドフィルタリング（検索クエリとお気に入りはクライアントで処理）
   const filteredOutputs = outputs.filter((output) => {
     // Filter by favorites
     if (showFavoritesOnly && !output.favorite) {
@@ -101,11 +114,9 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
     );
   });
 
-  // ページング計算
-  const totalPages = Math.ceil(filteredOutputs.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentOutputs = filteredOutputs.slice(startIndex, endIndex);
+  // サーバーサイドページング情報を使用
+  const totalPages = pagination?.totalPages || 1;
+  const total = pagination?.total || 0;
 
   // ページ変更ハンドラー
   const handlePageChange = (page: number) => {
@@ -140,7 +151,7 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
           <p className="text-sm mt-1">{error}</p>
         </div>
         <button
-          onClick={fetchOutputs}
+          onClick={() => fetchOutputs(currentPage)}
           className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
         >
           再試行
@@ -187,10 +198,10 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
       {/* Results count and pagination info */}
       <div className="mb-4 flex items-center justify-between">
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {filteredOutputs.length}件のアウトプット
+          {total}件のアウトプット
           {totalPages > 1 && (
             <span className="ml-2">
-              (ページ {currentPage} / {totalPages})
+              （ページ {currentPage} / {totalPages}、表示中: {filteredOutputs.length}件）
             </span>
           )}
         </div>
@@ -198,7 +209,7 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {currentOutputs.map((output) => (
+        {filteredOutputs.map((output) => (
           <OutputCard
             key={output.id}
             output={output}
