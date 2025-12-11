@@ -163,9 +163,9 @@ export default function Header() {
         PaperProps={{
           sx: {
             width: 280,
-            backgroundColor: 'var(--tw-bg-opacity, 1) rgb(255 255 255)',
+            backgroundColor: '#ffffff',
             '@media (prefers-color-scheme: dark)': {
-              backgroundColor: 'rgb(31 41 55)',
+              backgroundColor: '#1f2937',
             },
           },
         }}
