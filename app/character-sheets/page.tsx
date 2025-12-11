@@ -18,7 +18,7 @@ import {
   DialogActions,
   Container,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Download as DownloadIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 
@@ -97,6 +97,37 @@ export default function CharacterSheetsPage() {
 
   const handleEdit = (sheet: CharacterSheet) => {
     router.push(`/character-sheets/${sheet.id}/edit`);
+  };
+
+  const handleDownload = async (sheet: CharacterSheet) => {
+    try {
+      const imageUrl = getImageUrl(sheet.image_url);
+      const response = await fetch(imageUrl);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch image');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // ファイル名を生成（キャラクター名 + 拡張子）
+      const contentType = response.headers.get('content-type') || 'image/png';
+      const extension = contentType.split('/')[1] || 'png';
+      link.download = `${sheet.name}.${extension}`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('ダウンロードを開始しました');
+    } catch (error) {
+      console.error('Failed to download image:', error);
+      toast.error('ダウンロードに失敗しました');
+    }
   };
 
   const getImageUrl = (imageUrl: string) => {
@@ -198,6 +229,13 @@ export default function CharacterSheetsPage() {
                   onClick={() => handleEdit(sheet)}
                 >
                   編集
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => handleDownload(sheet)}
+                >
+                  ダウンロード
                 </Button>
                 <Button
                   size="small"

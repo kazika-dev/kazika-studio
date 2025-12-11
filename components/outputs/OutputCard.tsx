@@ -69,6 +69,45 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
     router.push(`/outputs/edit/${output.id}`);
   };
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!output.content_url) return;
+
+    try {
+      const url = getImageSrc(output.content_url);
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch file');
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+
+      // ファイル名を生成（タイムスタンプ + 拡張子）
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      let extension = 'bin';
+      if (output.output_type === 'image') {
+        extension = contentType.split('/')[1] || 'png';
+      } else if (output.output_type === 'video') {
+        extension = contentType.split('/')[1] || 'mp4';
+      } else if (output.output_type === 'audio') {
+        extension = contentType.split('/')[1] || 'mp3';
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.download = `output_${output.output_type}_${timestamp}.${extension}`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Failed to download:', error);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('ja-JP', {
@@ -247,6 +286,24 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
                     strokeLinejoin="round"
                     strokeWidth={2}
                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
+
+            {/* Download Button (for image, video, audio) */}
+            {['image', 'video', 'audio'].includes(output.output_type) && output.content_url && (
+              <button
+                onClick={handleDownload}
+                className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 p-2 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                title="ダウンロード"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                   />
                 </svg>
               </button>
