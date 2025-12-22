@@ -104,6 +104,11 @@ export default function PromptQueueDialog({
   // 編集モードの場合は値を設定
   useEffect(() => {
     if (editQueue) {
+      // デバッグ: editQueueの内容を確認
+      console.log('editQueue:', editQueue);
+      console.log('editQueue.enhanced_prompt:', editQueue.enhanced_prompt);
+      console.log('editQueue.enhance_prompt:', editQueue.enhance_prompt);
+
       setName(editQueue.name || '');
       setPrompt(editQueue.prompt);
       setNegativePrompt(editQueue.negative_prompt || '');
@@ -121,9 +126,11 @@ export default function PromptQueueDialog({
       );
       // 補完済みプロンプトがあれば復元
       if (editQueue.enhanced_prompt) {
+        console.log('Setting enhanced prompt:', editQueue.enhanced_prompt);
         setEnhancedPrompt(editQueue.enhanced_prompt);
         setUseEnhancedPrompt(true);  // 補完済みプロンプトがあれば使用する状態に
       } else {
+        console.log('No enhanced_prompt found');
         setEnhancedPrompt('');
         setUseEnhancedPrompt(false);
       }
