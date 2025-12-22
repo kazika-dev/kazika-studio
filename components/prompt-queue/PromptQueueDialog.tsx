@@ -422,10 +422,12 @@ export default function PromptQueueDialog({
                 ※ 選択した画像も参照して最適なプロンプトを生成します
               </Typography>
 
-              {enhancedPrompt && (
+              {/* 補完済みプロンプトがある場合、または新規に補完した場合に表示 */}
+              {(enhancedPrompt || (editQueue && editQueue.enhanced_prompt)) && (
                 <>
                   <TextField
-                    value={enhancedPrompt}
+                    label="補完後のプロンプト"
+                    value={enhancedPrompt || editQueue?.enhanced_prompt || ''}
                     onChange={(e) => setEnhancedPrompt(e.target.value)}
                     fullWidth
                     multiline
