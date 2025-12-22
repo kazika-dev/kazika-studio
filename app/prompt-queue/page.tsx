@@ -216,7 +216,6 @@ export default function PromptQueuePage() {
         onChange={(_, value) => setStatusFilter(value)}
         sx={{ mb: 3 }}
       >
-        <Tab value="all" label="すべて" />
         <Tab value="pending" label="待機中" />
         <Tab value="processing" label="実行中" />
         <Tab value="completed" label="完了" />
