@@ -33,7 +33,7 @@ export default function PromptQueuePage() {
   const [queues, setQueues] = useState<PromptQueueWithImages[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<PromptQueueStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<PromptQueueStatus>('pending');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editQueue, setEditQueue] = useState<PromptQueueWithImages | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -48,9 +48,7 @@ export default function PromptQueuePage() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (statusFilter !== 'all') {
-        params.set('status', statusFilter);
-      }
+      params.set('status', statusFilter);
       params.set('limit', '100');
 
       const response = await fetch(`/api/prompt-queue?${params.toString()}`);
