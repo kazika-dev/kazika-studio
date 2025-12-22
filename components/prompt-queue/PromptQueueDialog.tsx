@@ -23,6 +23,7 @@ import {
   Close as CloseIcon,
   Image as ImageIcon,
   Person as PersonIcon,
+  LibraryBooks as LibraryBooksIcon,
 } from '@mui/icons-material';
 import type {
   PromptQueueWithImages,
@@ -31,6 +32,7 @@ import type {
   PromptQueueImageType,
 } from '@/types/prompt-queue';
 import ImageSelectorDialog from './ImageSelectorDialog';
+import MasterSelectorDialog from './MasterSelectorDialog';
 
 /**
  * 画像URLを取得（GCP Storageパスの場合はAPIエンドポイント経由）
@@ -88,6 +90,7 @@ export default function PromptQueueDialog({
   const [saving, setSaving] = useState(false);
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
   const [imageSelectorType, setImageSelectorType] = useState<'character_sheet' | 'output'>('character_sheet');
+  const [masterSelectorOpen, setMasterSelectorOpen] = useState(false);
 
   // 編集モードの場合は値を設定
   useEffect(() => {
@@ -174,6 +177,11 @@ export default function PromptQueueDialog({
 
   const remainingSlots = 8 - selectedImages.length;
 
+  // マスターデータから選択したテキストをプロンプトに挿入
+  const handleMasterSelect = (text: string) => {
+    setPrompt((prev) => (prev ? `${prev} ${text}` : text));
+  };
+
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -192,17 +200,32 @@ export default function PromptQueueDialog({
             />
 
             {/* プロンプト */}
-            <TextField
-              label="プロンプト"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              fullWidth
-              multiline
-              rows={4}
-              required
-              error={!prompt.trim()}
-              helperText={!prompt.trim() ? 'プロンプトは必須です' : ''}
-            />
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                  プロンプト *
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<LibraryBooksIcon />}
+                  onClick={() => setMasterSelectorOpen(true)}
+                >
+                  マスターから挿入
+                </Button>
+              </Box>
+              <TextField
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                fullWidth
+                multiline
+                rows={4}
+                required
+                error={!prompt.trim()}
+                helperText={!prompt.trim() ? 'プロンプトは必須です' : ''}
+                placeholder="カメラアングル、ショット距離、テンプレートなどをマスターから挿入できます"
+              />
+            </Box>
 
             {/* ネガティブプロンプト */}
             <TextField
@@ -391,6 +414,13 @@ export default function PromptQueueDialog({
         type={imageSelectorType}
         maxSelections={remainingSlots}
         currentSelections={selectedImages}
+      />
+
+      {/* マスターデータ選択ダイアログ */}
+      <MasterSelectorDialog
+        open={masterSelectorOpen}
+        onClose={() => setMasterSelectorOpen(false)}
+        onSelect={handleMasterSelect}
       />
     </>
   );
