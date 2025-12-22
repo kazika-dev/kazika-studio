@@ -23,7 +23,6 @@ import {
   Image as ImageIcon,
 } from '@mui/icons-material';
 import type { PromptQueueImageType } from '@/types/prompt-queue';
-import { getSignedImageUrl } from '@/lib/utils/imageUrl';
 
 interface SelectedImage {
   image_type: PromptQueueImageType;
@@ -55,6 +54,17 @@ interface OutputImage {
   created_at: string;
 }
 
+/**
+ * 画像URLを取得（GCP Storageパスの場合はAPIエンドポイント経由）
+ */
+function getImageUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `/api/storage/${url}`;
+}
+
 export default function ImageSelectorDialog({
   open,
   onClose,
@@ -69,7 +79,6 @@ export default function ImageSelectorDialog({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
-  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
   // タブ変更時にタイプを更新
   useEffect(() => {
@@ -83,28 +92,6 @@ export default function ImageSelectorDialog({
       fetchData();
     }
   }, [open, tabValue]);
-
-  // 画像URLを読み込み
-  useEffect(() => {
-    const loadUrls = async () => {
-      const items = tabValue === 'character_sheet' ? characterSheets : outputs;
-      for (const item of items) {
-        const url = tabValue === 'character_sheet'
-          ? (item as CharacterSheet).image_url
-          : (item as OutputImage).content_url;
-        const key = `${tabValue}:${item.id}`;
-        if (url && !imageUrls[key]) {
-          try {
-            const signedUrl = await getSignedImageUrl(url);
-            setImageUrls((prev) => ({ ...prev, [key]: signedUrl }));
-          } catch (error) {
-            console.error('Failed to load image URL:', error);
-          }
-        }
-      }
-    };
-    loadUrls();
-  }, [characterSheets, outputs, tabValue]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -234,14 +221,13 @@ export default function ImageSelectorDialog({
               {tabValue === 'character_sheet' ? (
                 filteredCharacterSheets.length > 0 ? (
                   filteredCharacterSheets.map((cs) => {
-                    const key = `character_sheet:${cs.id}`;
-                    const url = imageUrls[key];
+                    const url = getImageUrl(cs.image_url);
                     const selected = isSelected('character_sheet', cs.id);
                     const alreadySelected = isAlreadySelected('character_sheet', cs.id);
                     const disabled = alreadySelected || (remainingSelections === 0 && !selected);
 
                     return (
-                      <Grid item xs={4} sm={3} md={2} key={cs.id}>
+                      <Grid size={{ xs: 4, sm: 3, md: 2 }} key={cs.id}>
                         <Box
                           onClick={() => {
                             if (!disabled) {
@@ -319,7 +305,7 @@ export default function ImageSelectorDialog({
                     );
                   })
                 ) : (
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }}>
                     <Typography color="text.secondary" textAlign="center" py={4}>
                       キャラクターシートがありません
                     </Typography>
@@ -327,15 +313,14 @@ export default function ImageSelectorDialog({
                 )
               ) : filteredOutputs.length > 0 ? (
                 filteredOutputs.map((output) => {
-                  const key = `output:${output.id}`;
-                  const url = imageUrls[key];
+                  const url = getImageUrl(output.content_url);
                   const selected = isSelected('output', output.id);
                   const alreadySelected = isAlreadySelected('output', output.id);
                   const disabled = alreadySelected || (remainingSelections === 0 && !selected);
                   const name = output.metadata?.name || `Output #${output.id}`;
 
                   return (
-                    <Grid item xs={4} sm={3} md={2} key={output.id}>
+                    <Grid size={{ xs: 4, sm: 3, md: 2 }} key={output.id}>
                       <Box
                         onClick={() => {
                           if (!disabled) {
@@ -413,7 +398,7 @@ export default function ImageSelectorDialog({
                   );
                 })
               ) : (
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Typography color="text.secondary" textAlign="center" py={4}>
                     アウトプット画像がありません
                   </Typography>

@@ -254,7 +254,7 @@ export default function PromptQueuePage() {
       ) : (
         <Grid container spacing={2}>
           {queues.map((queue) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={queue.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={queue.id}>
               <PromptQueueCard
                 queue={queue}
                 onEdit={handleEdit}

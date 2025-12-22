@@ -20,7 +20,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Add as AddIcon,
   Close as CloseIcon,
   Image as ImageIcon,
   Person as PersonIcon,
@@ -32,7 +31,17 @@ import type {
   PromptQueueImageType,
 } from '@/types/prompt-queue';
 import ImageSelectorDialog from './ImageSelectorDialog';
-import { getSignedImageUrl } from '@/lib/utils/imageUrl';
+
+/**
+ * 画像URLを取得（GCP Storageパスの場合はAPIエンドポイント経由）
+ */
+function getImageUrl(url: string | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `/api/storage/${url}`;
+}
 
 interface PromptQueueDialogProps {
   open: boolean;
@@ -76,7 +85,6 @@ export default function PromptQueueDialog({
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [priority, setPriority] = useState(0);
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
-  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
   const [imageSelectorType, setImageSelectorType] = useState<'character_sheet' | 'output'>('character_sheet');
@@ -110,23 +118,6 @@ export default function PromptQueueDialog({
     }
   }, [editQueue, open]);
 
-  // 画像URLを読み込み
-  useEffect(() => {
-    const loadUrls = async () => {
-      for (const img of selectedImages) {
-        const key = `${img.image_type}:${img.reference_id}`;
-        if (img.image_url && !imageUrls[key]) {
-          try {
-            const url = await getSignedImageUrl(img.image_url);
-            setImageUrls((prev) => ({ ...prev, [key]: url }));
-          } catch (error) {
-            console.error('Failed to load image URL:', error);
-          }
-        }
-      }
-    };
-    loadUrls();
-  }, [selectedImages]);
 
   const handleSave = async () => {
     if (!prompt.trim()) return;
@@ -297,7 +288,7 @@ export default function PromptQueueDialog({
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 {selectedImages.map((img, index) => {
                   const key = `${img.image_type}:${img.reference_id}`;
-                  const url = imageUrls[key];
+                  const url = getImageUrl(img.image_url);
 
                   return (
                     <Tooltip

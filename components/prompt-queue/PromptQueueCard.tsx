@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -22,13 +21,12 @@ import {
   Cancel as CancelIcon,
 } from '@mui/icons-material';
 import type { PromptQueueWithImages } from '@/types/prompt-queue';
-import { getSignedImageUrl } from '@/lib/utils/imageUrl';
 
 interface PromptQueueCardProps {
   queue: PromptQueueWithImages;
   onEdit: (queue: PromptQueueWithImages) => void;
-  onDelete: (queueId: number) => void;
-  onExecute: (queueId: number) => void;
+  onDelete: (queue: PromptQueueWithImages) => void;
+  onExecute: (queue: PromptQueueWithImages) => void;
   isExecuting?: boolean;
 }
 
@@ -40,6 +38,17 @@ const statusConfig = {
   cancelled: { label: 'キャンセル', color: 'warning' as const, icon: CancelIcon },
 };
 
+/**
+ * 画像URLを取得（GCP Storageパスの場合はAPIエンドポイント経由）
+ */
+function getImageUrl(url: string | null): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `/api/storage/${url}`;
+}
+
 export default function PromptQueueCard({
   queue,
   onEdit,
@@ -47,21 +56,8 @@ export default function PromptQueueCard({
   onExecute,
   isExecuting = false,
 }: PromptQueueCardProps) {
-  const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
-
   const status = statusConfig[queue.status] || statusConfig.pending;
   const StatusIcon = status.icon;
-
-  // 画像URLを取得
-  const loadImageUrl = async (imageId: number, storagePath: string | null) => {
-    if (!storagePath || imageUrls[imageId]) return;
-    try {
-      const url = await getSignedImageUrl(storagePath);
-      setImageUrls((prev) => ({ ...prev, [imageId]: url }));
-    } catch (error) {
-      console.error('Failed to load image URL:', error);
-    }
-  };
 
   return (
     <Card sx={{ mb: 2 }}>
@@ -89,7 +85,7 @@ export default function PromptQueueCard({
                 <IconButton
                   size="small"
                   color="primary"
-                  onClick={() => onExecute(queue.id)}
+                  onClick={() => onExecute(queue)}
                   disabled={isExecuting}
                 >
                   {isExecuting ? <CircularProgress size={20} /> : <PlayIcon />}
@@ -102,7 +98,7 @@ export default function PromptQueueCard({
               </IconButton>
             </Tooltip>
             <Tooltip title="削除">
-              <IconButton size="small" color="error" onClick={() => onDelete(queue.id)}>
+              <IconButton size="small" color="error" onClick={() => onDelete(queue)}>
                 <DeleteIcon />
               </IconButton>
             </Tooltip>
@@ -128,10 +124,7 @@ export default function PromptQueueCard({
         {queue.images.length > 0 && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
             {queue.images.slice(0, 8).map((img) => {
-              // 画像URLを読み込み
-              if (img.image_url && !imageUrls[img.id]) {
-                loadImageUrl(img.id, img.image_url);
-              }
+              const imageUrl = getImageUrl(img.image_url);
 
               return (
                 <Tooltip
@@ -151,9 +144,9 @@ export default function PromptQueueCard({
                       border: img.image_type === 'character_sheet' ? '2px solid #1976d2' : '2px solid #9c27b0',
                     }}
                   >
-                    {imageUrls[img.id] ? (
+                    {imageUrl ? (
                       <img
-                        src={imageUrls[img.id]}
+                        src={imageUrl}
                         alt={img.name || '参照画像'}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
