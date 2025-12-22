@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -91,6 +91,8 @@ export default function PromptQueueDialog({
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
   const [imageSelectorType, setImageSelectorType] = useState<'character_sheet' | 'output'>('character_sheet');
   const [masterSelectorOpen, setMasterSelectorOpen] = useState(false);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
+  const [cursorPosition, setCursorPosition] = useState<{ start: number; end: number } | null>(null);
 
   // 編集モードの場合は値を設定
   useEffect(() => {
@@ -177,9 +179,43 @@ export default function PromptQueueDialog({
 
   const remainingSlots = 8 - selectedImages.length;
 
-  // マスターデータから選択したテキストをプロンプトに挿入
+  // マスター選択ダイアログを開く前にカーソル位置を保存
+  const handleOpenMasterSelector = () => {
+    const textarea = promptInputRef.current;
+    if (textarea) {
+      setCursorPosition({
+        start: textarea.selectionStart ?? prompt.length,
+        end: textarea.selectionEnd ?? prompt.length,
+      });
+    } else {
+      setCursorPosition({ start: prompt.length, end: prompt.length });
+    }
+    setMasterSelectorOpen(true);
+  };
+
+  // マスターデータから選択したテキストをプロンプトの保存されたカーソル位置に挿入
   const handleMasterSelect = (text: string) => {
-    setPrompt((prev) => (prev ? `${prev} ${text}` : text));
+    const start = cursorPosition?.start ?? prompt.length;
+    const end = cursorPosition?.end ?? prompt.length;
+    const before = prompt.substring(0, start);
+    const after = prompt.substring(end);
+    // 前後にスペースを追加（必要な場合）
+    const needSpaceBefore = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n');
+    const needSpaceAfter = after.length > 0 && !after.startsWith(' ') && !after.startsWith('\n');
+    const insertText = `${needSpaceBefore ? ' ' : ''}${text}${needSpaceAfter ? ' ' : ''}`;
+    const newPrompt = before + insertText + after;
+    setPrompt(newPrompt);
+    // カーソル位置を挿入したテキストの後ろに移動
+    const textarea = promptInputRef.current;
+    if (textarea) {
+      setTimeout(() => {
+        const newCursorPos = start + insertText.length;
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }, 0);
+    }
+    // カーソル位置をリセット
+    setCursorPosition(null);
   };
 
   return (
@@ -209,12 +245,13 @@ export default function PromptQueueDialog({
                   variant="outlined"
                   size="small"
                   startIcon={<LibraryBooksIcon />}
-                  onClick={() => setMasterSelectorOpen(true)}
+                  onClick={handleOpenMasterSelector}
                 >
                   マスターから挿入
                 </Button>
               </Box>
               <TextField
+                inputRef={promptInputRef}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 fullWidth
