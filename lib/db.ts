@@ -2102,3 +2102,358 @@ export async function deleteConversationPromptTemplate(id: number) {
     [id]
   );
 }
+
+// ============================================================================
+// Prompt Queue
+// ============================================================================
+
+import type {
+  PromptQueue,
+  PromptQueueWithImages,
+  PromptQueueImageWithDetails,
+  PromptQueueStatus,
+  PromptQueueImageType,
+} from '@/types/prompt-queue';
+
+/**
+ * ユーザーのプロンプトキュー一覧を取得（参照画像付き）
+ */
+export async function getPromptQueuesByUserId(
+  userId: string,
+  options?: {
+    status?: PromptQueueStatus;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<{ queues: PromptQueueWithImages[]; total: number }> {
+  const { status, limit = 50, offset = 0 } = options || {};
+
+  // 件数取得
+  let countQuery = `SELECT COUNT(*) as count FROM kazikastudio.prompt_queues WHERE user_id = $1`;
+  const countParams: any[] = [userId];
+
+  if (status) {
+    countQuery += ` AND status = $2`;
+    countParams.push(status);
+  }
+
+  const countResult = await query(countQuery, countParams);
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  // キュー取得
+  let queuesQuery = `
+    SELECT * FROM kazikastudio.prompt_queues
+    WHERE user_id = $1
+  `;
+  const queuesParams: any[] = [userId];
+  let paramIndex = 2;
+
+  if (status) {
+    queuesQuery += ` AND status = $${paramIndex++}`;
+    queuesParams.push(status);
+  }
+
+  queuesQuery += ` ORDER BY priority DESC, created_at ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+  queuesParams.push(limit, offset);
+
+  const queuesResult = await query(queuesQuery, queuesParams);
+  const queues = queuesResult.rows as PromptQueue[];
+
+  // 各キューの参照画像を取得
+  const queuesWithImages: PromptQueueWithImages[] = await Promise.all(
+    queues.map(async (q) => {
+      const images = await getPromptQueueImages(q.id);
+      return {
+        ...q,
+        images,
+        image_count: images.length,
+      };
+    })
+  );
+
+  return { queues: queuesWithImages, total };
+}
+
+/**
+ * プロンプトキューをIDで取得（参照画像付き）
+ */
+export async function getPromptQueueById(id: number): Promise<PromptQueueWithImages | null> {
+  const result = await query(
+    `SELECT * FROM kazikastudio.prompt_queues WHERE id = $1`,
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const queue = result.rows[0] as PromptQueue;
+  const images = await getPromptQueueImages(id);
+
+  return {
+    ...queue,
+    images,
+    image_count: images.length,
+  };
+}
+
+/**
+ * プロンプトキューの参照画像を取得（詳細情報付き）
+ */
+export async function getPromptQueueImages(queueId: number): Promise<PromptQueueImageWithDetails[]> {
+  const result = await query(
+    `SELECT
+       pqi.id,
+       pqi.queue_id,
+       pqi.image_type,
+       pqi.reference_id,
+       pqi.display_order,
+       pqi.created_at,
+       CASE
+         WHEN pqi.image_type = 'character_sheet' THEN cs.image_url
+         WHEN pqi.image_type = 'output' THEN wo.content_url
+       END as image_url,
+       CASE
+         WHEN pqi.image_type = 'character_sheet' THEN cs.name
+         ELSE NULL
+       END as name
+     FROM kazikastudio.prompt_queue_images pqi
+     LEFT JOIN kazikastudio.character_sheets cs
+       ON pqi.image_type = 'character_sheet' AND pqi.reference_id = cs.id
+     LEFT JOIN kazikastudio.workflow_outputs wo
+       ON pqi.image_type = 'output' AND pqi.reference_id = wo.id
+     WHERE pqi.queue_id = $1
+     ORDER BY pqi.display_order ASC`,
+    [queueId]
+  );
+
+  return result.rows as PromptQueueImageWithDetails[];
+}
+
+/**
+ * プロンプトキューを作成
+ */
+export async function createPromptQueue(
+  userId: string,
+  data: {
+    name?: string;
+    prompt: string;
+    negative_prompt?: string;
+    model?: string;
+    aspect_ratio?: string;
+    priority?: number;
+    metadata?: Record<string, any>;
+    images?: { image_type: PromptQueueImageType; reference_id: number }[];
+  }
+): Promise<PromptQueueWithImages> {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // キューを作成
+    const queueResult = await client.query(
+      `INSERT INTO kazikastudio.prompt_queues
+       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        userId,
+        data.name || null,
+        data.prompt,
+        data.negative_prompt || null,
+        data.model || 'gemini-2.5-flash-image',
+        data.aspect_ratio || '16:9',
+        data.priority || 0,
+        JSON.stringify(data.metadata || {}),
+      ]
+    );
+
+    const queue = queueResult.rows[0] as PromptQueue;
+
+    // 参照画像を追加
+    if (data.images && data.images.length > 0) {
+      for (let i = 0; i < Math.min(data.images.length, 8); i++) {
+        const img = data.images[i];
+        await client.query(
+          `INSERT INTO kazikastudio.prompt_queue_images
+           (queue_id, image_type, reference_id, display_order)
+           VALUES ($1, $2, $3, $4)`,
+          [queue.id, img.image_type, img.reference_id, i]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // 参照画像付きで返す
+    const images = await getPromptQueueImages(queue.id);
+    return {
+      ...queue,
+      images,
+      image_count: images.length,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * プロンプトキューを更新
+ */
+export async function updatePromptQueue(
+  id: number,
+  data: {
+    name?: string;
+    prompt?: string;
+    negative_prompt?: string;
+    model?: string;
+    aspect_ratio?: string;
+    priority?: number;
+    status?: PromptQueueStatus;
+    metadata?: Record<string, any>;
+    error_message?: string;
+    output_id?: number;
+    executed_at?: string;
+    images?: { image_type: PromptQueueImageType; reference_id: number }[];
+  }
+): Promise<PromptQueueWithImages | null> {
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 動的にSET句を構築
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (data.name !== undefined) {
+      setClauses.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.prompt !== undefined) {
+      setClauses.push(`prompt = $${paramIndex++}`);
+      values.push(data.prompt);
+    }
+    if (data.negative_prompt !== undefined) {
+      setClauses.push(`negative_prompt = $${paramIndex++}`);
+      values.push(data.negative_prompt);
+    }
+    if (data.model !== undefined) {
+      setClauses.push(`model = $${paramIndex++}`);
+      values.push(data.model);
+    }
+    if (data.aspect_ratio !== undefined) {
+      setClauses.push(`aspect_ratio = $${paramIndex++}`);
+      values.push(data.aspect_ratio);
+    }
+    if (data.priority !== undefined) {
+      setClauses.push(`priority = $${paramIndex++}`);
+      values.push(data.priority);
+    }
+    if (data.status !== undefined) {
+      setClauses.push(`status = $${paramIndex++}`);
+      values.push(data.status);
+    }
+    if (data.metadata !== undefined) {
+      setClauses.push(`metadata = $${paramIndex++}`);
+      values.push(JSON.stringify(data.metadata));
+    }
+    if (data.error_message !== undefined) {
+      setClauses.push(`error_message = $${paramIndex++}`);
+      values.push(data.error_message);
+    }
+    if (data.output_id !== undefined) {
+      setClauses.push(`output_id = $${paramIndex++}`);
+      values.push(data.output_id);
+    }
+    if (data.executed_at !== undefined) {
+      setClauses.push(`executed_at = $${paramIndex++}`);
+      values.push(data.executed_at);
+    }
+
+    if (setClauses.length === 0 && !data.images) {
+      await client.query('ROLLBACK');
+      return await getPromptQueueById(id);
+    }
+
+    if (setClauses.length > 0) {
+      values.push(id);
+      await client.query(
+        `UPDATE kazikastudio.prompt_queues
+         SET ${setClauses.join(', ')}
+         WHERE id = $${paramIndex}`,
+        values
+      );
+    }
+
+    // 画像を更新する場合は、既存の画像を削除して再作成
+    if (data.images !== undefined) {
+      await client.query(
+        `DELETE FROM kazikastudio.prompt_queue_images WHERE queue_id = $1`,
+        [id]
+      );
+
+      for (let i = 0; i < Math.min(data.images.length, 8); i++) {
+        const img = data.images[i];
+        await client.query(
+          `INSERT INTO kazikastudio.prompt_queue_images
+           (queue_id, image_type, reference_id, display_order)
+           VALUES ($1, $2, $3, $4)`,
+          [id, img.image_type, img.reference_id, i]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return await getPromptQueueById(id);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * プロンプトキューを削除
+ */
+export async function deletePromptQueue(id: number): Promise<boolean> {
+  const result = await query(
+    `DELETE FROM kazikastudio.prompt_queues WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * ステータスがpendingのキューを優先度順で取得
+ */
+export async function getPendingPromptQueues(userId: string): Promise<PromptQueueWithImages[]> {
+  const result = await query(
+    `SELECT * FROM kazikastudio.prompt_queues
+     WHERE user_id = $1 AND status = 'pending'
+     ORDER BY priority DESC, created_at ASC`,
+    [userId]
+  );
+
+  const queues = result.rows as PromptQueue[];
+
+  return Promise.all(
+    queues.map(async (q) => {
+      const images = await getPromptQueueImages(q.id);
+      return {
+        ...q,
+        images,
+        image_count: images.length,
+      };
+    })
+  );
+}
