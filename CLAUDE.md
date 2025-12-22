@@ -29,6 +29,37 @@ CLAUDE.mdは40.0k文字以下にして概要としてまとめてください。
 
 ## 最近の主要な変更
 
+### 2025-12-22: プロンプトキュー機能にプロンプト補完機能を追加
+
+**目的**: プロンプトキュー登録時に、Gemini AIを使用してユーザーの入力プロンプトを画像生成に最適化された英語プロンプトに補完する機能を追加
+
+**変更内容**:
+
+1. **データベースカラム追加**
+   - `enhance_prompt` (TEXT, デフォルト: 'none') - 補完モード（`none` / `enhance`）
+   - `enhanced_prompt` (TEXT, NULL可) - 補完後のプロンプト
+
+2. **PromptQueueDialog の修正**
+   - 補完後プロンプトの保存・復元ロジックを修正
+   - `enhanced_prompt` が存在する場合は `enhance_prompt: 'enhance'` を自動設定
+   - 編集時に補完後プロンプトが正しく表示されるように修正
+
+3. **API修正**
+   - `/api/prompt-queue` - `enhance_prompt`, `enhanced_prompt` の保存に対応
+   - `/api/prompt-queue/[id]` - 更新時も同様に対応
+
+**キュー実行時のプロンプト決定ロジック（重要）**:
+```typescript
+const promptToUse =
+  queue.enhance_prompt === 'enhance' && queue.enhanced_prompt
+    ? queue.enhanced_prompt  // 補完後プロンプトを使用
+    : queue.prompt;          // 元のプロンプトを使用
+```
+
+**詳細**: [/docs/prompt-queue.md](/docs/prompt-queue.md)
+
+---
+
 ### 2025-12-07: API 認証機能（Chrome Extension 対応）を追加
 
 **目的**: Chrome Extension などの外部クライアントから kazika-studio の API を利用できるように、Authorization ヘッダー認証（API キー方式）を追加
