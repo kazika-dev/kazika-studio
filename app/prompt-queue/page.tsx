@@ -56,6 +56,11 @@ export default function PromptQueuePage() {
         throw new Error('キューの取得に失敗しました');
       }
       const data = await response.json();
+      // デバッグ: enhanced_promptが含まれているか確認
+      if (data.queues && data.queues.length > 0) {
+        console.log('First queue data:', data.queues[0]);
+        console.log('enhanced_prompt:', data.queues[0].enhanced_prompt);
+      }
       setQueues(data.queues || []);
     } catch (err: any) {
       setError(err.message);
