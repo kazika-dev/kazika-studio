@@ -5,6 +5,7 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
 /**
  * GET /api/character-sheets
  * ユーザーのキャラクターシート一覧を取得
+ * クエリパラメータ: limit, offset（ページング用）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,11 +19,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const characterSheets = await getCharacterSheetsByUserId(user.id);
+    // ページングパラメータを取得
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '0', 10);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
+
+    const characterSheets = await getCharacterSheetsByUserId(user.id, limit > 0 ? limit : undefined, offset > 0 ? offset : undefined);
+
+    // total を取得するために、limit/offset なしで全件数を取得
+    const allSheets = await getCharacterSheetsByUserId(user.id);
+    const total = allSheets.length;
 
     return NextResponse.json({
       success: true,
       characterSheets,
+      total,
     });
   } catch (error: any) {
     console.error('Failed to get character sheets:', error);

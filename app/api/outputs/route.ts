@@ -16,11 +16,14 @@ export async function GET(request: NextRequest) {
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const outputType = searchParams.get('output_type');
+    // output_type または type パラメータをサポート
+    const outputType = searchParams.get('output_type') || searchParams.get('type');
     const workflowId = searchParams.get('workflow_id');
     const limit = parseInt(searchParams.get('limit') || '50');
     const page = parseInt(searchParams.get('page') || '1');
-    const offset = (page - 1) * limit;
+    // offset パラメータが指定されている場合はそれを使用、そうでなければ page から計算
+    const offsetParam = searchParams.get('offset');
+    const offset = offsetParam !== null ? parseInt(offsetParam) : (page - 1) * limit;
 
     // source_url フィルタリング
     const sourceUrl = searchParams.get('source_url');
@@ -120,6 +123,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       outputs: dataResult.rows,
+      total,
       pagination: {
         page,
         limit,

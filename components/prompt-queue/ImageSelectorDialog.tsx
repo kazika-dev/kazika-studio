@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -16,13 +16,18 @@ import {
   CircularProgress,
   TextField,
   InputAdornment,
+  IconButton,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Person as PersonIcon,
   Image as ImageIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import type { PromptQueueImageType } from '@/types/prompt-queue';
+
+const PAGE_SIZE = 10;
 
 interface SelectedImage {
   image_type: PromptQueueImageType;
@@ -80,6 +85,12 @@ export default function ImageSelectorDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
 
+  // ページング状態
+  const [csPage, setCsPage] = useState(0);
+  const [csTotal, setCsTotal] = useState(0);
+  const [outputPage, setOutputPage] = useState(0);
+  const [outputTotal, setOutputTotal] = useState(0);
+
   // タブ変更時にタイプを更新
   useEffect(() => {
     setTabValue(type);
@@ -89,24 +100,37 @@ export default function ImageSelectorDialog({
   useEffect(() => {
     if (open) {
       setSelectedImages([]);
+      setCsPage(0);
+      setOutputPage(0);
+      setSearchQuery('');
+    }
+  }, [open]);
+
+  // タブまたはページが変わったときにデータを取得
+  useEffect(() => {
+    if (open) {
       fetchData();
     }
-  }, [open, tabValue]);
+  }, [open, tabValue, csPage, outputPage]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       if (tabValue === 'character_sheet') {
-        const response = await fetch('/api/character-sheets');
+        const offset = csPage * PAGE_SIZE;
+        const response = await fetch(`/api/character-sheets?limit=${PAGE_SIZE}&offset=${offset}`);
         if (response.ok) {
           const data = await response.json();
           setCharacterSheets(data.characterSheets || []);
+          setCsTotal(data.total || 0);
         }
       } else {
-        const response = await fetch('/api/outputs?type=image&limit=50');
+        const offset = outputPage * PAGE_SIZE;
+        const response = await fetch(`/api/outputs?type=image&limit=${PAGE_SIZE}&offset=${offset}`);
         if (response.ok) {
           const data = await response.json();
           setOutputs(data.outputs || []);
+          setOutputTotal(data.total || 0);
         }
       }
     } catch (error) {
@@ -114,7 +138,7 @@ export default function ImageSelectorDialog({
     } finally {
       setLoading(false);
     }
-  };
+  }, [tabValue, csPage, outputPage]);
 
   const handleToggleImage = (image: SelectedImage) => {
     setSelectedImages((prev) => {
@@ -154,6 +178,7 @@ export default function ImageSelectorDialog({
     onSelect(selectedImages);
   };
 
+  // 検索フィルタリング（クライアント側で現在のページ内をフィルタ）
   const filteredCharacterSheets = characterSheets.filter((cs) =>
     cs.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -164,6 +189,24 @@ export default function ImageSelectorDialog({
   });
 
   const remainingSelections = maxSelections - selectedImages.length;
+
+  // ページング計算
+  const currentPage = tabValue === 'character_sheet' ? csPage : outputPage;
+  const totalItems = tabValue === 'character_sheet' ? csTotal : outputTotal;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const setPage = tabValue === 'character_sheet' ? setCsPage : setOutputPage;
+
+  const handlePrevPage = () => {
+    if (currentPage > 0) {
+      setPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages - 1) {
+      setPage(currentPage + 1);
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -216,7 +259,7 @@ export default function ImageSelectorDialog({
             <CircularProgress />
           </Box>
         ) : (
-          <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+          <Box sx={{ minHeight: 300 }}>
             <Grid container spacing={1}>
               {tabValue === 'character_sheet' ? (
                 filteredCharacterSheets.length > 0 ? (
@@ -227,7 +270,7 @@ export default function ImageSelectorDialog({
                     const disabled = alreadySelected || (remainingSelections === 0 && !selected);
 
                     return (
-                      <Grid size={{ xs: 4, sm: 3, md: 2 }} key={cs.id}>
+                      <Grid size={{ xs: 4, sm: 3, md: 2.4 }} key={cs.id}>
                         <Box
                           onClick={() => {
                             if (!disabled) {
@@ -320,7 +363,7 @@ export default function ImageSelectorDialog({
                   const name = output.metadata?.name || `Output #${output.id}`;
 
                   return (
-                    <Grid size={{ xs: 4, sm: 3, md: 2 }} key={output.id}>
+                    <Grid size={{ xs: 4, sm: 3, md: 2.4 }} key={output.id}>
                       <Box
                         onClick={() => {
                           if (!disabled) {
@@ -405,6 +448,29 @@ export default function ImageSelectorDialog({
                 </Grid>
               )}
             </Grid>
+
+            {/* ページング */}
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 2, gap: 2 }}>
+                <IconButton
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 0}
+                  size="small"
+                >
+                  <ChevronLeftIcon />
+                </IconButton>
+                <Typography variant="body2">
+                  {currentPage + 1} / {totalPages} ページ（全{totalItems}件）
+                </Typography>
+                <IconButton
+                  onClick={handleNextPage}
+                  disabled={currentPage >= totalPages - 1}
+                  size="small"
+                >
+                  <ChevronRightIcon />
+                </IconButton>
+              </Box>
+            )}
           </Box>
         )}
       </DialogContent>

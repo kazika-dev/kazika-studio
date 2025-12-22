@@ -652,12 +652,24 @@ export async function getWorkflowOutputById(id: number) {
 
 /**
  * ユーザーの全キャラクターシートを取得
+ * @param userId ユーザーID
+ * @param limit 取得件数（省略時は全件）
+ * @param offset 開始位置（省略時は0）
  */
-export async function getCharacterSheetsByUserId(userId: string) {
-  const result = await query(
-    'SELECT * FROM kazikastudio.character_sheets WHERE user_id = $1 ORDER BY created_at DESC',
-    [userId]
-  );
+export async function getCharacterSheetsByUserId(userId: string, limit?: number, offset?: number) {
+  let sql = 'SELECT * FROM kazikastudio.character_sheets WHERE user_id = $1 ORDER BY created_at DESC';
+  const params: any[] = [userId];
+
+  if (limit !== undefined && limit > 0) {
+    sql += ` LIMIT $${params.length + 1}`;
+    params.push(limit);
+  }
+  if (offset !== undefined && offset > 0) {
+    sql += ` OFFSET $${params.length + 1}`;
+    params.push(offset);
+  }
+
+  const result = await query(sql, params);
   return result.rows;
 }
 
