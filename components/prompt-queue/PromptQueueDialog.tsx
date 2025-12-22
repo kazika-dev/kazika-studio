@@ -119,6 +119,15 @@ export default function PromptQueueDialog({
           image_url: img.image_url || undefined,
         }))
       );
+      // 補完済みプロンプトがあれば復元
+      if (editQueue.enhanced_prompt) {
+        setEnhancedPrompt(editQueue.enhanced_prompt);
+        setUseEnhancedPrompt(true);  // 補完済みプロンプトがあれば使用する状態に
+      } else {
+        setEnhancedPrompt('');
+        setUseEnhancedPrompt(false);
+      }
+      setIsEnhancing(false);
     } else {
       // 新規作成時はリセット
       setName('');
@@ -129,11 +138,11 @@ export default function PromptQueueDialog({
       setPriority(0);
       setEnhancePrompt('none');
       setSelectedImages([]);
+      // 補完関連の状態をリセット
+      setEnhancedPrompt('');
+      setUseEnhancedPrompt(false);
+      setIsEnhancing(false);
     }
-    // 補完関連の状態をリセット
-    setEnhancedPrompt('');
-    setUseEnhancedPrompt(false);
-    setIsEnhancing(false);
   }, [editQueue, open]);
 
 
@@ -142,27 +151,23 @@ export default function PromptQueueDialog({
 
     setSaving(true);
     try {
-      // 補完済みプロンプトを使用する場合は、それを保存
-      const finalPrompt = useEnhancedPrompt && enhancedPrompt ? enhancedPrompt : prompt;
       await onSave({
         name: name || undefined,
-        prompt: finalPrompt,
+        prompt: prompt,  // 常に元のプロンプトを保存
         negative_prompt: negativePrompt || undefined,
         model,
         aspect_ratio: aspectRatio,
         priority,
         // 補完済みを使用する場合は実行時補完をスキップ
         enhance_prompt: useEnhancedPrompt ? 'none' : enhancePrompt,
-        images: selectedImages.map((img) => ({
-          image_type: img.image_type,
-          reference_id: img.reference_id,
-        })),
-        // 元のプロンプトと補完後のプロンプトをメタデータに保存
-        metadata: useEnhancedPrompt ? {
-          original_prompt: prompt,
-          enhanced_prompt: enhancedPrompt,
-          enhanced_at_creation: true,
-        } : undefined,
+        // 補完後のプロンプトを直接enhanced_promptカラムに保存
+        enhanced_prompt: useEnhancedPrompt && enhancedPrompt ? enhancedPrompt : null,
+        images: selectedImages.length > 0
+          ? selectedImages.map((img) => ({
+              image_type: img.image_type,
+              reference_id: typeof img.reference_id === 'string' ? parseInt(img.reference_id, 10) : img.reference_id,
+            }))
+          : undefined,
       });
       onClose();
     } catch (error) {

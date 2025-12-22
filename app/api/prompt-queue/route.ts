@@ -110,6 +110,8 @@ export async function POST(request: NextRequest) {
       model: body.model,
       aspect_ratio: body.aspect_ratio,
       priority: body.priority,
+      enhance_prompt: body.enhance_prompt,
+      enhanced_prompt: body.enhanced_prompt,
       metadata: body.metadata,
       images: body.images,
     });

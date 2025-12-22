@@ -2256,6 +2256,7 @@ export async function createPromptQueue(
     aspect_ratio?: string;
     priority?: number;
     enhance_prompt?: PromptEnhanceMode;
+    enhanced_prompt?: string | null;
     metadata?: Record<string, any>;
     images?: { image_type: PromptQueueImageType; reference_id: number }[];
   }
@@ -2269,8 +2270,8 @@ export async function createPromptQueue(
     // キューを作成
     const queueResult = await client.query(
       `INSERT INTO kazikastudio.prompt_queues
-       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, enhance_prompt, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, enhance_prompt, enhanced_prompt, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         userId,
@@ -2281,6 +2282,7 @@ export async function createPromptQueue(
         data.aspect_ratio || '16:9',
         data.priority || 0,
         data.enhance_prompt || 'none',
+        data.enhanced_prompt || null,
         JSON.stringify(data.metadata || {}),
       ]
     );

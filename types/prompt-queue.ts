@@ -65,6 +65,7 @@ export interface CreatePromptQueueRequest {
   aspect_ratio?: string;
   priority?: number;
   enhance_prompt?: PromptEnhanceMode;
+  enhanced_prompt?: string | null;  // 補完後のプロンプト（作成時に補完した場合）
   images?: {
     image_type: PromptQueueImageType;
     reference_id: number;

@@ -122,6 +122,8 @@ export async function PUT(
       aspect_ratio: body.aspect_ratio,
       priority: body.priority,
       status: body.status,
+      enhance_prompt: body.enhance_prompt,
+      enhanced_prompt: body.enhanced_prompt,
       metadata: body.metadata,
       images: body.images,
     });
