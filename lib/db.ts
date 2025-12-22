@@ -2125,6 +2125,7 @@ import type {
   PromptQueueImageWithDetails,
   PromptQueueStatus,
   PromptQueueImageType,
+  PromptEnhanceMode,
 } from '@/types/prompt-queue';
 
 /**
@@ -2254,6 +2255,7 @@ export async function createPromptQueue(
     model?: string;
     aspect_ratio?: string;
     priority?: number;
+    enhance_prompt?: PromptEnhanceMode;
     metadata?: Record<string, any>;
     images?: { image_type: PromptQueueImageType; reference_id: number }[];
   }
@@ -2267,8 +2269,8 @@ export async function createPromptQueue(
     // キューを作成
     const queueResult = await client.query(
       `INSERT INTO kazikastudio.prompt_queues
-       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, enhance_prompt, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         userId,
@@ -2278,6 +2280,7 @@ export async function createPromptQueue(
         data.model || 'gemini-2.5-flash-image',
         data.aspect_ratio || '16:9',
         data.priority || 0,
+        data.enhance_prompt || 'none',
         JSON.stringify(data.metadata || {}),
       ]
     );
@@ -2327,6 +2330,8 @@ export async function updatePromptQueue(
     aspect_ratio?: string;
     priority?: number;
     status?: PromptQueueStatus;
+    enhance_prompt?: PromptEnhanceMode;
+    enhanced_prompt?: string | null;
     metadata?: Record<string, any>;
     error_message?: string;
     output_id?: number;
@@ -2388,6 +2393,14 @@ export async function updatePromptQueue(
     if (data.executed_at !== undefined) {
       setClauses.push(`executed_at = $${paramIndex++}`);
       values.push(data.executed_at);
+    }
+    if (data.enhance_prompt !== undefined) {
+      setClauses.push(`enhance_prompt = $${paramIndex++}`);
+      values.push(data.enhance_prompt);
+    }
+    if (data.enhanced_prompt !== undefined) {
+      setClauses.push(`enhanced_prompt = $${paramIndex++}`);
+      values.push(data.enhanced_prompt);
     }
 
     if (setClauses.length === 0 && !data.images) {

@@ -8,6 +8,9 @@ export type PromptQueueStatus = 'pending' | 'processing' | 'completed' | 'failed
 // 参照画像のタイプ
 export type PromptQueueImageType = 'character_sheet' | 'output';
 
+// プロンプト補完モード
+export type PromptEnhanceMode = 'none' | 'enhance';
+
 // プロンプトキューのメイン型
 export interface PromptQueue {
   id: number;
@@ -19,6 +22,8 @@ export interface PromptQueue {
   aspect_ratio: string;
   priority: number;
   status: PromptQueueStatus;
+  enhance_prompt: PromptEnhanceMode;  // プロンプト補完モード
+  enhanced_prompt: string | null;      // 補完後のプロンプト
   metadata: Record<string, any>;
   error_message: string | null;
   output_id: number | null;
@@ -59,6 +64,7 @@ export interface CreatePromptQueueRequest {
   model?: string;
   aspect_ratio?: string;
   priority?: number;
+  enhance_prompt?: PromptEnhanceMode;
   images?: {
     image_type: PromptQueueImageType;
     reference_id: number;
@@ -75,6 +81,8 @@ export interface UpdatePromptQueueRequest {
   aspect_ratio?: string;
   priority?: number;
   status?: PromptQueueStatus;
+  enhance_prompt?: PromptEnhanceMode;
+  enhanced_prompt?: string | null;
   images?: {
     image_type: PromptQueueImageType;
     reference_id: number;

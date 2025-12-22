@@ -24,12 +24,14 @@ import {
   Image as ImageIcon,
   Person as PersonIcon,
   LibraryBooks as LibraryBooksIcon,
+  AutoFixHigh as EnhanceIcon,
 } from '@mui/icons-material';
 import type {
   PromptQueueWithImages,
   CreatePromptQueueRequest,
   UpdatePromptQueueRequest,
   PromptQueueImageType,
+  PromptEnhanceMode,
 } from '@/types/prompt-queue';
 import ImageSelectorDialog from './ImageSelectorDialog';
 import MasterSelectorDialog from './MasterSelectorDialog';
@@ -93,6 +95,11 @@ export default function PromptQueueDialog({
   const [masterSelectorOpen, setMasterSelectorOpen] = useState(false);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const [cursorPosition, setCursorPosition] = useState<{ start: number; end: number } | null>(null);
+  const [enhancePrompt, setEnhancePrompt] = useState<PromptEnhanceMode>('none');
+  // プロンプト補完用の状態
+  const [enhancedPrompt, setEnhancedPrompt] = useState<string>('');
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [useEnhancedPrompt, setUseEnhancedPrompt] = useState(false);
 
   // 編集モードの場合は値を設定
   useEffect(() => {
@@ -103,6 +110,7 @@ export default function PromptQueueDialog({
       setModel(editQueue.model);
       setAspectRatio(editQueue.aspect_ratio);
       setPriority(editQueue.priority);
+      setEnhancePrompt(editQueue.enhance_prompt || 'none');
       setSelectedImages(
         editQueue.images.map((img) => ({
           image_type: img.image_type,
@@ -119,8 +127,13 @@ export default function PromptQueueDialog({
       setModel('gemini-2.5-flash-image');
       setAspectRatio('16:9');
       setPriority(0);
+      setEnhancePrompt('none');
       setSelectedImages([]);
     }
+    // 補完関連の状態をリセット
+    setEnhancedPrompt('');
+    setUseEnhancedPrompt(false);
+    setIsEnhancing(false);
   }, [editQueue, open]);
 
 
@@ -129,23 +142,96 @@ export default function PromptQueueDialog({
 
     setSaving(true);
     try {
+      // 補完済みプロンプトを使用する場合は、それを保存
+      const finalPrompt = useEnhancedPrompt && enhancedPrompt ? enhancedPrompt : prompt;
       await onSave({
         name: name || undefined,
-        prompt,
+        prompt: finalPrompt,
         negative_prompt: negativePrompt || undefined,
         model,
         aspect_ratio: aspectRatio,
         priority,
+        // 補完済みを使用する場合は実行時補完をスキップ
+        enhance_prompt: useEnhancedPrompt ? 'none' : enhancePrompt,
         images: selectedImages.map((img) => ({
           image_type: img.image_type,
           reference_id: img.reference_id,
         })),
+        // 元のプロンプトと補完後のプロンプトをメタデータに保存
+        metadata: useEnhancedPrompt ? {
+          original_prompt: prompt,
+          enhanced_prompt: enhancedPrompt,
+          enhanced_at_creation: true,
+        } : undefined,
       });
       onClose();
     } catch (error) {
       console.error('Failed to save queue:', error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // プロンプトを補完する
+  const handleEnhancePrompt = async () => {
+    if (!prompt.trim() || isEnhancing) return;
+
+    setIsEnhancing(true);
+    try {
+      // 選択された画像のbase64データを収集
+      const imageData: { mimeType: string; data: string }[] = [];
+
+      for (const img of selectedImages) {
+        if (img.image_url) {
+          try {
+            const url = getImageUrl(img.image_url);
+            const response = await fetch(url);
+            if (response.ok) {
+              const blob = await response.blob();
+              const base64 = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  // data:image/xxx;base64, の部分を除去
+                  const base64Data = result.split(',')[1];
+                  resolve(base64Data);
+                };
+                reader.readAsDataURL(blob);
+              });
+              imageData.push({
+                mimeType: blob.type || 'image/png',
+                data: base64,
+              });
+            }
+          } catch (e) {
+            console.error('Failed to load image for enhancement:', e);
+          }
+        }
+      }
+
+      // Gemini APIを呼び出してプロンプトを補完
+      const response = await fetch('/api/prompt-queue/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          negative_prompt: negativePrompt || undefined,
+          images: imageData.length > 0 ? imageData : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to enhance prompt');
+      }
+
+      const result = await response.json();
+      setEnhancedPrompt(result.enhanced_prompt);
+      setUseEnhancedPrompt(true);  // デフォルトで補完後を使用
+    } catch (error) {
+      console.error('Failed to enhance prompt:', error);
+      alert('プロンプトの補完に失敗しました');
+    } finally {
+      setIsEnhancing(false);
     }
   };
 
@@ -301,6 +387,60 @@ export default function PromptQueueDialog({
                   ))}
                 </Select>
               </FormControl>
+            </Box>
+
+            {/* プロンプト補完セクション */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                  プロンプト補完（Geminiで英語に最適化）
+                </Typography>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={isEnhancing ? <CircularProgress size={16} color="inherit" /> : <EnhanceIcon />}
+                  onClick={handleEnhancePrompt}
+                  disabled={!prompt.trim() || isEnhancing}
+                >
+                  {isEnhancing ? '補完中...' : '補完する'}
+                </Button>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                ※ 選択した画像も参照して最適なプロンプトを生成します
+              </Typography>
+
+              {enhancedPrompt && (
+                <>
+                  <TextField
+                    value={enhancedPrompt}
+                    onChange={(e) => setEnhancedPrompt(e.target.value)}
+                    fullWidth
+                    multiline
+                    rows={4}
+                    size="small"
+                    sx={{ mb: 1 }}
+                    placeholder="補完されたプロンプト"
+                  />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant={useEnhancedPrompt ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setUseEnhancedPrompt(true)}
+                      color={useEnhancedPrompt ? 'primary' : 'inherit'}
+                    >
+                      補完後を使用
+                    </Button>
+                    <Button
+                      variant={!useEnhancedPrompt ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setUseEnhancedPrompt(false)}
+                      color={!useEnhancedPrompt ? 'primary' : 'inherit'}
+                    >
+                      入力のまま使用
+                    </Button>
+                  </Box>
+                </>
+              )}
             </Box>
 
             {/* 優先度 */}
