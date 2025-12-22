@@ -16,7 +16,7 @@
 
 ## データベース設計
 
-### テーブル: `kazikastudio.prompt_queue`
+### テーブル: `kazikastudio.prompt_queues`
 
 プロンプトキューのメインテーブル
 
@@ -46,9 +46,9 @@
 - `cancelled` - キャンセル
 
 **インデックス**:
-- `idx_prompt_queue_user_id` ON (user_id)
-- `idx_prompt_queue_status` ON (status)
-- `idx_prompt_queue_priority_created` ON (priority DESC, created_at ASC)
+- `idx_prompt_queues_user_id` ON (user_id)
+- `idx_prompt_queues_status` ON (status)
+- `idx_prompt_queues_priority_created` ON (priority DESC, created_at ASC)
 
 ---
 
@@ -59,7 +59,7 @@
 | カラム名 | 型 | NULL | デフォルト | 説明 |
 |---------|-----|------|-----------|------|
 | id | BIGSERIAL | NO | 自動採番 | ID（プライマリキー） |
-| queue_id | BIGINT | NO | - | prompt_queue.id への参照 |
+| queue_id | BIGINT | NO | - | prompt_queues.id への参照 |
 | image_type | TEXT | NO | - | 画像タイプ |
 | reference_id | BIGINT | NO | - | 参照先のID |
 | display_order | INTEGER | NO | 0 | 表示順序（0〜7） |
@@ -77,7 +77,7 @@
 
 **制約**:
 - UNIQUE (queue_id, image_type, reference_id) - 同じ画像の重複登録を防止
-- FOREIGN KEY (queue_id) REFERENCES prompt_queue(id) ON DELETE CASCADE
+- FOREIGN KEY (queue_id) REFERENCES prompt_queues(id) ON DELETE CASCADE
 - CHECK (display_order >= 0 AND display_order < 8) - 表示順序の範囲制限
 
 **インデックス**:
