@@ -158,8 +158,8 @@ export default function PromptQueueDialog({
         model,
         aspect_ratio: aspectRatio,
         priority,
-        // 補完済みを使用する場合は実行時補完をスキップ
-        enhance_prompt: useEnhancedPrompt ? 'none' : enhancePrompt,
+        // 補完を生成して使用する場合は 'enhance'、しない場合は 'none'
+        enhance_prompt: useEnhancedPrompt && enhancedPrompt ? 'enhance' : 'none',
         // 補完後のプロンプトを直接enhanced_promptカラムに保存
         enhanced_prompt: useEnhancedPrompt && enhancedPrompt ? enhancedPrompt : null,
         images: selectedImages.length > 0
