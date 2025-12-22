@@ -34,6 +34,8 @@
 | metadata | JSONB | YES | '{}' | その他のメタデータ |
 | error_message | TEXT | YES | NULL | エラーメッセージ（失敗時） |
 | output_id | BIGINT | YES | NULL | 生成結果のoutput ID |
+| enhance_prompt | TEXT | NO | 'none' | 補完モード（none/enhance） |
+| enhanced_prompt | TEXT | YES | NULL | 補完後のプロンプト |
 | created_at | TIMESTAMPTZ | NO | NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | NO | NOW() | 更新日時 |
 | executed_at | TIMESTAMPTZ | YES | NULL | 実行日時 |
@@ -410,6 +412,182 @@
 - キュー一覧取得時に参照画像もJOINで取得
 - ページネーション対応
 - 画像生成は非同期処理（必要に応じてバックグラウンド処理）
+
+---
+
+## プロンプト補完（Enhance Prompt）機能
+
+### 概要
+
+プロンプトキュー登録時に、Gemini AIを使用してユーザーの入力プロンプトを画像生成に最適化された英語プロンプトに補完する機能。
+
+### データベースカラム
+
+`kazikastudio.prompt_queues` テーブルに以下のカラムが追加されている：
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| enhance_prompt | TEXT | NO | 'none' | 補完モード（`none` または `enhance`） |
+| enhanced_prompt | TEXT | YES | NULL | 補完後のプロンプト（補完実行時に保存） |
+
+**enhance_prompt 値の意味**:
+- `none` - プロンプト補完を使用しない（通常の `prompt` を使用）
+- `enhance` - プロンプト補完を使用する（`enhanced_prompt` を使用）
+
+### データフロー
+
+```
+1. ユーザーがプロンプトを入力
+   └─> prompt: "笑顔の女の子"
+
+2. 「プロンプトを補完」ボタンをクリック
+   └─> Gemini API で英語プロンプトに変換
+   └─> enhanced_prompt: "A cheerful anime girl with a bright smile, high quality, detailed, anime style, masterpiece"
+
+3. 「補完後を使用」チェックボックスをON
+   └─> enhance_prompt: 'enhance' に設定
+
+4. キュー保存時
+   └─> prompt: "笑顔の女の子"（元のプロンプト）
+   └─> enhanced_prompt: "A cheerful anime girl..."（補完後）
+   └─> enhance_prompt: 'enhance'（補完を使用する）
+```
+
+### キュー実行時の処理（重要）
+
+**キューを実行する側では、以下のロジックでプロンプトを決定すること：**
+
+```typescript
+// キュー実行時のプロンプト決定ロジック
+function getPromptForExecution(queue: PromptQueue): string {
+  // enhance_prompt が 'enhance' で enhanced_prompt が存在する場合は
+  // enhanced_prompt を使用する
+  if (queue.enhance_prompt === 'enhance' && queue.enhanced_prompt) {
+    return queue.enhanced_prompt;
+  }
+  // それ以外は通常の prompt を使用
+  return queue.prompt;
+}
+
+// 使用例
+const promptToUse = getPromptForExecution(queue);
+await callNanobanaAPI({
+  prompt: promptToUse,
+  negativePrompt: queue.negative_prompt,
+  model: queue.model,
+  aspectRatio: queue.aspect_ratio,
+  // ... その他のパラメータ
+});
+```
+
+### API実装例（POST /api/prompt-queue/[id]/execute）
+
+```typescript
+import { getPromptQueueById, updatePromptQueue } from '@/lib/db';
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const queueId = parseInt(id, 10);
+
+  // キュー取得
+  const queue = await getPromptQueueById(queueId);
+
+  // ステータスを processing に更新
+  await updatePromptQueue(queueId, { status: 'processing' });
+
+  try {
+    // ★ プロンプト決定（ここがポイント）
+    const promptToUse =
+      queue.enhance_prompt === 'enhance' && queue.enhanced_prompt
+        ? queue.enhanced_prompt  // 補完後プロンプトを使用
+        : queue.prompt;          // 元のプロンプトを使用
+
+    // 参照画像を取得
+    const images = await getQueueImages(queueId);
+
+    // Nanobana API 呼び出し
+    const result = await callNanobanaAPI({
+      prompt: promptToUse,
+      negativePrompt: queue.negative_prompt,
+      model: queue.model || 'gemini-2.5-flash-image',
+      aspectRatio: queue.aspect_ratio || '16:9',
+      referenceImages: images,
+    });
+
+    // 成功時：結果を保存
+    await updatePromptQueue(queueId, {
+      status: 'completed',
+      output_id: result.outputId,
+      executed_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({ success: true, output: result });
+
+  } catch (error) {
+    // 失敗時：エラーを保存
+    await updatePromptQueue(queueId, {
+      status: 'failed',
+      error_message: error.message,
+    });
+
+    return NextResponse.json(
+      { error: 'Execution failed', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### UIでの表示
+
+PromptQueueDialog では以下のようにフィールドが表示される：
+
+1. **プロンプト**（必須）- 元のプロンプト入力欄
+2. **[プロンプトを補完]** ボタン - Gemini AIで補完を実行
+3. **補完後のプロンプト**（補完実行後に表示）- 補完結果を表示・編集可能
+4. **「補完後を使用」** チェックボックス - ONで `enhance_prompt: 'enhance'` に設定
+
+### 補完処理の実装
+
+補完ボタンクリック時の処理（PromptQueueDialog.tsx）:
+
+```typescript
+const handleEnhancePrompt = async () => {
+  setIsEnhancing(true);
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemini-2.5-flash',
+        prompt: `あなたは画像生成AIのプロンプトエキスパートです。
+以下の日本語プロンプトを、高品質な画像生成のための英語プロンプトに変換してください。
+
+入力: ${prompt}
+
+変換ルール:
+1. 英語に翻訳
+2. 画像生成に適した詳細な描写を追加
+3. 品質タグを追加（high quality, detailed, masterpiece など）
+4. アニメスタイルの場合は anime style を追加
+5. プロンプトのみを出力（説明不要）`,
+      }),
+    });
+
+    const result = await response.json();
+    setEnhancedPrompt(result.text);
+    setUseEnhancedPrompt(true);
+    setEnhancePrompt('enhance');
+  } catch (error) {
+    console.error('Enhancement failed:', error);
+  } finally {
+    setIsEnhancing(false);
+  }
+};
+```
 
 ---
 
