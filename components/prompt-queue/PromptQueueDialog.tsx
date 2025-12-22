@@ -115,7 +115,6 @@ export default function PromptQueueDialog({
       setModel(editQueue.model);
       setAspectRatio(editQueue.aspect_ratio);
       setPriority(editQueue.priority);
-      setEnhancePrompt(editQueue.enhance_prompt || 'none');
       setSelectedImages(
         editQueue.images.map((img) => ({
           image_type: img.image_type,
@@ -129,10 +128,12 @@ export default function PromptQueueDialog({
         console.log('Setting enhanced prompt:', editQueue.enhanced_prompt);
         setEnhancedPrompt(editQueue.enhanced_prompt);
         setUseEnhancedPrompt(true);  // 補完済みプロンプトがあれば使用する状態に
+        setEnhancePrompt('enhance');  // enhanced_promptがあれば'enhance'に設定
       } else {
         console.log('No enhanced_prompt found');
         setEnhancedPrompt('');
         setUseEnhancedPrompt(false);
+        setEnhancePrompt(editQueue.enhance_prompt || 'none');
       }
       setIsEnhancing(false);
     } else {
