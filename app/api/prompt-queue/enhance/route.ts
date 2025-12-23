@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
     const enhanceSystemPrompt = `あなたは画像生成AIのプロンプトを最適化する専門家です。
 ユーザーの入力プロンプト（日本語または英語）を、高品質な画像生成に最適な英語プロンプトに変換してください。
 
+画像の構図をしっかり表現してください。再現できるようにプロンプトを作成してください。
+
 以下のガイドラインに従ってください：
 1. 入力プロンプトの意図を理解し、詳細な描写を追加する
 2. 画像生成に効果的なキーワード（lighting, composition, style, qualityなど）を適切に追加する
@@ -40,6 +42,7 @@ export async function POST(request: NextRequest) {
 4. 出力は英語のプロンプトのみを返す（説明や解説は不要）
 5. プロンプトは1つの段落にまとめ、カンマで区切る
 6. ネガティブプロンプトは含めない
+7. 構図（カメラアングル、被写体の配置、視点など）を具体的に記述する
 
 入力プロンプト: ${prompt}
 ${negative_prompt ? `ネガティブプロンプト（参考）: ${negative_prompt}` : ''}
