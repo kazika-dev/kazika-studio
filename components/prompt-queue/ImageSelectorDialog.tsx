@@ -17,6 +17,7 @@ import {
   TextField,
   InputAdornment,
   IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -24,7 +25,9 @@ import {
   Image as ImageIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  GridOn as GridIcon,
 } from '@mui/icons-material';
+import ImageGridSplitDialog from './ImageGridSplitDialog';
 import type { PromptQueueImageType } from '@/types/prompt-queue';
 
 const PAGE_SIZE = 10;
@@ -40,7 +43,6 @@ interface ImageSelectorDialogProps {
   open: boolean;
   onClose: () => void;
   onSelect: (images: SelectedImage[]) => void;
-  type: 'character_sheet' | 'output';
   maxSelections: number;
   currentSelections: SelectedImage[];
 }
@@ -74,11 +76,10 @@ export default function ImageSelectorDialog({
   open,
   onClose,
   onSelect,
-  type,
   maxSelections,
   currentSelections,
 }: ImageSelectorDialogProps) {
-  const [tabValue, setTabValue] = useState<'character_sheet' | 'output'>(type);
+  const [tabValue, setTabValue] = useState<'character_sheet' | 'output'>('character_sheet');
   const [characterSheets, setCharacterSheets] = useState<CharacterSheet[]>([]);
   const [outputs, setOutputs] = useState<OutputImage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,18 +92,23 @@ export default function ImageSelectorDialog({
   const [outputPage, setOutputPage] = useState(0);
   const [outputTotal, setOutputTotal] = useState(0);
 
-  // タブ変更時にタイプを更新
-  useEffect(() => {
-    setTabValue(type);
-  }, [type]);
+  // グリッド分割ダイアログ
+  const [gridSplitDialogOpen, setGridSplitDialogOpen] = useState(false);
+  const [gridSplitImage, setGridSplitImage] = useState<{
+    url: string;
+    name: string;
+    originalId: number;
+  } | null>(null);
+  const [savingSplitImages, setSavingSplitImages] = useState(false);
 
-  // ダイアログが開いたときにデータを取得
+  // ダイアログが開いたときにデータをリセット
   useEffect(() => {
     if (open) {
       setSelectedImages([]);
       setCsPage(0);
       setOutputPage(0);
       setSearchQuery('');
+      setTabValue('character_sheet');
     }
   }, [open]);
 
@@ -176,6 +182,74 @@ export default function ImageSelectorDialog({
 
   const handleConfirm = () => {
     onSelect(selectedImages);
+  };
+
+  // グリッド分割ダイアログを開く
+  const handleOpenGridSplit = (output: OutputImage, e: React.MouseEvent) => {
+    e.stopPropagation(); // 親要素のクリックイベントを防止
+    const url = getImageUrl(output.content_url);
+    const name = output.metadata?.name || `Output #${output.id}`;
+    setGridSplitImage({
+      url,
+      name,
+      originalId: output.id,
+    });
+    setGridSplitDialogOpen(true);
+  };
+
+  // 分割画像を保存して選択に追加
+  const handleSelectSplitImages = async (
+    images: { dataUrl: string; name: string }[]
+  ) => {
+    if (images.length === 0) return;
+
+    setSavingSplitImages(true);
+    const savedImages: SelectedImage[] = [];
+
+    try {
+      for (const img of images) {
+        // dataURL を Blob に変換
+        const response = await fetch(img.dataUrl);
+        const blob = await response.blob();
+
+        // FormData を作成
+        const formData = new FormData();
+        formData.append('file', blob, `${img.name}.png`);
+        formData.append('prompt', `Grid split: ${img.name}`);
+        if (gridSplitImage?.originalId) {
+          formData.append('originalOutputId', gridSplitImage.originalId.toString());
+        }
+
+        // API で保存
+        const saveResponse = await fetch('/api/outputs/save-edited', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (saveResponse.ok) {
+          const result = await saveResponse.json();
+          if (result.success && result.output) {
+            savedImages.push({
+              image_type: 'output',
+              reference_id: result.output.id,
+              name: img.name,
+              image_url: result.output.content_url,
+            });
+          }
+        }
+      }
+
+      // 保存完了後、アウトプット一覧を再読み込み（選択はしない）
+      if (savedImages.length > 0) {
+        await fetchData();
+      }
+    } catch (error) {
+      console.error('Failed to save split images:', error);
+    } finally {
+      setSavingSplitImages(false);
+      setGridSplitDialogOpen(false);
+      setGridSplitImage(null);
+    }
   };
 
   // 検索フィルタリング（クライアント側で現在のページ内をフィルタ）
@@ -417,6 +491,26 @@ export default function ImageSelectorDialog({
                             borderRadius: '0 0 0 4px',
                           }}
                         />
+                        {/* グリッド分割ボタン */}
+                        <Tooltip title="等分切り出し">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleOpenGridSplit(output, e)}
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              bgcolor: 'rgba(255,255,255,0.8)',
+                              borderRadius: '0 0 4px 0',
+                              padding: '2px',
+                              '&:hover': {
+                                bgcolor: 'rgba(156, 39, 176, 0.2)',
+                              },
+                            }}
+                          >
+                            <GridIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </Tooltip>
                         <Typography
                           variant="caption"
                           sx={{
@@ -479,11 +573,27 @@ export default function ImageSelectorDialog({
         <Button
           variant="contained"
           onClick={handleConfirm}
-          disabled={selectedImages.length === 0}
+          disabled={selectedImages.length === 0 || savingSplitImages}
+          startIcon={savingSplitImages ? <CircularProgress size={16} /> : undefined}
         >
-          {selectedImages.length}枚を追加
+          {savingSplitImages ? '保存中...' : `${selectedImages.length}枚を追加`}
         </Button>
       </DialogActions>
+
+      {/* グリッド分割ダイアログ */}
+      {gridSplitImage && (
+        <ImageGridSplitDialog
+          open={gridSplitDialogOpen}
+          onClose={() => {
+            setGridSplitDialogOpen(false);
+            setGridSplitImage(null);
+          }}
+          imageUrl={gridSplitImage.url}
+          imageName={gridSplitImage.name}
+          onSelectSplitImages={handleSelectSplitImages}
+          maxSelections={remainingSelections}
+        />
+      )}
     </Dialog>
   );
 }

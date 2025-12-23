@@ -22,7 +22,6 @@ import {
 import {
   Close as CloseIcon,
   Image as ImageIcon,
-  Person as PersonIcon,
   LibraryBooks as LibraryBooksIcon,
   AutoFixHigh as EnhanceIcon,
 } from '@mui/icons-material';
@@ -91,7 +90,6 @@ export default function PromptQueueDialog({
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
-  const [imageSelectorType, setImageSelectorType] = useState<'character_sheet' | 'output'>('character_sheet');
   const [masterSelectorOpen, setMasterSelectorOpen] = useState(false);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const [cursorPosition, setCursorPosition] = useState<{ start: number; end: number } | null>(null);
@@ -252,8 +250,7 @@ export default function PromptQueueDialog({
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleOpenImageSelector = (type: 'character_sheet' | 'output') => {
-    setImageSelectorType(type);
+  const handleOpenImageSelector = () => {
     setImageSelectorOpen(true);
   };
 
@@ -481,21 +478,12 @@ export default function PromptQueueDialog({
               <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                 <Button
                   variant="outlined"
-                  startIcon={<PersonIcon />}
-                  onClick={() => handleOpenImageSelector('character_sheet')}
-                  disabled={remainingSlots === 0}
-                  size="small"
-                >
-                  キャラクターシートから選択
-                </Button>
-                <Button
-                  variant="outlined"
                   startIcon={<ImageIcon />}
-                  onClick={() => handleOpenImageSelector('output')}
+                  onClick={handleOpenImageSelector}
                   disabled={remainingSlots === 0}
                   size="small"
                 >
-                  アウトプットから選択
+                  画像を選択
                 </Button>
               </Box>
 
@@ -603,7 +591,6 @@ export default function PromptQueueDialog({
         open={imageSelectorOpen}
         onClose={() => setImageSelectorOpen(false)}
         onSelect={handleSelectImages}
-        type={imageSelectorType}
         maxSelections={remainingSlots}
         currentSelections={selectedImages}
       />
