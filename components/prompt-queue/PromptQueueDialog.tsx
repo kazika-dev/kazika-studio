@@ -32,6 +32,7 @@ import type {
   UpdatePromptQueueRequest,
   PromptQueueImageType,
   PromptEnhanceMode,
+  PromptQueueStatus,
 } from '@/types/prompt-queue';
 import ImageSelectorDialog from './ImageSelectorDialog';
 import MasterSelectorDialog from './MasterSelectorDialog';
@@ -69,6 +70,14 @@ const MODEL_OPTIONS = [
   { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image Preview (高品質)' },
 ];
 
+const STATUS_OPTIONS: { value: PromptQueueStatus; label: string; color: string }[] = [
+  { value: 'pending', label: '待機中', color: '#757575' },
+  { value: 'processing', label: '処理中', color: '#2196f3' },
+  { value: 'completed', label: '完了', color: '#4caf50' },
+  { value: 'failed', label: '失敗', color: '#f44336' },
+  { value: 'cancelled', label: 'キャンセル', color: '#ff9800' },
+];
+
 interface SelectedImage {
   image_type: PromptQueueImageType;
   reference_id: number;
@@ -88,6 +97,7 @@ export default function PromptQueueDialog({
   const [model, setModel] = useState('gemini-2.5-flash-image');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [priority, setPriority] = useState(0);
+  const [status, setStatus] = useState<PromptQueueStatus>('pending');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
@@ -115,6 +125,7 @@ export default function PromptQueueDialog({
       setModel(editQueue.model);
       setAspectRatio(editQueue.aspect_ratio);
       setPriority(editQueue.priority);
+      setStatus(editQueue.status);
       setSelectedImages(
         editQueue.images.map((img) => ({
           image_type: img.image_type,
@@ -144,6 +155,7 @@ export default function PromptQueueDialog({
       setModel('gemini-2.5-flash-image');
       setAspectRatio('16:9');
       setPriority(0);
+      setStatus('pending');
       setEnhancePrompt('none');
       setSelectedImages([]);
       // 補完関連の状態をリセット
@@ -166,6 +178,8 @@ export default function PromptQueueDialog({
         model,
         aspect_ratio: aspectRatio,
         priority,
+        // 編集時のみステータスを送信
+        ...(editQueue ? { status } : {}),
         // 補完を生成して使用する場合は 'enhance'、しない場合は 'none'
         enhance_prompt: useEnhancedPrompt && enhancedPrompt ? 'enhance' : 'none',
         // 補完後のプロンプトを直接enhanced_promptカラムに保存
@@ -457,6 +471,34 @@ export default function PromptQueueDialog({
                 </>
               )}
             </Box>
+
+            {/* ステータス（編集時のみ表示） */}
+            {editQueue && (
+              <FormControl fullWidth size="small">
+                <InputLabel>ステータス</InputLabel>
+                <Select
+                  value={status}
+                  label="ステータス"
+                  onChange={(e) => setStatus(e.target.value as PromptQueueStatus)}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '50%',
+                            bgcolor: opt.color,
+                          }}
+                        />
+                        {opt.label}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             {/* 優先度 */}
             <Box>
