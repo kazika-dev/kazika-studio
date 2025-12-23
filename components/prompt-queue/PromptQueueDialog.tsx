@@ -348,6 +348,34 @@ export default function PromptQueueDialog({
               size="small"
             />
 
+            {/* ステータス（編集時のみ表示） */}
+            {editQueue && (
+              <FormControl fullWidth size="small">
+                <InputLabel>ステータス</InputLabel>
+                <Select
+                  value={status}
+                  label="ステータス"
+                  onChange={(e) => setStatus(e.target.value as PromptQueueStatus)}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '50%',
+                            bgcolor: opt.color,
+                          }}
+                        />
+                        {opt.label}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
             {/* プロンプト */}
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -471,34 +499,6 @@ export default function PromptQueueDialog({
                 </>
               )}
             </Box>
-
-            {/* ステータス（編集時のみ表示） */}
-            {editQueue && (
-              <FormControl fullWidth size="small">
-                <InputLabel>ステータス</InputLabel>
-                <Select
-                  value={status}
-                  label="ステータス"
-                  onChange={(e) => setStatus(e.target.value as PromptQueueStatus)}
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <MenuItem key={opt.value} value={opt.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box
-                          sx={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: '50%',
-                            bgcolor: opt.color,
-                          }}
-                        />
-                        {opt.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
 
             {/* 優先度 */}
             <Box>
