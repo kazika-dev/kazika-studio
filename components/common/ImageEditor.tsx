@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree, FileCopy, SaveAs } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree, FileCopy, ContentCopy, ContentPaste } from '@mui/icons-material';
 
 interface ImageEditorProps {
   imageUrl: string;
@@ -69,6 +69,9 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   const [redrawTrigger, setRedrawTrigger] = useState(0);  // Canvas再描画のトリガー
   const [saveModeDialogOpen, setSaveModeDialogOpen] = useState(false);
   const [pendingSaveBlob, setPendingSaveBlob] = useState<Blob | null>(null);
+  const [pastedImage, setPastedImage] = useState<{ imageData: ImageData; x: number; y: number } | null>(null);
+  const [isDraggingPasted, setIsDraggingPasted] = useState(false);
+  const [pastedDragOffset, setPastedDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -114,9 +117,14 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
         // eslint-disable-next-line react-hooks/exhaustive-deps
         drawSelectionOverlay();
       }
+      // 貼り付け画像がある場合も再描画
+      if (pastedImage) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        drawPastedImageOverlay();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [redrawTrigger, selection]);
+  }, [redrawTrigger, selection, pastedImage]);
 
   // テキストの境界ボックスを計算
   const getTextBoundingBox = (path: DrawingPath, ctx: CanvasRenderingContext2D) => {
@@ -372,6 +380,22 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
 
     // 選択モードの場合
     if (drawingMode === 'select') {
+      // 貼り付け画像内をクリックした場合は移動モード
+      if (pastedImage && isInsidePastedImage(x, y)) {
+        setIsDraggingPasted(true);
+        setPastedDragOffset({
+          x: x - pastedImage.x,
+          y: y - pastedImage.y,
+        });
+        return;
+      }
+
+      // 貼り付け画像外をクリックした場合は確定してから次の操作
+      if (pastedImage && !isInsidePastedImage(x, y)) {
+        handleConfirmPasted();
+        return;
+      }
+
       // 既存の選択範囲内をクリックした場合は移動モード
       if (selection && isInsideSelection(x, y)) {
         // 移動開始時に元の位置を白で塗りつぶす前に、現在の画像状態を保存
@@ -527,6 +551,20 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // 貼り付け画像をドラッグ中
+    if (isDraggingPasted && pastedImage) {
+      const newX = x - pastedDragOffset.x;
+      const newY = y - pastedDragOffset.y;
+      setPastedImage({
+        ...pastedImage,
+        x: newX,
+        y: newY,
+      });
+      redrawCanvas();
+      drawPastedImageOverlay();
+      return;
+    }
+
     // 選択範囲をドラッグ中
     if (isDraggingSelection && selection) {
       const width = Math.abs(selection.endX - selection.startX);
@@ -588,6 +626,11 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   const stopDrawing = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
+
+    if (isDraggingPasted) {
+      setIsDraggingPasted(false);
+      return;
+    }
 
     if (isDraggingSelection) {
       setIsDraggingSelection(false);
@@ -831,6 +874,180 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     }
   };
 
+  // 選択範囲をクリップボードにコピー
+  const handleCopySelection = useCallback(async () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !selection || !selection.imageData) return;
+
+    try {
+      // 選択範囲の画像データを一時Canvasに描画
+      const width = Math.abs(selection.endX - selection.startX);
+      const height = Math.abs(selection.endY - selection.startY);
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      if (!tempCtx) return;
+
+      tempCtx.putImageData(selection.imageData, 0, 0);
+
+      // Blobに変換してクリップボードに書き込み
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        tempCanvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to create blob'));
+        }, 'image/png');
+      });
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      console.log('Image copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      alert('クリップボードへのコピーに失敗しました。ブラウザの権限を確認してください。');
+    }
+  }, [selection]);
+
+  // クリップボードから画像を貼り付け
+  const handlePaste = useCallback(async () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const item of clipboardItems) {
+        // 画像タイプを探す
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (!imageType) continue;
+
+        const blob = await item.getType(imageType);
+        const img = new Image();
+
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            // 画像を一時Canvasに描画してImageDataを取得
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            if (!tempCtx) {
+              reject(new Error('Failed to get context'));
+              return;
+            }
+
+            tempCtx.drawImage(img, 0, 0);
+            const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+
+            // 既存の選択をクリア
+            setSelection(null);
+
+            // 貼り付け画像を設定（中央に配置）
+            const x = Math.max(0, Math.floor((canvas.width - img.width) / 2));
+            const y = Math.max(0, Math.floor((canvas.height - img.height) / 2));
+
+            setPastedImage({ imageData, x, y });
+
+            // 選択モードに切り替え
+            setDrawingMode('select');
+
+            resolve();
+          };
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = URL.createObjectURL(blob);
+        });
+
+        break; // 最初の画像のみ処理
+      }
+    } catch (error) {
+      console.error('Failed to paste from clipboard:', error);
+      // クリップボードに画像がない場合は静かに無視
+    }
+  }, []);
+
+  // 貼り付け画像の描画
+  const drawPastedImageOverlay = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !pastedImage) return;
+
+    // 画像を描画
+    ctx.putImageData(pastedImage.imageData, pastedImage.x, pastedImage.y);
+
+    // 選択範囲の枠線を描画（点線）
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(pastedImage.x, pastedImage.y, pastedImage.imageData.width, pastedImage.imageData.height);
+    ctx.setLineDash([]);
+
+    // コーナーのハンドルを描画
+    ctx.fillStyle = '#1976d2';
+    const handleSize = 8;
+    const corners = [
+      { x: pastedImage.x, y: pastedImage.y },
+      { x: pastedImage.x + pastedImage.imageData.width, y: pastedImage.y },
+      { x: pastedImage.x, y: pastedImage.y + pastedImage.imageData.height },
+      { x: pastedImage.x + pastedImage.imageData.width, y: pastedImage.y + pastedImage.imageData.height },
+    ];
+    corners.forEach(corner => {
+      ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+    });
+  }, [pastedImage]);
+
+  // 貼り付け画像の確定
+  const handleConfirmPasted = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !pastedImage) return;
+
+    // Undo用に履歴を保存
+    saveImageToHistory();
+
+    // 一時Canvasに現在の状態を構築
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    if (tempCtx && imageRef.current) {
+      tempCtx.drawImage(imageRef.current, 0, 0);
+      history.forEach(path => drawPath(tempCtx, path));
+      tempCtx.putImageData(pastedImage.imageData, pastedImage.x, pastedImage.y);
+
+      // 画像参照を更新
+      const img = new Image();
+      img.onload = () => {
+        imageRef.current = img;
+        setPastedImage(null);
+        redrawCanvas();
+      };
+      img.src = tempCanvas.toDataURL();
+    }
+  }, [pastedImage, history]);
+
+  // 貼り付けをキャンセル
+  const handleCancelPasted = useCallback(() => {
+    setPastedImage(null);
+    redrawCanvas();
+  }, []);
+
+  // 貼り付け画像内かチェック
+  const isInsidePastedImage = (x: number, y: number) => {
+    if (!pastedImage) return false;
+    return x >= pastedImage.x &&
+           x <= pastedImage.x + pastedImage.imageData.width &&
+           y >= pastedImage.y &&
+           y <= pastedImage.y + pastedImage.imageData.height;
+  };
+
   // 選択をキャンセル
   const handleCancelSelection = () => {
     const canvas = canvasRef.current;
@@ -865,23 +1082,41 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   // キーボードイベントを処理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+C で選択範囲をコピー
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selection && selection.imageData) {
+        e.preventDefault();
+        handleCopySelection();
+      }
+      // Ctrl+V でクリップボードから貼り付け
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        handlePaste();
+      }
       // Deleteキーで選択範囲を削除
       if (e.key === 'Delete' && selection && drawingMode === 'select') {
         handleDeleteSelection();
       }
-      // Enterキーで選択範囲を確定
-      if (e.key === 'Enter' && selection && drawingMode === 'select') {
-        handleConfirmSelection();
+      // Enterキーで選択範囲または貼り付け画像を確定
+      if (e.key === 'Enter' && drawingMode === 'select') {
+        if (pastedImage) {
+          handleConfirmPasted();
+        } else if (selection) {
+          handleConfirmSelection();
+        }
       }
-      // Escapeキーで選択をキャンセル
-      if (e.key === 'Escape' && selection) {
-        handleCancelSelection();
+      // Escapeキーで選択または貼り付けをキャンセル
+      if (e.key === 'Escape') {
+        if (pastedImage) {
+          handleCancelPasted();
+        } else if (selection) {
+          handleCancelSelection();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selection, drawingMode]);
+  }, [selection, drawingMode, pastedImage, handleCopySelection, handlePaste, handleConfirmPasted, handleCancelPasted]);
 
   // 元に戻す
   const handleUndo = () => {
@@ -1056,8 +1291,17 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
           </ToggleButtonGroup>
 
           {/* 選択範囲の操作ボタン */}
-          {selection && drawingMode === 'select' && (
+          {selection && selection.imageData && drawingMode === 'select' && (
             <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ContentCopy />}
+                onClick={handleCopySelection}
+                title="Ctrl+C"
+              >
+                コピー
+              </Button>
               <Button
                 variant="outlined"
                 size="small"
@@ -1081,6 +1325,39 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
                 キャンセル (Esc)
               </Button>
             </Box>
+          )}
+
+          {/* 貼り付け画像の操作ボタン */}
+          {pastedImage && drawingMode === 'select' && (
+            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleConfirmPasted}
+              >
+                確定 (Enter)
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleCancelPasted}
+              >
+                キャンセル (Esc)
+              </Button>
+            </Box>
+          )}
+
+          {/* 貼り付けボタン（選択モード時） */}
+          {drawingMode === 'select' && !selection && !pastedImage && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ContentPaste />}
+              onClick={handlePaste}
+              title="Ctrl+V"
+            >
+              貼り付け
+            </Button>
           )}
 
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
