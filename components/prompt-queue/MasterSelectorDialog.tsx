@@ -24,7 +24,7 @@ import {
   CameraAlt as CameraIcon,
   Videocam as VideoIcon,
   PhotoSizeSelectActual as ShotIcon,
-  TextSnippet as TextIcon,
+  Queue as QueueIcon,
 } from '@mui/icons-material';
 
 interface MasterRecord {
@@ -35,6 +35,8 @@ interface MasterRecord {
   description_ja?: string;
   category?: string;
   content?: string;
+  // prompt_queuesから取得する場合のフィールド
+  prompt?: string;
 }
 
 interface MasterSelectorDialogProps {
@@ -43,13 +45,13 @@ interface MasterSelectorDialogProps {
   onSelect: (text: string) => void;
 }
 
-type MasterTableType = 'm_camera_angles' | 'm_camera_movements' | 'm_shot_distances' | 'm_text_templates';
+type MasterTableType = 'm_camera_angles' | 'm_camera_movements' | 'm_shot_distances' | 'prompt_queues';
 
 const MASTER_TABLES: { value: MasterTableType; label: string; icon: React.ReactElement }[] = [
   { value: 'm_camera_angles', label: 'カメラアングル', icon: <CameraIcon /> },
   { value: 'm_camera_movements', label: 'カメラ動き', icon: <VideoIcon /> },
   { value: 'm_shot_distances', label: 'ショット距離', icon: <ShotIcon /> },
-  { value: 'm_text_templates', label: 'テンプレート', icon: <TextIcon /> },
+  { value: 'prompt_queues', label: 'プロンプトキュー', icon: <QueueIcon /> },
 ];
 
 export default function MasterSelectorDialog({
@@ -75,11 +77,32 @@ export default function MasterSelectorDialog({
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/master-tables/${tabValue}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRecords(data.data || []);
+      let records: MasterRecord[] = [];
+
+      if (tabValue === 'prompt_queues') {
+        // prompt_queuesの場合は専用APIを使用
+        const response = await fetch('/api/prompt-queue?limit=100');
+        if (response.ok) {
+          const data = await response.json();
+          // prompt_queuesのデータをMasterRecord形式に変換
+          records = (data.queues || []).map((queue: any) => ({
+            id: queue.id,
+            name: queue.prompt,  // promptをnameとして表示
+            name_ja: queue.name || queue.prompt.substring(0, 50) + (queue.prompt.length > 50 ? '...' : ''),  // キュー名があればそれを、なければpromptの先頭を表示
+            description: queue.prompt,  // 全文をdescriptionとして保持
+            prompt: queue.prompt,  // 挿入用に元のpromptを保持
+          }));
+        }
+      } else {
+        // 他のマスターテーブルは従来通り
+        const response = await fetch(`/api/master-tables/${tabValue}`);
+        if (response.ok) {
+          const data = await response.json();
+          records = data.data || [];
+        }
       }
+
+      setRecords(records);
     } catch (error) {
       console.error('Failed to fetch master data:', error);
     } finally {
@@ -89,8 +112,8 @@ export default function MasterSelectorDialog({
 
   const handleConfirm = () => {
     if (selectedRecord) {
-      // name_ja があればそれを使用、なければ name を使用
-      const text = selectedRecord.name_ja || selectedRecord.name;
+      // prompt_queuesの場合はprompt全文を使用、その他はname_jaまたはnameを使用
+      const text = selectedRecord.prompt || selectedRecord.name_ja || selectedRecord.name;
       onSelect(text);
       onClose();
     }
@@ -215,12 +238,16 @@ export default function MasterSelectorDialog({
 
         {/* プレビュー */}
         {selectedRecord && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 150, overflow: 'auto' }}>
             <Typography variant="caption" color="text.secondary">
               挿入するテキスト:
             </Typography>
-            <Typography variant="body1" fontWeight="medium">
-              {selectedRecord.name_ja || selectedRecord.name}
+            <Typography
+              variant="body1"
+              fontWeight="medium"
+              sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            >
+              {selectedRecord.prompt || selectedRecord.name_ja || selectedRecord.name}
             </Typography>
           </Box>
         )}
