@@ -235,11 +235,11 @@ export default function PromptQueueDialog({
         }
       }
 
-      // 画像を4.5MB以下に圧縮
+      // 画像を3MB以下に圧縮（Vercel制限4.5MB - JSONオーバーヘッド考慮）
       let compressedImages = imageData;
       if (imageData.length > 0) {
         console.log(`Original images size: ${getTotalImageSizeKB(imageData).toFixed(1)}KB`);
-        compressedImages = await compressImagesForApiClient(imageData, 4.5 * 1024 * 1024);
+        compressedImages = await compressImagesForApiClient(imageData, 3 * 1024 * 1024);
         console.log(`Compressed images size: ${getTotalImageSizeKB(compressedImages).toFixed(1)}KB`);
       }
 

@@ -120,12 +120,12 @@ async function resizeImage(
  * 複数の画像を合計サイズ以下に圧縮（クライアントサイド）
  *
  * @param images 画像データの配列
- * @param maxTotalSize 最大合計サイズ（バイト、デフォルト4.5MB）
+ * @param maxTotalSize 最大合計サイズ（バイト、デフォルト3MB - Vercel制限考慮）
  * @returns 圧縮された画像データの配列
  */
 export async function compressImagesForApiClient(
   images: ImageData[],
-  maxTotalSize: number = 4.5 * 1024 * 1024 // 4.5MB
+  maxTotalSize: number = 3 * 1024 * 1024 // 3MB (Vercel制限4.5MB - JSONオーバーヘッド考慮)
 ): Promise<ImageData[]> {
   if (images.length === 0) {
     return images;
