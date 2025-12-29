@@ -35,6 +35,7 @@ import type {
 } from '@/types/prompt-queue';
 import ImageSelectorDialog from './ImageSelectorDialog';
 import MasterSelectorDialog from './MasterSelectorDialog';
+import { compressImagesForApiClient, getTotalImageSizeKB } from '@/lib/utils/clientImageCompression';
 
 /**
  * 画像URLを取得（GCP Storageパスの場合はAPIエンドポイント経由）
@@ -234,6 +235,14 @@ export default function PromptQueueDialog({
         }
       }
 
+      // 画像を4.5MB以下に圧縮
+      let compressedImages = imageData;
+      if (imageData.length > 0) {
+        console.log(`Original images size: ${getTotalImageSizeKB(imageData).toFixed(1)}KB`);
+        compressedImages = await compressImagesForApiClient(imageData, 4.5 * 1024 * 1024);
+        console.log(`Compressed images size: ${getTotalImageSizeKB(compressedImages).toFixed(1)}KB`);
+      }
+
       // Gemini APIを呼び出してプロンプトを補完
       const response = await fetch('/api/prompt-queue/enhance', {
         method: 'POST',
@@ -241,7 +250,7 @@ export default function PromptQueueDialog({
         body: JSON.stringify({
           prompt,
           negative_prompt: negativePrompt || undefined,
-          images: imageData.length > 0 ? imageData : undefined,
+          images: compressedImages.length > 0 ? compressedImages : undefined,
         }),
       });
 
