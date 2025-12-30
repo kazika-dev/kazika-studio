@@ -90,7 +90,7 @@ export async function PUT(
     const { width, height, format } = metadata;
 
     // GCP Storageバケットを取得
-    const bucket = getStorage().bucket(process.env.GCP_BUCKET_NAME!);
+    const bucket = getStorage().bucket(process.env.GCP_STORAGE_BUCKET!);
 
     // 古い画像を削除（GCP Storage）
     if (existingMaterial.file_name) {
