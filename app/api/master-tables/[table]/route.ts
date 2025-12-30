@@ -184,6 +184,42 @@ export async function PUT(
       );
     }
 
+    // m_text_templates の場合は特別な処理
+    if (table === 'm_text_templates') {
+      const { content, category, tags, is_active } = body;
+
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        return NextResponse.json(
+          { error: 'Content is required' },
+          { status: 400 }
+        );
+      }
+
+      const data = await updateMasterRecord(table, id, {
+        name: name.trim(),
+        name_ja: name_ja?.trim() || '',
+        content: content.trim(),
+        description: description?.trim() || '',
+        description_ja: description_ja?.trim() || '',
+        category: category || 'general',
+        tags: tags || [],
+        is_active: is_active !== undefined ? is_active : true,
+      });
+
+      if (!data) {
+        return NextResponse.json(
+          { error: 'Record not found' },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data,
+      });
+    }
+
+    // 既存のマスタテーブル用の処理
     const data = await updateMasterRecord(table, id, {
       name: name.trim(),
       description: description?.trim() || '',
