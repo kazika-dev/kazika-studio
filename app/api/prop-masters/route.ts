@@ -19,6 +19,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
+    // デバッグログ: クエリパラメータ
+    console.log('[Prop Masters] Query params:', {
+      userId: user.id,
+      schema: 'kazikastudio',
+      table: 'm_props',
+      filter: `user_id.eq.${user.id},user_id.is.null`,
+    });
+
     // ユーザーの小物または共有小物を取得（kazikastudioスキーマを明示的に指定）
     const { data: props, error } = await supabase
       .schema('kazikastudio')
@@ -26,6 +34,14 @@ export async function GET(request: NextRequest) {
       .select('*')
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('created_at', { ascending: false });
+
+    // デバッグログ: クエリ結果
+    console.log('[Prop Masters] Query result:', {
+      success: !error,
+      count: props?.length || 0,
+      error: error?.message || null,
+      data: props?.map(p => ({ id: p.id, name: p.name, user_id: p.user_id })) || [],
+    });
 
     if (error) {
       console.error('Prop masters fetch error:', error);

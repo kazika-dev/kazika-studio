@@ -19,6 +19,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
+    // デバッグログ: クエリパラメータ
+    console.log('[Scene Masters] Query params:', {
+      userId: user.id,
+      schema: 'kazikastudio',
+      table: 'm_scenes',
+      filter: `user_id.eq.${user.id},user_id.is.null`,
+    });
+
     // ユーザーのシーンまたは共有シーンを取得（kazikastudioスキーマを明示的に指定）
     const { data: scenes, error } = await supabase
       .schema('kazikastudio')
@@ -26,6 +34,14 @@ export async function GET(request: NextRequest) {
       .select('*')
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('created_at', { ascending: false });
+
+    // デバッグログ: クエリ結果
+    console.log('[Scene Masters] Query result:', {
+      success: !error,
+      count: scenes?.length || 0,
+      error: error?.message || null,
+      data: scenes?.map(s => ({ id: s.id, name: s.name, user_id: s.user_id })) || [],
+    });
 
     if (error) {
       console.error('Scene masters fetch error:', error);
