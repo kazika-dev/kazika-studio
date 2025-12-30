@@ -39,6 +39,7 @@ interface DrawingPath {
   fontSize?: number;
   fontWeight?: 'normal' | 'bold';
   fontStyle?: 'normal' | 'italic';
+  textBackgroundColor?: string | null;  // null = 透明
 }
 
 export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultSave = false, enableSaveModeSelection = false }: ImageEditorProps) {
@@ -57,7 +58,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   const [isEditingText, setIsEditingText] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [textPosition, setTextPosition] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
-  const [textConfig, setTextConfig] = useState({ fontSize: 32, fontWeight: 'normal' as 'normal' | 'bold', fontStyle: 'normal' as 'normal' | 'italic' });
+  const [textConfig, setTextConfig] = useState({ fontSize: 32, fontWeight: 'normal' as 'normal' | 'bold', fontStyle: 'normal' as 'normal' | 'italic', backgroundColor: null as string | null });
   const textInputRef = useRef<HTMLInputElement>(null);
   const [displayScale, setDisplayScale] = useState(1); // Canvas表示スケール
   const [selectedTextIndex, setSelectedTextIndex] = useState<number | null>(null);
@@ -240,6 +241,21 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
       // テキストを描画
       ctx.globalCompositeOperation = 'source-over';
       ctx.font = `${path.fontStyle || 'normal'} ${path.fontWeight || 'normal'} ${path.fontSize || 32}px sans-serif`;
+
+      // 背景色がある場合は先に背景を描画
+      if (path.textBackgroundColor) {
+        const metrics = ctx.measureText(path.text);
+        const textHeight = path.fontSize || 32;
+        const padding = 4;
+        ctx.fillStyle = path.textBackgroundColor;
+        ctx.fillRect(
+          path.points[0].x - padding,
+          path.points[0].y - textHeight,
+          metrics.width + padding * 2,
+          textHeight + padding
+        );
+      }
+
       ctx.fillStyle = path.color;
       ctx.fillText(path.text, path.points[0].x, path.points[0].y);
     } else if (path.mode === 'erase') {
@@ -336,6 +352,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
           fontSize: textConfig.fontSize,
           fontWeight: textConfig.fontWeight,
           fontStyle: textConfig.fontStyle,
+          textBackgroundColor: textConfig.backgroundColor,
         };
 
         // historyを更新
@@ -712,6 +729,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
       fontSize: textConfig.fontSize,
       fontWeight: textConfig.fontWeight,
       fontStyle: textConfig.fontStyle,
+      textBackgroundColor: textConfig.backgroundColor,
     };
 
     // historyを更新
@@ -1470,7 +1488,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
                 left: textPosition.x,
                 top: textPosition.y,
                 border: '2px dashed #1976d2',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: textConfig.backgroundColor || 'rgba(255, 255, 255, 0.1)',
                 minWidth: 200,
                 minHeight: textConfig.fontSize * displayScale * 1.5,
                 pointerEvents: 'none',
@@ -1525,6 +1543,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
                 alignItems: 'center',
                 backgroundColor: 'rgba(255, 255, 255, 0.95)',
                 backdropFilter: 'blur(10px)',
+                flexWrap: 'wrap',
               }}
             >
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -1557,6 +1576,39 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
                 <ToggleButton value="normal">標準</ToggleButton>
                 <ToggleButton value="italic">斜体</ToggleButton>
               </ToggleButtonGroup>
+              {/* 背景色選択 */}
+              <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', borderLeft: '1px solid #ddd', pl: 1 }}>
+                <Typography variant="caption">背景:</Typography>
+                {/* 透明（なし） */}
+                <Box
+                  onClick={() => setTextConfig({ ...textConfig, backgroundColor: null })}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    border: textConfig.backgroundColor === null ? '2px solid #000' : '1px solid #ccc',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    background: 'repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px',
+                  }}
+                  title="透明"
+                />
+                {/* 色オプション */}
+                {['#FFFFFF', '#000000', '#FFFF00', '#FF0000', '#00FF00', '#0000FF'].map(bgColor => (
+                  <Box
+                    key={bgColor}
+                    onClick={() => setTextConfig({ ...textConfig, backgroundColor: bgColor })}
+                    sx={{
+                      width: 20,
+                      height: 20,
+                      bgcolor: bgColor,
+                      border: textConfig.backgroundColor === bgColor ? '2px solid #000' : '1px solid #ccc',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                    title={bgColor}
+                  />
+                ))}
+              </Box>
               <Button size="small" onClick={() => { setIsEditingText(false); setTextInput(''); }}>
                 キャンセル
               </Button>
