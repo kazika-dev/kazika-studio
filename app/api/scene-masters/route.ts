@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllSceneMasters, createSceneMaster, Scene } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -9,11 +9,34 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
  */
 export async function GET(request: NextRequest) {
   try {
-    const scenes = await getAllSceneMasters();
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const supabase = await createClient();
+
+    // ユーザーのシーンまたは共有シーンを取得
+    const { data: scenes, error } = await supabase
+      .from('m_scenes')
+      .select('*')
+      .or(`user_id.eq.${user.id},user_id.is.null`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Scene masters fetch error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch scene masters', details: error.message },
+        { status: 500 }
+      );
+    }
 
     // 各シーンに署名付きURLを追加
     const scenesWithUrls = await Promise.all(
-      scenes.map(async (scene: Scene) => {
+      (scenes || []).map(async (scene) => {
         if (!scene.image_url) {
           return scene;
         }
@@ -49,7 +72,6 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
     const user = await authenticateRequest(request);
     if (!user) {
       return NextResponse.json(
@@ -57,6 +79,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const formData = await request.formData();
     const name = formData.get('name') as string;
@@ -123,19 +147,31 @@ export async function POST(request: NextRequest) {
     }
 
     // データベースに保存
-    const scene = await createSceneMaster({
-      user_id: user.id,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      image_url: imageUrl,
-      location: location || undefined,
-      time_of_day: timeOfDay || undefined,
-      weather: weather || undefined,
-      mood: mood || undefined,
-      prompt_hint_ja: promptHintJa.trim() || undefined,
-      prompt_hint_en: promptHintEn.trim() || undefined,
-      tags,
-    });
+    const { data: scene, error } = await supabase
+      .from('m_scenes')
+      .insert({
+        user_id: user.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        image_url: imageUrl || null,
+        location: location || null,
+        time_of_day: timeOfDay || null,
+        weather: weather || null,
+        mood: mood || null,
+        prompt_hint_ja: promptHintJa.trim() || null,
+        prompt_hint_en: promptHintEn.trim() || null,
+        tags,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Scene master creation error:', error);
+      return NextResponse.json(
+        { error: 'Failed to create scene master', details: error.message },
+        { status: 500 }
+      );
+    }
 
     // 署名付きURLを生成
     let signedUrl: string | undefined;

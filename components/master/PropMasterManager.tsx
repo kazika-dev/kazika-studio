@@ -36,10 +36,12 @@ import {
   ArrowBack as ArrowBackIcon,
   CloudUpload as CloudUploadIcon,
   Category as CategoryIcon,
+  Brush as BrushIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 import { Prop } from '@/lib/db';
+import ImageEditor from '@/components/common/ImageEditor';
 
 // 小物カテゴリオプション
 const CATEGORY_OPTIONS = [
@@ -68,6 +70,8 @@ export default function PropMasterManager() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedProp, setSelectedProp] = useState<PropWithUrl | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -281,6 +285,68 @@ export default function PropMasterManager() {
     setDeleteDialogOpen(true);
   };
 
+  const openImageEditor = (prop: PropWithUrl) => {
+    if (prop.image_url) {
+      // GCP署名付きURLではなく、/api/storage経由のURLを使用
+      const proxyUrl = `/api/storage/${prop.image_url}`;
+      setEditingImageUrl(proxyUrl);
+      setSelectedProp(prop);
+      setImageEditorOpen(true);
+    }
+  };
+
+  const handleSaveEditedImage = async (blob: Blob, saveMode?: 'overwrite' | 'new') => {
+    if (!selectedProp) {
+      toast.error('小物が選択されていません');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('image', blob);
+
+      let response;
+      let successMessage;
+
+      if (saveMode === 'new') {
+        // 新規保存: 元の小物情報をコピーして新規作成
+        formData.append('name', `${selectedProp.name} (編集済み)`);
+        formData.append('description', selectedProp.description || '');
+        formData.append('category', selectedProp.category || '');
+        formData.append('prompt_hint_ja', selectedProp.prompt_hint_ja || '');
+        formData.append('prompt_hint_en', selectedProp.prompt_hint_en || '');
+        formData.append('tags', JSON.stringify(selectedProp.tags || []));
+
+        response = await fetch('/api/prop-masters', {
+          method: 'POST',
+          body: formData,
+        });
+        successMessage = '新しい小物として保存しました';
+      } else {
+        // 上書き保存（デフォルト）
+        response = await fetch(`/api/prop-masters/${selectedProp.id}/replace-image`, {
+          method: 'PUT',
+          body: formData,
+        });
+        successMessage = '画像を更新しました';
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(successMessage);
+        setImageEditorOpen(false);
+        setEditingImageUrl(null);
+        loadProps();
+      } else {
+        toast.error(data.error || '画像の保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to save edited image:', error);
+      toast.error('画像の保存に失敗しました');
+    }
+  };
+
   const getLabelForCategory = (value: string | null) => {
     if (!value) return '-';
     const option = CATEGORY_OPTIONS.find(o => o.value === value);
@@ -409,6 +475,16 @@ export default function PropMasterManager() {
                       </Box>
                     </TableCell>
                     <TableCell align="right">
+                      {prop.image_url && (
+                        <IconButton
+                          size="small"
+                          onClick={() => openImageEditor(prop)}
+                          color="secondary"
+                          title="画像を編集"
+                        >
+                          <BrushIcon />
+                        </IconButton>
+                      )}
                       <IconButton
                         size="small"
                         onClick={() => openEditDialog(prop)}
@@ -595,6 +671,20 @@ export default function PropMasterManager() {
                     borderRadius: 1,
                   }}
                 />
+                {selectedProp?.image_url && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<BrushIcon />}
+                    onClick={() => {
+                      setEditDialogOpen(false);
+                      openImageEditor(selectedProp);
+                    }}
+                    sx={{ mt: 1 }}
+                    size="small"
+                  >
+                    画像を編集
+                  </Button>
+                )}
               </Box>
             )}
 
@@ -749,6 +839,19 @@ export default function PropMasterManager() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 画像エディタ */}
+      {imageEditorOpen && editingImageUrl && (
+        <ImageEditor
+          imageUrl={editingImageUrl}
+          onSave={handleSaveEditedImage}
+          onClose={() => {
+            setImageEditorOpen(false);
+            setEditingImageUrl(null);
+          }}
+          enableSaveModeSelection={true}
+        />
+      )}
     </Container>
   );
 }

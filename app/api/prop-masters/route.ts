@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllProps, createProp, Prop } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -9,11 +9,34 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
  */
 export async function GET(request: NextRequest) {
   try {
-    const props = await getAllProps();
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const supabase = await createClient();
+
+    // ユーザーの小物または共有小物を取得
+    const { data: props, error } = await supabase
+      .from('m_props')
+      .select('*')
+      .or(`user_id.eq.${user.id},user_id.is.null`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Prop masters fetch error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch prop masters', details: error.message },
+        { status: 500 }
+      );
+    }
 
     // 各小物に署名付きURLを追加
     const propsWithUrls = await Promise.all(
-      props.map(async (prop: Prop) => {
+      (props || []).map(async (prop) => {
         if (!prop.image_url) {
           return prop;
         }
@@ -49,7 +72,6 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
     const user = await authenticateRequest(request);
     if (!user) {
       return NextResponse.json(
@@ -57,6 +79,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    const supabase = await createClient();
 
     const formData = await request.formData();
     const name = formData.get('name') as string;
@@ -120,16 +144,28 @@ export async function POST(request: NextRequest) {
     }
 
     // データベースに保存
-    const prop = await createProp({
-      user_id: user.id,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      image_url: imageUrl,
-      category: category || undefined,
-      prompt_hint_ja: promptHintJa.trim() || undefined,
-      prompt_hint_en: promptHintEn.trim() || undefined,
-      tags,
-    });
+    const { data: prop, error } = await supabase
+      .from('m_props')
+      .insert({
+        user_id: user.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        image_url: imageUrl || null,
+        category: category || null,
+        prompt_hint_ja: promptHintJa.trim() || null,
+        prompt_hint_en: promptHintEn.trim() || null,
+        tags,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Prop master creation error:', error);
+      return NextResponse.json(
+        { error: 'Failed to create prop master', details: error.message },
+        { status: 500 }
+      );
+    }
 
     // 署名付きURLを生成
     let signedUrl: string | undefined;

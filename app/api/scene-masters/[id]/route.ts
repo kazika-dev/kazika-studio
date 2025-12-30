@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSceneMasterById, updateSceneMaster, deleteSceneMaster } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import {
   uploadImageToStorage,
   getSignedUrl,
@@ -16,6 +16,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
     const sceneId = parseInt(id);
 
@@ -26,9 +34,15 @@ export async function GET(
       );
     }
 
-    const scene = await getSceneMasterById(sceneId);
+    const supabase = await createClient();
 
-    if (!scene) {
+    const { data: scene, error } = await supabase
+      .from('m_scenes')
+      .select('*')
+      .eq('id', sceneId)
+      .single();
+
+    if (error || !scene) {
       return NextResponse.json(
         { error: 'Scene not found' },
         { status: 404 }
@@ -84,9 +98,16 @@ export async function PUT(
       );
     }
 
+    const supabase = await createClient();
+
     // 既存のシーンを取得
-    const existingScene = await getSceneMasterById(sceneId);
-    if (!existingScene) {
+    const { data: existingScene, error: fetchError } = await supabase
+      .from('m_scenes')
+      .select('*')
+      .eq('id', sceneId)
+      .single();
+
+    if (fetchError || !existingScene) {
       return NextResponse.json(
         { error: 'Scene not found' },
         { status: 404 }
@@ -175,23 +196,29 @@ export async function PUT(
     }
 
     // データベース更新
-    const updatedScene = await updateSceneMaster(sceneId, {
-      name: name.trim(),
-      description: description?.trim() || '',
-      image_url: imageUrl || undefined,
-      location: location || undefined,
-      time_of_day: timeOfDay || undefined,
-      weather: weather || undefined,
-      mood: mood || undefined,
-      prompt_hint_ja: promptHintJa?.trim() || undefined,
-      prompt_hint_en: promptHintEn?.trim() || undefined,
-      tags,
-    });
+    const { data: updatedScene, error: updateError } = await supabase
+      .from('m_scenes')
+      .update({
+        name: name.trim(),
+        description: description?.trim() || null,
+        image_url: imageUrl || null,
+        location: location || null,
+        time_of_day: timeOfDay || null,
+        weather: weather || null,
+        mood: mood || null,
+        prompt_hint_ja: promptHintJa?.trim() || null,
+        prompt_hint_en: promptHintEn?.trim() || null,
+        tags,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sceneId)
+      .select()
+      .single();
 
-    if (!updatedScene) {
+    if (updateError || !updatedScene) {
       return NextResponse.json(
-        { error: 'Scene not found' },
-        { status: 404 }
+        { error: 'Failed to update scene master' },
+        { status: 500 }
       );
     }
 
@@ -244,10 +271,16 @@ export async function DELETE(
       );
     }
 
-    // 削除前にシーン情報を取得
-    const scene = await getSceneMasterById(sceneId);
+    const supabase = await createClient();
 
-    if (!scene) {
+    // 削除前にシーン情報を取得
+    const { data: scene, error: fetchError } = await supabase
+      .from('m_scenes')
+      .select('*')
+      .eq('id', sceneId)
+      .single();
+
+    if (fetchError || !scene) {
       return NextResponse.json(
         { error: 'Scene not found' },
         { status: 404 }
@@ -263,9 +296,12 @@ export async function DELETE(
     }
 
     // データベースから削除
-    const deletedScene = await deleteSceneMaster(sceneId);
+    const { error: deleteError } = await supabase
+      .from('m_scenes')
+      .delete()
+      .eq('id', sceneId);
 
-    if (!deletedScene) {
+    if (deleteError) {
       return NextResponse.json(
         { error: 'Failed to delete from database' },
         { status: 500 }

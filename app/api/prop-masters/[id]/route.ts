@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPropById, updateProp, deleteProp } from '@/lib/db';
+import { createClient } from '@/lib/supabase/server';
 import {
   uploadImageToStorage,
   getSignedUrl,
@@ -16,6 +16,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
     const propId = parseInt(id);
 
@@ -26,9 +34,15 @@ export async function GET(
       );
     }
 
-    const prop = await getPropById(propId);
+    const supabase = await createClient();
 
-    if (!prop) {
+    const { data: prop, error } = await supabase
+      .from('m_props')
+      .select('*')
+      .eq('id', propId)
+      .single();
+
+    if (error || !prop) {
       return NextResponse.json(
         { error: 'Prop not found' },
         { status: 404 }
@@ -84,9 +98,16 @@ export async function PUT(
       );
     }
 
+    const supabase = await createClient();
+
     // 既存の小物を取得
-    const existingProp = await getPropById(propId);
-    if (!existingProp) {
+    const { data: existingProp, error: fetchError } = await supabase
+      .from('m_props')
+      .select('*')
+      .eq('id', propId)
+      .single();
+
+    if (fetchError || !existingProp) {
       return NextResponse.json(
         { error: 'Prop not found' },
         { status: 404 }
@@ -172,20 +193,26 @@ export async function PUT(
     }
 
     // データベース更新
-    const updatedProp = await updateProp(propId, {
-      name: name.trim(),
-      description: description?.trim() || '',
-      image_url: imageUrl || undefined,
-      category: category || undefined,
-      prompt_hint_ja: promptHintJa?.trim() || undefined,
-      prompt_hint_en: promptHintEn?.trim() || undefined,
-      tags,
-    });
+    const { data: updatedProp, error: updateError } = await supabase
+      .from('m_props')
+      .update({
+        name: name.trim(),
+        description: description?.trim() || null,
+        image_url: imageUrl || null,
+        category: category || null,
+        prompt_hint_ja: promptHintJa?.trim() || null,
+        prompt_hint_en: promptHintEn?.trim() || null,
+        tags,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', propId)
+      .select()
+      .single();
 
-    if (!updatedProp) {
+    if (updateError || !updatedProp) {
       return NextResponse.json(
-        { error: 'Prop not found' },
-        { status: 404 }
+        { error: 'Failed to update prop master' },
+        { status: 500 }
       );
     }
 
@@ -238,10 +265,16 @@ export async function DELETE(
       );
     }
 
-    // 削除前に小物情報を取得
-    const prop = await getPropById(propId);
+    const supabase = await createClient();
 
-    if (!prop) {
+    // 削除前に小物情報を取得
+    const { data: prop, error: fetchError } = await supabase
+      .from('m_props')
+      .select('*')
+      .eq('id', propId)
+      .single();
+
+    if (fetchError || !prop) {
       return NextResponse.json(
         { error: 'Prop not found' },
         { status: 404 }
@@ -257,9 +290,12 @@ export async function DELETE(
     }
 
     // データベースから削除
-    const deletedProp = await deleteProp(propId);
+    const { error: deleteError } = await supabase
+      .from('m_props')
+      .delete()
+      .eq('id', propId);
 
-    if (!deletedProp) {
+    if (deleteError) {
       return NextResponse.json(
         { error: 'Failed to delete from database' },
         { status: 500 }

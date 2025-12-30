@@ -36,10 +36,12 @@ import {
   ArrowBack as ArrowBackIcon,
   CloudUpload as CloudUploadIcon,
   Landscape as LandscapeIcon,
+  Brush as BrushIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 import { Scene } from '@/lib/db';
+import ImageEditor from '@/components/common/ImageEditor';
 
 // シーン設定オプション
 const LOCATION_OPTIONS = [
@@ -90,6 +92,8 @@ export default function SceneMasterManager() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedScene, setSelectedScene] = useState<SceneWithUrl | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -318,6 +322,71 @@ export default function SceneMasterManager() {
     setDeleteDialogOpen(true);
   };
 
+  const openImageEditor = (scene: SceneWithUrl) => {
+    if (scene.image_url) {
+      // GCP署名付きURLではなく、/api/storage経由のURLを使用
+      const proxyUrl = `/api/storage/${scene.image_url}`;
+      setEditingImageUrl(proxyUrl);
+      setSelectedScene(scene);
+      setImageEditorOpen(true);
+    }
+  };
+
+  const handleSaveEditedImage = async (blob: Blob, saveMode?: 'overwrite' | 'new') => {
+    if (!selectedScene) {
+      toast.error('シーンが選択されていません');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('image', blob);
+
+      let response;
+      let successMessage;
+
+      if (saveMode === 'new') {
+        // 新規保存: 元のシーン情報をコピーして新規作成
+        formData.append('name', `${selectedScene.name} (編集済み)`);
+        formData.append('description', selectedScene.description || '');
+        formData.append('location', selectedScene.location || '');
+        formData.append('time_of_day', selectedScene.time_of_day || '');
+        formData.append('weather', selectedScene.weather || '');
+        formData.append('mood', selectedScene.mood || '');
+        formData.append('prompt_hint_ja', selectedScene.prompt_hint_ja || '');
+        formData.append('prompt_hint_en', selectedScene.prompt_hint_en || '');
+        formData.append('tags', JSON.stringify(selectedScene.tags || []));
+
+        response = await fetch('/api/scene-masters', {
+          method: 'POST',
+          body: formData,
+        });
+        successMessage = '新しいシーンとして保存しました';
+      } else {
+        // 上書き保存（デフォルト）
+        response = await fetch(`/api/scene-masters/${selectedScene.id}/replace-image`, {
+          method: 'PUT',
+          body: formData,
+        });
+        successMessage = '画像を更新しました';
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(successMessage);
+        setImageEditorOpen(false);
+        setEditingImageUrl(null);
+        loadScenes();
+      } else {
+        toast.error(data.error || '画像の保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to save edited image:', error);
+      toast.error('画像の保存に失敗しました');
+    }
+  };
+
   const getLabelForOption = (options: { value: string; label: string }[], value: string | null) => {
     if (!value) return '-';
     const option = options.find(o => o.value === value);
@@ -447,6 +516,16 @@ export default function SceneMasterManager() {
                       </Box>
                     </TableCell>
                     <TableCell align="right">
+                      {scene.image_url && (
+                        <IconButton
+                          size="small"
+                          onClick={() => openImageEditor(scene)}
+                          color="secondary"
+                          title="画像を編集"
+                        >
+                          <BrushIcon />
+                        </IconButton>
+                      )}
                       <IconButton
                         size="small"
                         onClick={() => openEditDialog(scene)}
@@ -679,6 +758,22 @@ export default function SceneMasterManager() {
                     borderRadius: 1,
                   }}
                 />
+                <Box mt={2}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<BrushIcon />}
+                    onClick={() => {
+                      setEditDialogOpen(false);
+                      openImageEditor(selectedScene);
+                    }}
+                    size="small"
+                  >
+                    画像を編集
+                  </Button>
+                </Box>
+                <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                  画像エディタで編集できます（描画、テキスト追加、選択範囲の移動・削除など）
+                </Typography>
               </Box>
             )}
 
@@ -879,6 +974,19 @@ export default function SceneMasterManager() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 画像エディタ */}
+      {imageEditorOpen && editingImageUrl && (
+        <ImageEditor
+          imageUrl={editingImageUrl}
+          onSave={handleSaveEditedImage}
+          onClose={() => {
+            setImageEditorOpen(false);
+            setEditingImageUrl(null);
+          }}
+          enableSaveModeSelection={true}
+        />
+      )}
     </Container>
   );
 }
