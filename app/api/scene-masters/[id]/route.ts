@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSceneById, updateScene, deleteScene } from '@/lib/db';
+import { getSceneMasterById, updateSceneMaster, deleteSceneMaster } from '@/lib/db';
 import {
   uploadImageToStorage,
   getSignedUrl,
@@ -26,7 +26,7 @@ export async function GET(
       );
     }
 
-    const scene = await getSceneById(sceneId);
+    const scene = await getSceneMasterById(sceneId);
 
     if (!scene) {
       return NextResponse.json(
@@ -85,7 +85,7 @@ export async function PUT(
     }
 
     // 既存のシーンを取得
-    const existingScene = await getSceneById(sceneId);
+    const existingScene = await getSceneMasterById(sceneId);
     if (!existingScene) {
       return NextResponse.json(
         { error: 'Scene not found' },
@@ -175,7 +175,7 @@ export async function PUT(
     }
 
     // データベース更新
-    const updatedScene = await updateScene(sceneId, {
+    const updatedScene = await updateSceneMaster(sceneId, {
       name: name.trim(),
       description: description?.trim() || '',
       image_url: imageUrl || undefined,
@@ -245,7 +245,7 @@ export async function DELETE(
     }
 
     // 削除前にシーン情報を取得
-    const scene = await getSceneById(sceneId);
+    const scene = await getSceneMasterById(sceneId);
 
     if (!scene) {
       return NextResponse.json(
@@ -263,7 +263,7 @@ export async function DELETE(
     }
 
     // データベースから削除
-    const deletedScene = await deleteScene(sceneId);
+    const deletedScene = await deleteSceneMaster(sceneId);
 
     if (!deletedScene) {
       return NextResponse.json(

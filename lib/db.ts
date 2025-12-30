@@ -2508,9 +2508,9 @@ export interface Scene {
 }
 
 /**
- * ユーザーのシーン一覧を取得（共有シーン含む）
+ * ユーザーのシーンマスタ一覧を取得（共有シーン含む）
  */
-export async function getScenesByUserId(userId: string): Promise<Scene[]> {
+export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> {
   const result = await query(
     `SELECT * FROM kazikastudio.m_scenes
      WHERE user_id = $1 OR user_id IS NULL
@@ -2521,9 +2521,9 @@ export async function getScenesByUserId(userId: string): Promise<Scene[]> {
 }
 
 /**
- * 全てのシーンを取得
+ * 全てのシーンマスタを取得
  */
-export async function getAllScenes(): Promise<Scene[]> {
+export async function getAllSceneMasters(): Promise<Scene[]> {
   const result = await query(
     'SELECT * FROM kazikastudio.m_scenes ORDER BY created_at DESC',
     []
@@ -2532,9 +2532,9 @@ export async function getAllScenes(): Promise<Scene[]> {
 }
 
 /**
- * IDでシーンを取得
+ * IDでシーンマスタを取得
  */
-export async function getSceneById(id: number): Promise<Scene | null> {
+export async function getSceneMasterById(id: number): Promise<Scene | null> {
   const result = await query(
     'SELECT * FROM kazikastudio.m_scenes WHERE id = $1',
     [id]
@@ -2543,9 +2543,9 @@ export async function getSceneById(id: number): Promise<Scene | null> {
 }
 
 /**
- * シーンを作成
+ * シーンマスタを作成
  */
-export async function createScene(data: {
+export async function createSceneMaster(data: {
   user_id: string;
   name: string;
   description?: string;
@@ -2584,9 +2584,9 @@ export async function createScene(data: {
 }
 
 /**
- * シーンを更新
+ * シーンマスタを更新
  */
-export async function updateScene(
+export async function updateSceneMaster(
   id: number,
   data: {
     name?: string;
@@ -2652,7 +2652,7 @@ export async function updateScene(
   }
 
   if (setClauses.length === 0) {
-    return getSceneById(id);
+    return getSceneMasterById(id);
   }
 
   values.push(id);
@@ -2669,9 +2669,9 @@ export async function updateScene(
 }
 
 /**
- * シーンを削除
+ * シーンマスタを削除
  */
-export async function deleteScene(id: number): Promise<Scene | null> {
+export async function deleteSceneMaster(id: number): Promise<Scene | null> {
   const result = await query(
     'DELETE FROM kazikastudio.m_scenes WHERE id = $1 RETURNING *',
     [id]

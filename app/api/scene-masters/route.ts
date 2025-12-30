@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllScenes, createScene, Scene } from '@/lib/db';
+import { getAllSceneMasters, createSceneMaster, Scene } from '@/lib/db';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -9,7 +9,7 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
  */
 export async function GET(request: NextRequest) {
   try {
-    const scenes = await getAllScenes();
+    const scenes = await getAllSceneMasters();
 
     // 各シーンに署名付きURLを追加
     const scenesWithUrls = await Promise.all(
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     // データベースに保存
-    const scene = await createScene({
+    const scene = await createSceneMaster({
       user_id: user.id,
       name: name.trim(),
       description: description.trim() || undefined,
