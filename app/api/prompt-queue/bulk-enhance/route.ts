@@ -95,8 +95,11 @@ export async function POST(request: NextRequest) {
           result = await model.generateContent(enhanceSystemPrompt);
         }
 
-        const enhancedPrompt = result.response.text().trim();
-        console.log(`Queue ${queueRequest.queueId}: Enhanced prompt: ${enhancedPrompt.substring(0, 100)}...`);
+        const rawEnhancedPrompt = result.response.text().trim();
+        // キャラクターシートに忠実に描画するよう指示を先頭に追加
+        const characterSheetInstruction = 'Please make sure that the hairstyle, clothing, and accessories of the character appearing in the image you create exactly match the attached character sheet.';
+        const enhancedPrompt = `${characterSheetInstruction} ${rawEnhancedPrompt}`;
+        console.log(`Queue ${queueRequest.queueId}: Enhanced prompt: ${enhancedPrompt.substring(0, 150)}...`);
 
         // データベースを更新
         await query(
