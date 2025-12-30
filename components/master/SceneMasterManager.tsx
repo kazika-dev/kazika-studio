@@ -377,6 +377,7 @@ export default function SceneMasterManager() {
         toast.success(successMessage);
         setImageEditorOpen(false);
         setEditingImageUrl(null);
+        setSelectedScene(null);
         loadScenes();
       } else {
         toast.error(data.error || '画像の保存に失敗しました');
@@ -384,6 +385,8 @@ export default function SceneMasterManager() {
     } catch (error) {
       console.error('Failed to save edited image:', error);
       toast.error('画像の保存に失敗しました');
+    } finally {
+      setSelectedScene(null);
     }
   };
 
@@ -983,6 +986,7 @@ export default function SceneMasterManager() {
           onClose={() => {
             setImageEditorOpen(false);
             setEditingImageUrl(null);
+            setSelectedScene(null);
           }}
           enableSaveModeSelection={true}
         />

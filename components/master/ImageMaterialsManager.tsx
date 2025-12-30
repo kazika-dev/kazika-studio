@@ -319,6 +319,7 @@ export default function ImageMaterialsManager() {
         toast.success(successMessage);
         setImageEditorOpen(false);
         setEditingImageUrl(null);
+        setSelectedMaterial(null);
         loadMaterials();
       } else {
         toast.error(data.error || '画像の保存に失敗しました');
@@ -326,6 +327,8 @@ export default function ImageMaterialsManager() {
     } catch (error) {
       console.error('Failed to save edited image:', error);
       toast.error('画像の保存に失敗しました');
+    } finally {
+      setSelectedMaterial(null);
     }
   };
 
@@ -725,6 +728,7 @@ export default function ImageMaterialsManager() {
           onClose={() => {
             setImageEditorOpen(false);
             setEditingImageUrl(null);
+            setSelectedMaterial(null);
           }}
           enableSaveModeSelection={true}
         />

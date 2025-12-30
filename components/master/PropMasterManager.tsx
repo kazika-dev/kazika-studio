@@ -337,6 +337,7 @@ export default function PropMasterManager() {
         toast.success(successMessage);
         setImageEditorOpen(false);
         setEditingImageUrl(null);
+        setSelectedProp(null);
         loadProps();
       } else {
         toast.error(data.error || '画像の保存に失敗しました');
@@ -344,6 +345,8 @@ export default function PropMasterManager() {
     } catch (error) {
       console.error('Failed to save edited image:', error);
       toast.error('画像の保存に失敗しました');
+    } finally {
+      setSelectedProp(null);
     }
   };
 
@@ -848,6 +851,7 @@ export default function PropMasterManager() {
           onClose={() => {
             setImageEditorOpen(false);
             setEditingImageUrl(null);
+            setSelectedProp(null);
           }}
           enableSaveModeSelection={true}
         />
