@@ -2212,6 +2212,7 @@ export async function getPromptQueueById(id: number): Promise<PromptQueueWithIma
 
 /**
  * プロンプトキューの参照画像を取得（詳細情報付き）
+ * 対応する画像タイプ: character_sheet, output, scene, prop
  */
 export async function getPromptQueueImages(queueId: number): Promise<PromptQueueImageWithDetails[]> {
   const result = await query(
@@ -2225,9 +2226,13 @@ export async function getPromptQueueImages(queueId: number): Promise<PromptQueue
        CASE
          WHEN pqi.image_type = 'character_sheet' THEN cs.image_url
          WHEN pqi.image_type = 'output' THEN wo.content_url
+         WHEN pqi.image_type = 'scene' THEN sc.image_url
+         WHEN pqi.image_type = 'prop' THEN pr.image_url
        END as image_url,
        CASE
          WHEN pqi.image_type = 'character_sheet' THEN cs.name
+         WHEN pqi.image_type = 'scene' THEN sc.name
+         WHEN pqi.image_type = 'prop' THEN pr.name
          ELSE NULL
        END as name
      FROM kazikastudio.prompt_queue_images pqi
@@ -2235,6 +2240,10 @@ export async function getPromptQueueImages(queueId: number): Promise<PromptQueue
        ON pqi.image_type = 'character_sheet' AND pqi.reference_id = cs.id
      LEFT JOIN kazikastudio.workflow_outputs wo
        ON pqi.image_type = 'output' AND pqi.reference_id = wo.id
+     LEFT JOIN kazikastudio.m_scenes sc
+       ON pqi.image_type = 'scene' AND pqi.reference_id = sc.id
+     LEFT JOIN kazikastudio.m_props pr
+       ON pqi.image_type = 'prop' AND pqi.reference_id = pr.id
      WHERE pqi.queue_id = $1
      ORDER BY pqi.display_order ASC`,
     [queueId]

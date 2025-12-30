@@ -87,10 +87,11 @@ export async function POST(request: NextRequest) {
 
     // 画像のバリデーション
     if (body.images) {
+      const validImageTypes = ['character_sheet', 'output', 'scene', 'prop'];
       for (const img of body.images) {
-        if (!['character_sheet', 'output'].includes(img.image_type)) {
+        if (!validImageTypes.includes(img.image_type)) {
           return NextResponse.json(
-            { error: `Invalid image_type: ${img.image_type}` },
+            { error: `Invalid image_type: ${img.image_type}. Valid types: ${validImageTypes.join(', ')}` },
             { status: 400 }
           );
         }

@@ -6,7 +6,7 @@
 export type PromptQueueStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 // 参照画像のタイプ
-export type PromptQueueImageType = 'character_sheet' | 'output';
+export type PromptQueueImageType = 'character_sheet' | 'output' | 'scene' | 'prop';
 
 // プロンプト補完モード
 export type PromptEnhanceMode = 'none' | 'enhance';
