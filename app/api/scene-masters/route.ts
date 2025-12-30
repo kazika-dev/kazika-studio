@@ -19,8 +19,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // ユーザーのシーンまたは共有シーンを取得
+    // ユーザーのシーンまたは共有シーンを取得（kazikastudioスキーマを明示的に指定）
     const { data: scenes, error } = await supabase
+      .schema('kazikastudio')
       .from('m_scenes')
       .select('*')
       .or(`user_id.eq.${user.id},user_id.is.null`)
@@ -146,8 +147,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // データベースに保存
+    // データベースに保存（kazikastudioスキーマを明示的に指定）
     const { data: scene, error } = await supabase
+      .schema('kazikastudio')
       .from('m_scenes')
       .insert({
         user_id: user.id,
