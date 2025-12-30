@@ -70,7 +70,10 @@ ${negative_prompt ? `ネガティブプロンプト（参考）: ${negative_prom
       result = await model.generateContent(enhanceSystemPrompt);
     }
 
-    const enhancedPrompt = result.response.text().trim();
+    const rawEnhancedPrompt = result.response.text().trim();
+    // キャラクターシートに忠実に描画するよう指示を先頭に追加
+    const characterSheetInstruction = 'Please make sure that the hairstyle, clothing, and accessories of the character appearing in the image you create exactly match the attached character sheet.';
+    const enhancedPrompt = `${characterSheetInstruction} ${rawEnhancedPrompt}`;
     console.log(`Enhanced prompt: ${enhancedPrompt}`);
 
     return NextResponse.json({

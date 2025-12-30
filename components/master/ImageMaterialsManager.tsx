@@ -59,6 +59,7 @@ export default function ImageMaterialsManager() {
   const [uploading, setUploading] = useState(false);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
+  const [editingMaterial, setEditingMaterial] = useState<ImageMaterial | null>(null); // イメージエディタ専用の状態
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -276,11 +277,13 @@ export default function ImageMaterialsManager() {
     // GCP署名付きURLではなく、/api/storage経由のURLを使用
     const proxyUrl = `/api/storage/${material.file_name}`;
     setEditingImageUrl(proxyUrl);
+    setEditingMaterial(material); // イメージエディタ専用の状態に設定
     setImageEditorOpen(true);
   };
 
   const handleSaveEditedImage = async (blob: Blob, saveMode?: 'overwrite' | 'new') => {
-    if (!selectedMaterial) {
+    // イメージエディタ専用の状態を使用（selectedMaterialではなくeditingMaterial）
+    if (!editingMaterial) {
       toast.error('素材が選択されていません');
       return;
     }
@@ -294,10 +297,10 @@ export default function ImageMaterialsManager() {
 
       if (saveMode === 'new') {
         // 新規保存: 元の素材情報をコピーして新規作成
-        formData.append('name', `${selectedMaterial.name} (編集済み)`);
-        formData.append('description', selectedMaterial.description);
-        formData.append('category', selectedMaterial.category);
-        formData.append('tags', JSON.stringify(selectedMaterial.tags));
+        formData.append('name', `${editingMaterial.name} (編集済み)`);
+        formData.append('description', editingMaterial.description);
+        formData.append('category', editingMaterial.category);
+        formData.append('tags', JSON.stringify(editingMaterial.tags));
 
         response = await fetch('/api/image-materials', {
           method: 'POST',
@@ -305,8 +308,8 @@ export default function ImageMaterialsManager() {
         });
         successMessage = '新しい素材として保存しました';
       } else {
-        // 上書き保存（デフォルト）
-        response = await fetch(`/api/image-materials/${selectedMaterial.id}/replace-image`, {
+        // 上書き保存（デフォルト）: editingMaterialのIDを使用
+        response = await fetch(`/api/image-materials/${editingMaterial.id}/replace-image`, {
           method: 'PUT',
           body: formData,
         });
@@ -319,7 +322,7 @@ export default function ImageMaterialsManager() {
         toast.success(successMessage);
         setImageEditorOpen(false);
         setEditingImageUrl(null);
-        setSelectedMaterial(null);
+        setEditingMaterial(null); // イメージエディタ専用の状態をクリア
         loadMaterials();
       } else {
         toast.error(data.error || '画像の保存に失敗しました');
@@ -327,8 +330,6 @@ export default function ImageMaterialsManager() {
     } catch (error) {
       console.error('Failed to save edited image:', error);
       toast.error('画像の保存に失敗しました');
-    } finally {
-      setSelectedMaterial(null);
     }
   };
 
@@ -452,10 +453,7 @@ export default function ImageMaterialsManager() {
                     <TableCell align="right">
                       <IconButton
                         size="small"
-                        onClick={() => {
-                          setSelectedMaterial(material);
-                          openImageEditor(material);
-                        }}
+                        onClick={() => openImageEditor(material)}
                         color="secondary"
                         title="画像を編集"
                       >
@@ -728,7 +726,7 @@ export default function ImageMaterialsManager() {
           onClose={() => {
             setImageEditorOpen(false);
             setEditingImageUrl(null);
-            setSelectedMaterial(null);
+            setEditingMaterial(null); // イメージエディタ専用の状態をクリア
           }}
           enableSaveModeSelection={true}
         />
