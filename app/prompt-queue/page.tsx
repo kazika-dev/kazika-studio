@@ -14,11 +14,15 @@ import {
   Fab,
   Tooltip,
   Snackbar,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
   PlayArrow as PlayIcon,
   Refresh as RefreshIcon,
+  CheckBox as CheckBoxIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import type {
   PromptQueueWithImages,
@@ -28,6 +32,7 @@ import type {
 } from '@/types/prompt-queue';
 import PromptQueueCard from '@/components/prompt-queue/PromptQueueCard';
 import PromptQueueDialog from '@/components/prompt-queue/PromptQueueDialog';
+import BulkSettingsDialog, { BulkUpdateData } from '@/components/prompt-queue/BulkSettingsDialog';
 
 export default function PromptQueuePage() {
   const [queues, setQueues] = useState<PromptQueueWithImages[]>([]);
@@ -42,6 +47,11 @@ export default function PromptQueuePage() {
     message: '',
     severity: 'success',
   });
+
+  // 選択モード用の状態
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkSettingsOpen, setBulkSettingsOpen] = useState(false);
 
   const fetchQueues = useCallback(async () => {
     setLoading(true);
@@ -185,7 +195,66 @@ export default function PromptQueuePage() {
     setEditQueue(null);
   };
 
+  // 選択モードのハンドラー
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // 選択モードを終了する際は選択をクリア
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectQueue = (queue: PromptQueueWithImages, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(queue.id);
+      } else {
+        newSet.delete(queue.id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === queues.length) {
+      // 全選択されていれば全解除
+      setSelectedIds(new Set());
+    } else {
+      // それ以外は全選択
+      setSelectedIds(new Set(queues.map((q) => q.id)));
+    }
+  };
+
+  // 一括設定の適用
+  const handleBulkApply = async (updates: BulkUpdateData) => {
+    const queueIds = Array.from(selectedIds);
+    if (queueIds.length === 0) return;
+
+    const response = await fetch('/api/prompt-queue/bulk-update', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        queue_ids: queueIds,
+        updates,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('一括更新に失敗しました');
+    }
+
+    const result = await response.json();
+    await fetchQueues();
+    setSnackbar({
+      open: true,
+      message: `${result.updated_count}件のキューを更新しました`,
+      severity: 'success',
+    });
+  };
+
   const pendingCount = queues.filter((q) => q.status === 'pending').length;
+  const selectedQueues = queues.filter((q) => selectedIds.has(q.id));
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -195,6 +264,23 @@ export default function PromptQueuePage() {
           プロンプトキュー
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={selectionMode ? 'contained' : 'outlined'}
+            startIcon={<CheckBoxIcon />}
+            onClick={handleToggleSelectionMode}
+            color={selectionMode ? 'primary' : 'inherit'}
+          >
+            {selectionMode ? `選択中 (${selectedIds.size})` : '選択'}
+          </Button>
+          {selectionMode && selectedIds.size > 0 && (
+            <Button
+              variant="contained"
+              startIcon={<SettingsIcon />}
+              onClick={() => setBulkSettingsOpen(true)}
+            >
+              一括設定
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -235,6 +321,22 @@ export default function PromptQueuePage() {
         </Alert>
       )}
 
+      {/* 選択モード時の全選択ボタン */}
+      {selectionMode && queues.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedIds.size === queues.length && queues.length > 0}
+                indeterminate={selectedIds.size > 0 && selectedIds.size < queues.length}
+                onChange={handleSelectAll}
+              />
+            }
+            label={`全て選択 (${selectedIds.size}/${queues.length})`}
+          />
+        </Box>
+      )}
+
       {/* キュー一覧 */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -262,6 +364,9 @@ export default function PromptQueuePage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onExecute={handleExecute}
+                selectionMode={selectionMode}
+                selected={selectedIds.has(queue.id)}
+                onSelect={handleSelectQueue}
               />
             </Grid>
           ))}
@@ -285,6 +390,18 @@ export default function PromptQueuePage() {
         onClose={handleDialogClose}
         onSave={handleSave}
         editQueue={editQueue}
+      />
+
+      {/* 一括設定ダイアログ */}
+      <BulkSettingsDialog
+        open={bulkSettingsOpen}
+        onClose={() => {
+          setBulkSettingsOpen(false);
+          // ダイアログを閉じたらデータを再取得して画面を更新
+          fetchQueues();
+        }}
+        selectedQueues={selectedQueues}
+        onApply={handleBulkApply}
       />
 
       {/* スナックバー */}

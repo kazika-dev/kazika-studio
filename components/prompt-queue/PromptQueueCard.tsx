@@ -9,6 +9,7 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
+  Checkbox,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -28,6 +29,10 @@ interface PromptQueueCardProps {
   onDelete: (queue: PromptQueueWithImages) => void;
   onExecute: (queue: PromptQueueWithImages) => void;
   isExecuting?: boolean;
+  // 選択モード用のprops
+  selectionMode?: boolean;
+  selected?: boolean;
+  onSelect?: (queue: PromptQueueWithImages, selected: boolean) => void;
 }
 
 const statusConfig = {
@@ -55,28 +60,54 @@ export default function PromptQueueCard({
   onDelete,
   onExecute,
   isExecuting = false,
+  selectionMode = false,
+  selected = false,
+  onSelect,
 }: PromptQueueCardProps) {
   const status = statusConfig[queue.status] || statusConfig.pending;
   const StatusIcon = status.icon;
 
+  const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    onSelect?.(queue, event.target.checked);
+  };
+
   return (
-    <Card sx={{ mb: 2 }}>
+    <Card
+      sx={{
+        mb: 2,
+        border: selected ? '2px solid' : undefined,
+        borderColor: selected ? 'primary.main' : undefined,
+        bgcolor: selected ? 'action.selected' : undefined,
+      }}
+    >
       <CardContent>
         {/* ヘッダー */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Box>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {queue.name || `キュー #${queue.id}`}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-              <Chip
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+            {selectionMode && (
+              <Checkbox
+                checked={selected}
+                onChange={handleCheckboxChange}
+                onClick={(e) => e.stopPropagation()}
                 size="small"
-                label={status.label}
-                color={status.color}
-                icon={queue.status === 'processing' ? <CircularProgress size={14} /> : <StatusIcon sx={{ fontSize: 16 }} />}
+                sx={{ mt: -0.5, ml: -1 }}
               />
-              <Chip size="small" label={`優先度: ${queue.priority}`} variant="outlined" />
-              <Chip size="small" label={queue.aspect_ratio} variant="outlined" />
+            )}
+            <Box>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {queue.name || `キュー #${queue.id}`}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                <Chip
+                  size="small"
+                  label={status.label}
+                  color={status.color}
+                  icon={queue.status === 'processing' ? <CircularProgress size={14} /> : <StatusIcon sx={{ fontSize: 16 }} />}
+                />
+                <Chip size="small" label={`優先度: ${queue.priority}`} variant="outlined" />
+                <Chip size="small" label={queue.aspect_ratio} variant="outlined" />
+              </Box>
             </Box>
           </Box>
           <Box>
