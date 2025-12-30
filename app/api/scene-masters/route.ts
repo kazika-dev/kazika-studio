@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getSceneMastersByUserId, createSceneMaster } from '@/lib/db';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * GET /api/scene-masters
  * シーンマスタ一覧を取得（署名付きURL付き）
+ * lib/db.tsの関数を使用（RLSをバイパス）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -17,43 +18,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // lib/db.tsの関数を使用（PostgreSQL直接接続、RLSバイパス）
+    const scenes = await getSceneMastersByUserId(user.id);
 
-    // デバッグログ: クエリパラメータ
-    console.log('[Scene Masters] Query params:', {
-      userId: user.id,
-      schema: 'kazikastudio',
-      table: 'm_scenes',
-      filter: `user_id.eq.${user.id},user_id.is.null`,
-    });
-
-    // ユーザーのシーンまたは共有シーンを取得（kazikastudioスキーマを明示的に指定）
-    const { data: scenes, error } = await supabase
-      .schema('kazikastudio')
-      .from('m_scenes')
-      .select('*')
-      .or(`user_id.eq.${user.id},user_id.is.null`)
-      .order('created_at', { ascending: false });
-
-    // デバッグログ: クエリ結果
     console.log('[Scene Masters] Query result:', {
-      success: !error,
-      count: scenes?.length || 0,
-      error: error?.message || null,
-      data: scenes?.map(s => ({ id: s.id, name: s.name, user_id: s.user_id })) || [],
+      userId: user.id,
+      count: scenes.length,
     });
-
-    if (error) {
-      console.error('Scene masters fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch scene masters', details: error.message },
-        { status: 500 }
-      );
-    }
 
     // 各シーンに署名付きURLを追加
     const scenesWithUrls = await Promise.all(
-      (scenes || []).map(async (scene) => {
+      scenes.map(async (scene) => {
         if (!scene.image_url) {
           return scene;
         }
@@ -86,6 +61,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/scene-masters
  * シーンマスタを新規作成（画像アップロード含む）
+ * lib/db.tsの関数を使用（RLSをバイパス）
  */
 export async function POST(request: NextRequest) {
   try {
@@ -96,8 +72,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     const formData = await request.formData();
     const name = formData.get('name') as string;
@@ -163,33 +137,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // データベースに保存（kazikastudioスキーマを明示的に指定）
-    const { data: scene, error } = await supabase
-      .schema('kazikastudio')
-      .from('m_scenes')
-      .insert({
-        user_id: user.id,
-        name: name.trim(),
-        description: description.trim() || null,
-        image_url: imageUrl || null,
-        location: location || null,
-        time_of_day: timeOfDay || null,
-        weather: weather || null,
-        mood: mood || null,
-        prompt_hint_ja: promptHintJa.trim() || null,
-        prompt_hint_en: promptHintEn.trim() || null,
-        tags,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Scene master creation error:', error);
-      return NextResponse.json(
-        { error: 'Failed to create scene master', details: error.message },
-        { status: 500 }
-      );
-    }
+    // lib/db.tsの関数を使用（PostgreSQL直接接続、RLSバイパス）
+    const scene = await createSceneMaster({
+      user_id: user.id,
+      name: name.trim(),
+      description: description.trim() || undefined,
+      image_url: imageUrl,
+      location: location || undefined,
+      time_of_day: timeOfDay || undefined,
+      weather: weather || undefined,
+      mood: mood || undefined,
+      prompt_hint_ja: promptHintJa.trim() || undefined,
+      prompt_hint_en: promptHintEn.trim() || undefined,
+      tags,
+    });
 
     // 署名付きURLを生成
     let signedUrl: string | undefined;

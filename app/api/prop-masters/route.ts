@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getPropsByUserId, createProp } from '@/lib/db';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * GET /api/prop-masters
  * 小物マスタ一覧を取得（署名付きURL付き）
+ * lib/db.tsの関数を使用（RLSをバイパス）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -17,43 +18,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // lib/db.tsの関数を使用（PostgreSQL直接接続、RLSバイパス）
+    const props = await getPropsByUserId(user.id);
 
-    // デバッグログ: クエリパラメータ
-    console.log('[Prop Masters] Query params:', {
-      userId: user.id,
-      schema: 'kazikastudio',
-      table: 'm_props',
-      filter: `user_id.eq.${user.id},user_id.is.null`,
-    });
-
-    // ユーザーの小物または共有小物を取得（kazikastudioスキーマを明示的に指定）
-    const { data: props, error } = await supabase
-      .schema('kazikastudio')
-      .from('m_props')
-      .select('*')
-      .or(`user_id.eq.${user.id},user_id.is.null`)
-      .order('created_at', { ascending: false });
-
-    // デバッグログ: クエリ結果
     console.log('[Prop Masters] Query result:', {
-      success: !error,
-      count: props?.length || 0,
-      error: error?.message || null,
-      data: props?.map(p => ({ id: p.id, name: p.name, user_id: p.user_id })) || [],
+      userId: user.id,
+      count: props.length,
     });
-
-    if (error) {
-      console.error('Prop masters fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch prop masters', details: error.message },
-        { status: 500 }
-      );
-    }
 
     // 各小物に署名付きURLを追加
     const propsWithUrls = await Promise.all(
-      (props || []).map(async (prop) => {
+      props.map(async (prop) => {
         if (!prop.image_url) {
           return prop;
         }
@@ -86,6 +61,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/prop-masters
  * 小物マスタを新規作成（画像アップロード含む）
+ * lib/db.tsの関数を使用（RLSをバイパス）
  */
 export async function POST(request: NextRequest) {
   try {
@@ -96,8 +72,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     const formData = await request.formData();
     const name = formData.get('name') as string;
@@ -160,30 +134,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // データベースに保存（kazikastudioスキーマを明示的に指定）
-    const { data: prop, error } = await supabase
-      .schema('kazikastudio')
-      .from('m_props')
-      .insert({
-        user_id: user.id,
-        name: name.trim(),
-        description: description.trim() || null,
-        image_url: imageUrl || null,
-        category: category || null,
-        prompt_hint_ja: promptHintJa.trim() || null,
-        prompt_hint_en: promptHintEn.trim() || null,
-        tags,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Prop master creation error:', error);
-      return NextResponse.json(
-        { error: 'Failed to create prop master', details: error.message },
-        { status: 500 }
-      );
-    }
+    // lib/db.tsの関数を使用（PostgreSQL直接接続、RLSバイパス）
+    const prop = await createProp({
+      user_id: user.id,
+      name: name.trim(),
+      description: description.trim() || undefined,
+      image_url: imageUrl,
+      category: category || undefined,
+      prompt_hint_ja: promptHintJa.trim() || undefined,
+      prompt_hint_en: promptHintEn.trim() || undefined,
+      tags,
+    });
 
     // 署名付きURLを生成
     let signedUrl: string | undefined;
