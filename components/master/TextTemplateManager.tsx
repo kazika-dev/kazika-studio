@@ -57,6 +57,7 @@ const CATEGORIES = [
 export default function TextTemplateManager() {
   const [templates, setTemplates] = useState<TextTemplate[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TextTemplate | null>(null);
@@ -141,11 +142,14 @@ export default function TextTemplateManager() {
       return;
     }
 
-    try {
-      const url = editingTemplate
-        ? '/api/master-tables/m_text_templates'
-        : '/api/master-tables/m_text_templates';
+    // 二重クリック防止
+    if (saving) return;
 
+    setSaving(true);
+    setError(null);
+
+    try {
+      const url = '/api/master-tables/m_text_templates';
       const method = editingTemplate ? 'PUT' : 'POST';
 
       // Trim all string fields before saving
@@ -164,23 +168,28 @@ export default function TextTemplateManager() {
         ? { ...trimmedData, id: editingTemplate.id }
         : trimmedData;
 
+      console.log('Saving template:', { method, body });
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
+      const responseData = await response.json();
+      console.log('Save response:', responseData);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save template');
+        throw new Error(responseData.error || 'Failed to save template');
       }
 
       await loadTemplates();
       handleCloseDialog();
-      setError(null);
     } catch (err: any) {
       console.error('Save error:', err);
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -401,13 +410,14 @@ export default function TextTemplateManager() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>キャンセル</Button>
+          <Button onClick={handleCloseDialog} disabled={saving}>キャンセル</Button>
           <Button
+            type="button"
             onClick={handleSave}
             variant="contained"
-            disabled={!formData.name.trim() || !formData.content.trim()}
+            disabled={saving || !formData.name.trim() || !formData.content.trim()}
           >
-            保存
+            {saving ? <CircularProgress size={20} /> : '保存'}
           </Button>
         </DialogActions>
       </Dialog>
