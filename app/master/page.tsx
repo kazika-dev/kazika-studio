@@ -22,6 +22,8 @@ import {
   Image as ImageIcon,
   EditNote as EditNoteIcon,
   Description as DescriptionIcon,
+  Landscape as LandscapeIcon,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -100,6 +102,22 @@ const masterTables: MasterTable[] = [
     description: 'テキスト入力フォームに挿入可能なテンプレート文の管理',
     icon: <DescriptionIcon />,
     color: '#00897b',
+  },
+  {
+    id: 'm_scenes',
+    name: 'm_scenes',
+    displayName: 'シーンマスタ',
+    description: '背景画像と場所情報（学校、自宅、屋外など）のマスタデータ',
+    icon: <LandscapeIcon />,
+    color: '#0288d1',
+  },
+  {
+    id: 'm_props',
+    name: 'm_props',
+    displayName: '小物マスタ',
+    description: '小道具・アイテム（アクセサリー、家具、食べ物など）のマスタデータ',
+    icon: <CategoryIcon />,
+    color: '#5d4037',
   },
 ];
 

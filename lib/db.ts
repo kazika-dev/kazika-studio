@@ -2484,3 +2484,367 @@ export async function getPendingPromptQueues(userId: string): Promise<PromptQueu
     })
   );
 }
+
+// ============================================================================
+// Scene Master (m_scenes)
+// ============================================================================
+
+export interface Scene {
+  id: number;
+  user_id: string | null;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  location: string | null;
+  time_of_day: string | null;
+  weather: string | null;
+  mood: string | null;
+  prompt_hint_ja: string | null;
+  prompt_hint_en: string | null;
+  tags: string[];
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * ユーザーのシーン一覧を取得（共有シーン含む）
+ */
+export async function getScenesByUserId(userId: string): Promise<Scene[]> {
+  const result = await query(
+    `SELECT * FROM kazikastudio.m_scenes
+     WHERE user_id = $1 OR user_id IS NULL
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * 全てのシーンを取得
+ */
+export async function getAllScenes(): Promise<Scene[]> {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_scenes ORDER BY created_at DESC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * IDでシーンを取得
+ */
+export async function getSceneById(id: number): Promise<Scene | null> {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_scenes WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * シーンを作成
+ */
+export async function createScene(data: {
+  user_id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  location?: string;
+  time_of_day?: string;
+  weather?: string;
+  mood?: string;
+  prompt_hint_ja?: string;
+  prompt_hint_en?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+}): Promise<Scene> {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_scenes
+      (user_id, name, description, image_url, location, time_of_day, weather, mood,
+       prompt_hint_ja, prompt_hint_en, tags, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.name,
+      data.description || null,
+      data.image_url || null,
+      data.location || null,
+      data.time_of_day || null,
+      data.weather || null,
+      data.mood || null,
+      data.prompt_hint_ja || null,
+      data.prompt_hint_en || null,
+      data.tags || [],
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * シーンを更新
+ */
+export async function updateScene(
+  id: number,
+  data: {
+    name?: string;
+    description?: string;
+    image_url?: string;
+    location?: string;
+    time_of_day?: string;
+    weather?: string;
+    mood?: string;
+    prompt_hint_ja?: string;
+    prompt_hint_en?: string;
+    tags?: string[];
+    metadata?: Record<string, any>;
+  }
+): Promise<Scene | null> {
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    setClauses.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    setClauses.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.image_url !== undefined) {
+    setClauses.push(`image_url = $${paramIndex++}`);
+    values.push(data.image_url);
+  }
+  if (data.location !== undefined) {
+    setClauses.push(`location = $${paramIndex++}`);
+    values.push(data.location);
+  }
+  if (data.time_of_day !== undefined) {
+    setClauses.push(`time_of_day = $${paramIndex++}`);
+    values.push(data.time_of_day);
+  }
+  if (data.weather !== undefined) {
+    setClauses.push(`weather = $${paramIndex++}`);
+    values.push(data.weather);
+  }
+  if (data.mood !== undefined) {
+    setClauses.push(`mood = $${paramIndex++}`);
+    values.push(data.mood);
+  }
+  if (data.prompt_hint_ja !== undefined) {
+    setClauses.push(`prompt_hint_ja = $${paramIndex++}`);
+    values.push(data.prompt_hint_ja);
+  }
+  if (data.prompt_hint_en !== undefined) {
+    setClauses.push(`prompt_hint_en = $${paramIndex++}`);
+    values.push(data.prompt_hint_en);
+  }
+  if (data.tags !== undefined) {
+    setClauses.push(`tags = $${paramIndex++}`);
+    values.push(data.tags);
+  }
+  if (data.metadata !== undefined) {
+    setClauses.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (setClauses.length === 0) {
+    return getSceneById(id);
+  }
+
+  values.push(id);
+
+  const result = await query(
+    `UPDATE kazikastudio.m_scenes
+     SET ${setClauses.join(', ')}, updated_at = NOW()
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * シーンを削除
+ */
+export async function deleteScene(id: number): Promise<Scene | null> {
+  const result = await query(
+    'DELETE FROM kazikastudio.m_scenes WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+// ============================================================================
+// Props Master (m_props)
+// ============================================================================
+
+export interface Prop {
+  id: number;
+  user_id: string | null;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  category: string | null;
+  prompt_hint_ja: string | null;
+  prompt_hint_en: string | null;
+  tags: string[];
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * ユーザーの小物一覧を取得（共有小物含む）
+ */
+export async function getPropsByUserId(userId: string): Promise<Prop[]> {
+  const result = await query(
+    `SELECT * FROM kazikastudio.m_props
+     WHERE user_id = $1 OR user_id IS NULL
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * 全ての小物を取得
+ */
+export async function getAllProps(): Promise<Prop[]> {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_props ORDER BY created_at DESC',
+    []
+  );
+  return result.rows;
+}
+
+/**
+ * IDで小物を取得
+ */
+export async function getPropById(id: number): Promise<Prop | null> {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_props WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 小物を作成
+ */
+export async function createProp(data: {
+  user_id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  category?: string;
+  prompt_hint_ja?: string;
+  prompt_hint_en?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+}): Promise<Prop> {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_props
+      (user_id, name, description, image_url, category,
+       prompt_hint_ja, prompt_hint_en, tags, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING *`,
+    [
+      data.user_id,
+      data.name,
+      data.description || null,
+      data.image_url || null,
+      data.category || null,
+      data.prompt_hint_ja || null,
+      data.prompt_hint_en || null,
+      data.tags || [],
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+/**
+ * 小物を更新
+ */
+export async function updateProp(
+  id: number,
+  data: {
+    name?: string;
+    description?: string;
+    image_url?: string;
+    category?: string;
+    prompt_hint_ja?: string;
+    prompt_hint_en?: string;
+    tags?: string[];
+    metadata?: Record<string, any>;
+  }
+): Promise<Prop | null> {
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    setClauses.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    setClauses.push(`description = $${paramIndex++}`);
+    values.push(data.description);
+  }
+  if (data.image_url !== undefined) {
+    setClauses.push(`image_url = $${paramIndex++}`);
+    values.push(data.image_url);
+  }
+  if (data.category !== undefined) {
+    setClauses.push(`category = $${paramIndex++}`);
+    values.push(data.category);
+  }
+  if (data.prompt_hint_ja !== undefined) {
+    setClauses.push(`prompt_hint_ja = $${paramIndex++}`);
+    values.push(data.prompt_hint_ja);
+  }
+  if (data.prompt_hint_en !== undefined) {
+    setClauses.push(`prompt_hint_en = $${paramIndex++}`);
+    values.push(data.prompt_hint_en);
+  }
+  if (data.tags !== undefined) {
+    setClauses.push(`tags = $${paramIndex++}`);
+    values.push(data.tags);
+  }
+  if (data.metadata !== undefined) {
+    setClauses.push(`metadata = $${paramIndex++}`);
+    values.push(data.metadata);
+  }
+
+  if (setClauses.length === 0) {
+    return getPropById(id);
+  }
+
+  values.push(id);
+
+  const result = await query(
+    `UPDATE kazikastudio.m_props
+     SET ${setClauses.join(', ')}, updated_at = NOW()
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 小物を削除
+ */
+export async function deleteProp(id: number): Promise<Prop | null> {
+  const result = await query(
+    'DELETE FROM kazikastudio.m_props WHERE id = $1 RETURNING *',
+    [id]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
