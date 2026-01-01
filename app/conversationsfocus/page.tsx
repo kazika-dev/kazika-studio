@@ -72,8 +72,8 @@ export default function ConversationsFocusPage() {
     ? getStoryInfoForConversation(selectedConversation.story_scene_id)
     : undefined;
 
-  // Use story title if available, otherwise use story ID as prefix
-  const currentStoryTitle = storyInfo?.title || (storyInfo?.id ? `story${storyInfo.id}` : undefined);
+  // Use story title if available, otherwise use story ID, or default to 'kazikastudio'
+  const currentStoryTitle = storyInfo?.title || (storyInfo?.id ? `story${storyInfo.id}` : 'kazikastudio');
 
   useEffect(() => {
     loadStoryTree();
