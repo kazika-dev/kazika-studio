@@ -9,11 +9,15 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Divider
+  Divider,
+  Chip
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
-import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
+import ConversationViewer from '@/components/studio/conversation/ConversationViewer';
+import ConversationGeneratorDialogStandalone from '@/components/studio/conversation/ConversationGeneratorDialogStandalone';
+import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
@@ -54,6 +58,8 @@ export default function ConversationsPage() {
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
+  const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -144,7 +150,7 @@ export default function ConversationsPage() {
     }
   };
 
-  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number }) => {
+  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number; scenePromptJa?: string; scenePromptEn?: string }) => {
     try {
       const response = await fetch(`/api/conversations/messages/${messageId}`, {
         method: 'PATCH',
@@ -281,6 +287,11 @@ export default function ConversationsPage() {
     }
   };
 
+  const handleConversationGenerated = async (conversationId: number) => {
+    await loadStoryTree();
+    await loadConversation(conversationId);
+  };
+
   const handleCreateStudioClick = () => {
     if (!selectedConversation) return;
     setWorkflowSelectionDialogOpen(true);
@@ -321,6 +332,11 @@ export default function ConversationsPage() {
   const handleCreateScene = (storyId: number) => {
     setSelectedStoryId(storyId);
     setSceneDialogOpen(true);
+  };
+
+  const handleCreateConversation = (sceneId: number) => {
+    setSelectedSceneId(sceneId);
+    setConversationDialogOpen(true);
   };
 
   const handleDeleteStory = async (storyId: number) => {
@@ -414,6 +430,7 @@ export default function ConversationsPage() {
               onSelectConversation={handleSelectConversation}
               onCreateStory={() => setStoryDialogOpen(true)}
               onCreateScene={handleCreateScene}
+              onCreateConversation={handleCreateConversation}
               onDeleteStory={handleDeleteStory}
               onDeleteScene={handleDeleteScene}
               onDeleteConversation={handleDeleteConversation}
@@ -455,7 +472,7 @@ export default function ConversationsPage() {
                   </Box>
                   <Divider />
                 </Box>
-                <ConversationViewerSimple
+                <ConversationViewer
                   messages={messages}
                   characters={characters}
                   onUpdateMessage={handleUpdateMessage}
@@ -507,6 +524,16 @@ export default function ConversationsPage() {
         onCreated={async () => {
           await loadStoryTree();
         }}
+      />
+
+      <ConversationGeneratorDialogWithScene
+        open={conversationDialogOpen}
+        sceneId={selectedSceneId}
+        onClose={() => {
+          setConversationDialogOpen(false);
+          setSelectedSceneId(null);
+        }}
+        onGenerated={handleConversationGenerated}
       />
 
       <WorkflowSelectionDialog

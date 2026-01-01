@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -9,40 +9,29 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Divider,
-  List,
-  ListItemButton,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
-  IconButton,
-  Tooltip,
-  TextField,
-  InputAdornment,
+  Divider
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Clear';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ConversationViewer from '@/components/studio/conversation/ConversationViewer';
+import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
+import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
+import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
+import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import type {
   Conversation,
   ConversationMessageWithCharacter,
   GetConversationResponse,
+  StoryTreeNode,
 } from '@/types/conversation';
 
-interface ConversationListItem {
-  id: number;
-  title: string;
-  description?: string | null;
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-  storyTitle?: string;
-  sceneTitle?: string;
+interface ConversationWithCount extends Conversation {
+  messageCount?: number;
+  sceneCount?: number;
+  studios?: {
+    id: number;
+    name: string;
+  };
 }
 
 interface Character {
@@ -53,53 +42,44 @@ interface Character {
 
 export default function ConversationsFocusPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const conversationIdParam = searchParams.get('id');
 
-  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
-  const [filteredConversations, setFilteredConversations] = useState<ConversationListItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<ConversationWithCount | null>(null);
   const [messages, setMessages] = useState<ConversationMessageWithCharacter[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [creatingStudio, setCreatingStudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storyDialogOpen, setStoryDialogOpen] = useState(false);
+  const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
+  const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
-  // Load all conversations (flat list)
-  const loadConversations = useCallback(async () => {
+  useEffect(() => {
+    loadStoryTree();
+    loadAllCharacters();
+  }, []);
+
+  const loadStoryTree = async () => {
     try {
-      const response = await fetch('/api/conversations');
+      const response = await fetch('/api/stories/tree');
       const result = await response.json();
 
       if (result.success && result.data) {
-        const conversationList: ConversationListItem[] = result.data.conversations.map((conv: any) => ({
-          id: conv.id,
-          title: conv.title,
-          description: conv.description,
-          messageCount: conv.message_count || conv.messageCount || 0,
-          createdAt: conv.created_at,
-          updatedAt: conv.updated_at,
-          storyTitle: conv.story_scene?.story?.title,
-          sceneTitle: conv.story_scene?.title,
-        }));
-        setConversations(conversationList);
-        setFilteredConversations(conversationList);
+        setStoryTree(result.data.tree);
       } else {
-        setError(result.error || '会話一覧の読み込みに失敗しました');
+        setError(result.error || 'ストーリーツリーの読み込みに失敗しました');
       }
     } catch (error) {
-      console.error('Failed to load conversations:', error);
-      setError('会話一覧の読み込みに失敗しました');
+      console.error('Failed to load story tree:', error);
+      setError('ストーリーツリーの読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  // Load a specific conversation
-  const loadConversation = useCallback(async (conversationId: number) => {
+  const loadConversation = async (conversationId: number) => {
     setLoadingConversation(true);
     try {
       const response = await fetch(`/api/conversations/${conversationId}`);
@@ -117,10 +97,9 @@ export default function ConversationsFocusPage() {
     } finally {
       setLoadingConversation(false);
     }
-  }, []);
+  };
 
-  // Load all characters
-  const loadAllCharacters = useCallback(async () => {
+  const loadAllCharacters = async () => {
     try {
       const response = await fetch('/api/characters');
       const result = await response.json();
@@ -136,51 +115,36 @@ export default function ConversationsFocusPage() {
     } catch (error) {
       console.error('Failed to load all characters:', error);
     }
-  }, []);
-
-  useEffect(() => {
-    loadConversations();
-    loadAllCharacters();
-  }, [loadConversations, loadAllCharacters]);
-
-  // Load conversation from URL parameter
-  useEffect(() => {
-    if (conversationIdParam) {
-      const id = parseInt(conversationIdParam, 10);
-      if (!isNaN(id)) {
-        loadConversation(id);
-      }
-    }
-  }, [conversationIdParam, loadConversation]);
-
-  // Filter conversations based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredConversations(conversations);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = conversations.filter(conv =>
-      conv.title.toLowerCase().includes(query) ||
-      conv.description?.toLowerCase().includes(query) ||
-      conv.storyTitle?.toLowerCase().includes(query) ||
-      conv.sceneTitle?.toLowerCase().includes(query)
-    );
-    setFilteredConversations(filtered);
-  }, [searchQuery, conversations]);
+  };
 
   const handleSelectConversation = (conversationId: number) => {
-    router.push(`/conversationsfocus?id=${conversationId}`);
+    loadConversation(conversationId);
   };
 
-  const handleBackToList = () => {
-    setSelectedConversation(null);
-    setMessages([]);
-    router.push('/conversationsfocus');
+  const handleDeleteConversation = async (conversationId: number) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadStoryTree();
+        if (selectedConversation?.id === conversationId) {
+          setSelectedConversation(null);
+          setMessages([]);
+        }
+      } else {
+        alert(`削除に失敗しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      alert('削除に失敗しました');
+    }
   };
 
-  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number; scenePromptJa?: string; scenePromptEn?: string }) => {
+  const handleUpdateMessage = async (messageId: number, updates: { messageText?: string; characterId?: number }) => {
     try {
       const response = await fetch(`/api/conversations/messages/${messageId}`, {
         method: 'PATCH',
@@ -261,6 +225,7 @@ export default function ConversationsFocusPage() {
       const result = await response.json();
 
       if (result.success && result.data) {
+        // Update the message with new emotion tag
         setMessages(prev =>
           prev.map(msg =>
             msg.id === messageId
@@ -300,9 +265,11 @@ export default function ConversationsFocusPage() {
       const result = await response.json();
 
       if (result.success && result.data) {
+        // If inserting after a message, reload the entire conversation to get updated sequence_order
         if (insertAfterMessageId) {
           await loadConversation(selectedConversation.id);
         } else {
+          // If adding at the end, just append to the list
           setMessages(prev => [...prev, result.data.message]);
         }
       } else {
@@ -351,6 +318,49 @@ export default function ConversationsFocusPage() {
     }
   };
 
+  const handleCreateScene = (storyId: number) => {
+    setSelectedStoryId(storyId);
+    setSceneDialogOpen(true);
+  };
+
+  const handleDeleteStory = async (storyId: number) => {
+    try {
+      const response = await fetch(`/api/stories/${storyId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadStoryTree();
+      } else {
+        alert(`削除に失敗しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete story:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
+  const handleDeleteScene = async (sceneId: number) => {
+    try {
+      const response = await fetch(`/api/scenes/${sceneId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadStoryTree();
+      } else {
+        alert(`削除に失敗しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete scene:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ maxWidth: 1280, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
@@ -361,96 +371,23 @@ export default function ConversationsFocusPage() {
     );
   }
 
-  // Show conversation detail view
-  if (selectedConversation) {
-    return (
-      <Box sx={{ maxWidth: 1280, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
-        {/* Header with back button */}
-        <Box sx={{ marginBottom: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 2 }}>
-            <IconButton onClick={handleBackToList} sx={{ mr: 1 }}>
-              <ArrowBackIcon />
-            </IconButton>
-            <ChatIcon sx={{ fontSize: 32 }} />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h5">{selectedConversation.title}</Typography>
-              {selectedConversation.description && (
-                <Typography variant="body2" color="text.secondary">
-                  {selectedConversation.description}
-                </Typography>
-              )}
-            </Box>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<MovieIcon />}
-              onClick={handleCreateStudioClick}
-              disabled={creatingStudio || messages.length === 0}
-            >
-              {creatingStudio ? 'スタジオを作成中...' : 'スタジオを作成'}
-            </Button>
-          </Box>
-          <Divider />
-        </Box>
-
-        {error && (
-          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Conversation content */}
-        <Paper elevation={2} sx={{ padding: 3, minHeight: 'calc(100vh - 300px)' }}>
-          {loadingConversation ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <ConversationViewer
-              messages={messages}
-              characters={characters}
-              onUpdateMessage={handleUpdateMessage}
-              onReorderMessages={handleReorderMessages}
-              onDeleteMessage={handleDeleteMessage}
-              onReanalyzeEmotion={handleReanalyzeEmotion}
-              onAddMessage={handleAddMessage}
-            />
-          )}
-        </Paper>
-
-        {/* Workflow Selection Dialog */}
-        <WorkflowSelectionDialog
-          open={workflowSelectionDialogOpen}
-          onClose={() => setWorkflowSelectionDialogOpen(false)}
-          onSelect={handleWorkflowSelected}
-        />
-      </Box>
-    );
-  }
-
-  // Show conversation list view
   return (
-    <Box sx={{ maxWidth: 1280, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
+    <Box sx={{ maxWidth: 1536, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
       {/* Header */}
       <Box sx={{ marginBottom: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 2 }}>
           <ChatIcon sx={{ fontSize: 32 }} />
           <Box sx={{ flex: 1 }}>
-            <Typography variant="h4">会話一覧</Typography>
+            <Typography variant="h4">ストーリー・シーン・会話</Typography>
             <Typography variant="body2" color="text.secondary">
-              会話を選択して編集・スタジオ作成
+              ストーリーごとにシーンと会話を管理
             </Typography>
           </Box>
-          <Tooltip title="会話一覧を更新">
-            <IconButton onClick={() => loadConversations()}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
           <Button
             variant="outlined"
-            onClick={() => router.push('/conversations')}
+            onClick={() => router.push('/studios')}
           >
-            ストーリー階層表示へ
+            スタジオ一覧
           </Button>
         </Box>
         <Divider />
@@ -462,95 +399,122 @@ export default function ConversationsFocusPage() {
         </Alert>
       )}
 
-      {/* Search */}
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="会話を検索..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-            endAdornment: searchQuery && (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearchQuery('')}>
-                  <ClearIcon />
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-        />
+      {/* Content */}
+      <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+        {/* Story Tree (Left Sidebar) */}
+        <Box sx={{ width: { xs: '100%', md: '33%' } }}>
+          <Paper elevation={2} sx={{ padding: 2, height: 'calc(100vh - 250px)', overflow: 'auto' }}>
+            <Typography variant="h6" gutterBottom>
+              ストーリー階層
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            <StoryTreeView
+              tree={storyTree}
+              selectedConversationId={selectedConversation?.id || null}
+              onSelectConversation={handleSelectConversation}
+              onCreateStory={() => setStoryDialogOpen(true)}
+              onCreateScene={handleCreateScene}
+              onDeleteStory={handleDeleteStory}
+              onDeleteScene={handleDeleteScene}
+              onDeleteConversation={handleDeleteConversation}
+            />
+          </Paper>
+        </Box>
+
+        {/* Conversation Viewer (Main Content) */}
+        <Box sx={{ flex: 1 }}>
+          <Paper elevation={2} sx={{ padding: 3, minHeight: 'calc(100vh - 250px)', overflow: 'auto' }}>
+            {loadingConversation ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+                <CircularProgress />
+              </Box>
+            ) : selectedConversation ? (
+              <>
+                <Box sx={{ marginBottom: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="h5" gutterBottom>
+                        {selectedConversation.title}
+                      </Typography>
+                      {selectedConversation.description && (
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedConversation.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<MovieIcon />}
+                      onClick={handleCreateStudioClick}
+                      disabled={creatingStudio || messages.length === 0}
+                      sx={{ ml: 2 }}
+                    >
+                      {creatingStudio ? 'スタジオを作成中...' : 'スタジオを作成'}
+                    </Button>
+                  </Box>
+                  <Divider />
+                </Box>
+                <ConversationViewerSimple
+                  messages={messages}
+                  characters={characters}
+                  onUpdateMessage={handleUpdateMessage}
+                  onReorderMessages={handleReorderMessages}
+                  onDeleteMessage={handleDeleteMessage}
+                  onReanalyzeEmotion={handleReanalyzeEmotion}
+                  onAddMessage={handleAddMessage}
+                />
+              </>
+            ) : (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 400,
+                  color: 'text.secondary',
+                  gap: 2
+                }}
+              >
+                <ChatIcon sx={{ fontSize: 80, opacity: 0.3 }} />
+                <Typography variant="h6">会話を選択してください</Typography>
+                <Typography variant="body2">
+                  左側のツリーから会話を選択してください
+                </Typography>
+              </Box>
+            )}
+          </Paper>
+        </Box>
       </Box>
 
-      {/* Conversation List */}
-      <Paper elevation={2}>
-        {filteredConversations.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
-            <ChatIcon sx={{ fontSize: 64, opacity: 0.3, mb: 2 }} />
-            <Typography variant="h6">
-              {searchQuery ? '検索結果がありません' : '会話がありません'}
-            </Typography>
-            <Typography variant="body2">
-              {searchQuery ? '別のキーワードで検索してください' : 'ストーリー階層表示から会話を作成してください'}
-            </Typography>
-          </Box>
-        ) : (
-          <List>
-            {filteredConversations.map((conv, index) => (
-              <Box key={conv.id}>
-                <ListItemButton
-                  onClick={() => handleSelectConversation(conv.id)}
-                  sx={{
-                    py: 2,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    }
-                  }}
-                >
-                  <ListItemAvatar>
-                    <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      <ChatIcon />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                          {conv.title}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ({conv.messageCount}件のメッセージ)
-                        </Typography>
-                      </Box>
-                    }
-                    secondary={
-                      <Box>
-                        {conv.description && (
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                            {conv.description}
-                          </Typography>
-                        )}
-                        {(conv.storyTitle || conv.sceneTitle) && (
-                          <Typography variant="caption" color="text.secondary">
-                            {conv.storyTitle && `${conv.storyTitle}`}
-                            {conv.storyTitle && conv.sceneTitle && ' / '}
-                            {conv.sceneTitle && `${conv.sceneTitle}`}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                  />
-                </ListItemButton>
-                {index < filteredConversations.length - 1 && <Divider />}
-              </Box>
-            ))}
-          </List>
-        )}
-      </Paper>
+      {/* Dialogs */}
+      <StoryCreationDialog
+        open={storyDialogOpen}
+        onClose={() => setStoryDialogOpen(false)}
+        onCreated={async () => {
+          await loadStoryTree();
+        }}
+      />
+
+      <SceneCreationDialog
+        open={sceneDialogOpen}
+        storyId={selectedStoryId}
+        onClose={() => {
+          setSceneDialogOpen(false);
+          setSelectedStoryId(null);
+        }}
+        onCreated={async () => {
+          await loadStoryTree();
+        }}
+      />
+
+      <WorkflowSelectionDialog
+        open={workflowSelectionDialogOpen}
+        onClose={() => setWorkflowSelectionDialogOpen(false)}
+        onSelect={handleWorkflowSelected}
+      />
+
     </Box>
   );
 }
