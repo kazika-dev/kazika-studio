@@ -99,7 +99,7 @@ export async function PUT(
     // 画像のバリデーション
     if (body.images) {
       for (const img of body.images) {
-        if (!['character_sheet', 'output'].includes(img.image_type)) {
+        if (!['character_sheet', 'output', 'scene', 'prop'].includes(img.image_type)) {
           return NextResponse.json(
             { error: `Invalid image_type: ${img.image_type}` },
             { status: 400 }
