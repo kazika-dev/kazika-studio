@@ -25,7 +25,7 @@ interface StoryTreeViewProps {
   onSelectConversation: (conversationId: number) => void;
   onCreateStory: () => void;
   onCreateScene: (storyId: number) => void;
-  onCreateConversation: (sceneId: number) => void;
+  onCreateConversation?: (sceneId: number) => void;
   onDeleteStory: (storyId: number) => void;
   onDeleteScene: (sceneId: number) => void;
   onDeleteConversation: (conversationId: number) => void;
@@ -177,14 +177,16 @@ export default function StoryTreeView({
                           <Collapse in={isSceneExpanded}>
                             <Box sx={{ pl: 3 }}>
                               {/* 会話作成ボタン */}
-                              <Button
-                                size="small"
-                                startIcon={<AddIcon />}
-                                onClick={() => onCreateConversation(sceneNode.scene.id)}
-                                sx={{ mb: 0.5, fontSize: '0.7rem' }}
-                              >
-                                会話を追加
-                              </Button>
+                              {onCreateConversation && (
+                                <Button
+                                  size="small"
+                                  startIcon={<AddIcon />}
+                                  onClick={() => onCreateConversation(sceneNode.scene.id)}
+                                  sx={{ mb: 0.5, fontSize: '0.7rem' }}
+                                >
+                                  会話を追加
+                                </Button>
+                              )}
 
                               {sceneNode.conversations.map((conversation) => (
                                 <Box
