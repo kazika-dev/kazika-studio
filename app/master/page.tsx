@@ -24,22 +24,30 @@ import {
   Description as DescriptionIcon,
   Landscape as LandscapeIcon,
   Category as CategoryIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
   id: string;
   name: string;
-
   displayName: string;
   description: string;
   icon: React.ReactNode;
   color: string;
-
+  customPath?: string; // マスタテーブル以外のパスを使用する場合
 }
 
 const masterTables: MasterTable[] = [
   {
-
+    id: 'character_sheets',
+    name: 'character_sheets',
+    displayName: 'キャラクターシート',
+    description: 'キャラクターの外見・性格・設定を管理するマスタデータ',
+    icon: <PeopleIcon />,
+    color: '#3f51b5',
+    customPath: '/character-sheets',
+  },
+  {
     id: 'eleven_labs_tags',
     name: 'eleven_labs_tags',
     displayName: 'ElevenLabs タグ',
@@ -190,20 +198,22 @@ export default function MasterPage() {
                 <Typography variant="body2" color="text.secondary">
                   {table.description}
                 </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1, display: 'block', fontFamily: 'monospace' }}
-                >
-                  テーブル: kazikastudio.{table.name}
-                </Typography>
+                {!table.customPath && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: 'block', fontFamily: 'monospace' }}
+                  >
+                    テーブル: kazikastudio.{table.name}
+                  </Typography>
+                )}
               </CardContent>
               <CardActions sx={{ p: 2, pt: 0 }}>
                 <Button
                   size="medium"
                   variant="contained"
                   fullWidth
-                  onClick={() => router.push(`/master/${table.name}`)}
+                  onClick={() => router.push(table.customPath || `/master/${table.name}`)}
                   sx={{
                     backgroundColor: table.color,
                     '&:hover': {
