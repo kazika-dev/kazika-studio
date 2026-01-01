@@ -792,11 +792,12 @@ export default function ConversationViewerSimple({
   };
 
   const handleDownloadAudio = async (messageId: number, speakerName: string) => {
-    const audioUrl = audioUrls[messageId];
-    if (!audioUrl) return;
-
     try {
-      const response = await fetch(audioUrl);
+      // Use API endpoint to bypass CORS
+      const response = await fetch(`/api/conversations/messages/${messageId}/download-audio`);
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');

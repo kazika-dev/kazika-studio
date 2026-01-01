@@ -258,3 +258,13 @@ export async function getImageMaterialSignedUrl(
 ): Promise<string> {
   return getSignedUrl(fileName, expiresInMinutes);
 }
+
+/**
+ * ファイルをBufferとしてダウンロード（getFileFromStorageのエイリアス）
+ * @param filePath GCP Storage内のファイルパス
+ * @returns ファイルデータ
+ */
+export async function downloadFileAsBuffer(filePath: string): Promise<Buffer> {
+  const { data } = await getFileFromStorage(filePath);
+  return data;
+}
