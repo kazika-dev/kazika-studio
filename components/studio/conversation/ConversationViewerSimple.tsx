@@ -557,6 +557,7 @@ export default function ConversationViewerSimple({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(new Set());
   const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchDownloading, setBatchDownloading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   const sensors = useSensors(
@@ -938,6 +939,58 @@ export default function ConversationViewerSimple({
     alert(`${successCount}/${messageIds.length}件の音声を生成しました`);
   };
 
+  // Batch audio download
+  const handleBatchDownloadAudio = async () => {
+    // Get selected messages that have audio
+    const messagesWithAudio = localMessages.filter(
+      m => selectedMessageIds.has(m.id) && audioUrls[m.id]
+    );
+
+    if (messagesWithAudio.length === 0) {
+      alert('選択したメッセージに音声がありません');
+      return;
+    }
+
+    setBatchDownloading(true);
+    setBatchProgress({ current: 0, total: messagesWithAudio.length });
+
+    let successCount = 0;
+
+    for (let i = 0; i < messagesWithAudio.length; i++) {
+      const msg = messagesWithAudio[i];
+      setBatchProgress({ current: i + 1, total: messagesWithAudio.length });
+
+      try {
+        const response = await fetch(`/api/conversations/messages/${msg.id}/download-audio`);
+        if (!response.ok) {
+          throw new Error('Download failed');
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Include sequence order in filename for proper ordering
+        const orderNum = String(msg.sequence_order + 1).padStart(3, '0');
+        a.download = `${orderNum}_${msg.speaker_name}_${msg.id}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        successCount++;
+
+        // Small delay between downloads to avoid browser blocking
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (error) {
+        console.error(`Failed to download audio for message ${msg.id}:`, error);
+      }
+    }
+
+    setBatchDownloading(false);
+    setBatchProgress({ current: 0, total: 0 });
+
+    alert(`${successCount}/${messagesWithAudio.length}件の音声をダウンロードしました`);
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -1016,12 +1069,23 @@ export default function ConversationViewerSimple({
                 variant="contained"
                 color="primary"
                 onClick={handleBatchGenerateAudio}
-                disabled={batchGenerating || selectedMessageIds.size === 0}
+                disabled={batchGenerating || batchDownloading || selectedMessageIds.size === 0}
                 startIcon={batchGenerating ? <CircularProgress size={16} color="inherit" /> : <VolumeUpIcon />}
               >
                 {batchGenerating
                   ? `生成中 (${batchProgress.current}/${batchProgress.total})`
                   : `選択した${selectedMessageIds.size}件を生成`}
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={handleBatchDownloadAudio}
+                disabled={batchGenerating || batchDownloading || selectedMessageIds.size === 0}
+                startIcon={batchDownloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+              >
+                {batchDownloading
+                  ? `DL中 (${batchProgress.current}/${batchProgress.total})`
+                  : '選択した音声をDL'}
               </Button>
             </>
           )}
@@ -1029,14 +1093,15 @@ export default function ConversationViewerSimple({
       )}
 
       {/* Batch Progress */}
-      {batchGenerating && (
+      {(batchGenerating || batchDownloading) && (
         <Box sx={{ marginBottom: 2 }}>
           <LinearProgress
             variant="determinate"
             value={(batchProgress.current / batchProgress.total) * 100}
+            color={batchDownloading ? 'success' : 'primary'}
           />
           <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-            {batchProgress.current}/{batchProgress.total}件の音声を生成中...
+            {batchProgress.current}/{batchProgress.total}件の音声を{batchDownloading ? 'ダウンロード' : '生成'}中...
           </Typography>
         </Box>
       )}
