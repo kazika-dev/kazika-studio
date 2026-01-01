@@ -72,9 +72,6 @@ export default function ConversationsFocusPage() {
     ? getStoryTitleForConversation(selectedConversation.story_scene_id)
     : undefined;
 
-  // Debug log
-  console.log('[DEBUG] selectedConversation.story_scene_id:', selectedConversation?.story_scene_id, 'currentStoryTitle:', currentStoryTitle);
-
   useEffect(() => {
     loadStoryTree();
     loadAllCharacters();

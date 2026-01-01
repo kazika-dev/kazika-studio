@@ -84,6 +84,7 @@ export async function GET(
         conversation: {
           id: conversation.id,
           studio_id: conversation.studio_id,
+          story_scene_id: conversation.story_scene_id,
           title: conversation.title,
           description: conversation.description,
           created_at: conversation.created_at,
