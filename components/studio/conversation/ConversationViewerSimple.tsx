@@ -23,6 +23,10 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
+import CircularProgress from '@mui/material/CircularProgress';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
@@ -58,6 +62,7 @@ interface ConversationViewerSimpleProps {
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
   onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
+  onGenerateAudio?: (messageId: number) => Promise<{ audioUrl: string } | null>;
   readonly?: boolean;
 }
 
@@ -69,6 +74,9 @@ interface SortableMessageProps {
   characters?: Character[];
   saving: boolean;
   reanalyzing: boolean;
+  generatingAudioId: number | null;
+  audioUrls: Record<number, string>;
+  playingAudioId: number | null;
   readonly?: boolean;
   showInsertButton?: boolean;
   onEditClick: (message: ConversationMessageWithCharacter) => void;
@@ -80,6 +88,9 @@ interface SortableMessageProps {
   onCharacterChange: (characterId: number) => void;
   onOpenTagSelector: () => void;
   onInsertAfter?: (messageId: number) => void;
+  onGenerateAudio?: (messageId: number) => void;
+  onPlayAudio?: (messageId: number) => void;
+  onPauseAudio?: () => void;
   textFieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -91,6 +102,9 @@ function SortableMessage({
   characters,
   saving,
   reanalyzing,
+  generatingAudioId,
+  audioUrls,
+  playingAudioId,
   readonly,
   showInsertButton,
   onEditClick,
@@ -102,6 +116,9 @@ function SortableMessage({
   onCharacterChange,
   onOpenTagSelector,
   onInsertAfter,
+  onGenerateAudio,
+  onPlayAudio,
+  onPauseAudio,
   textFieldRef
 }: SortableMessageProps) {
   const {
@@ -293,6 +310,80 @@ function SortableMessage({
             {message.message_text}
           </Typography>
         )}
+
+        {/* Audio Controls */}
+        {!isEditing && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            {/* Generate Audio Button */}
+            {onGenerateAudio && (
+              <Tooltip title={audioUrls[message.id] ? '音声を再生成' : '音声を生成'}>
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => onGenerateAudio(message.id)}
+                  disabled={generatingAudioId === message.id}
+                  sx={{
+                    backgroundColor: 'primary.light',
+                    color: 'white',
+                    '&:hover': {
+                      backgroundColor: 'primary.main',
+                    },
+                    '&.Mui-disabled': {
+                      backgroundColor: 'grey.300',
+                    },
+                  }}
+                >
+                  {generatingAudioId === message.id ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <VolumeUpIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Play/Pause Button */}
+            {audioUrls[message.id] && onPlayAudio && onPauseAudio && (
+              <Tooltip title={playingAudioId === message.id ? '一時停止' : '再生'}>
+                <IconButton
+                  size="small"
+                  color="secondary"
+                  onClick={() => {
+                    if (playingAudioId === message.id) {
+                      onPauseAudio();
+                    } else {
+                      onPlayAudio(message.id);
+                    }
+                  }}
+                  sx={{
+                    backgroundColor: 'secondary.light',
+                    color: 'white',
+                    '&:hover': {
+                      backgroundColor: 'secondary.main',
+                    },
+                  }}
+                >
+                  {playingAudioId === message.id ? (
+                    <PauseIcon fontSize="small" />
+                  ) : (
+                    <PlayArrowIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Audio indicator */}
+            {audioUrls[message.id] && (
+              <Chip
+                label="音声あり"
+                size="small"
+                color="success"
+                variant="outlined"
+                sx={{ height: 20, fontSize: '0.7rem' }}
+              />
+            )}
+          </Box>
+        )}
       </Box>
 
       {/* Actions */}
@@ -396,6 +487,7 @@ export default function ConversationViewerSimple({
   onDeleteMessage,
   onReanalyzeEmotion,
   onAddMessage,
+  onGenerateAudio,
   readonly = false
 }: ConversationViewerSimpleProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -408,6 +500,12 @@ export default function ConversationViewerSimple({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
+
+  // Audio state
+  const [generatingAudioId, setGeneratingAudioId] = useState<number | null>(null);
+  const [audioUrls, setAudioUrls] = useState<Record<number, string>>({});
+  const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -613,6 +711,74 @@ export default function ConversationViewerSimple({
     setAddDialogOpen(true);
   };
 
+  // Audio handlers
+  const handleGenerateAudio = async (messageId: number) => {
+    if (!onGenerateAudio) return;
+
+    setGeneratingAudioId(messageId);
+    try {
+      const result = await onGenerateAudio(messageId);
+      if (result?.audioUrl) {
+        setAudioUrls(prev => ({ ...prev, [messageId]: result.audioUrl }));
+      }
+    } catch (error) {
+      console.error('Failed to generate audio:', error);
+      alert('音声の生成に失敗しました');
+    } finally {
+      setGeneratingAudioId(null);
+    }
+  };
+
+  const handlePlayAudio = (messageId: number) => {
+    const audioUrl = audioUrls[messageId];
+    if (!audioUrl) return;
+
+    // Stop current audio if playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    // Create and play new audio
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    setPlayingAudioId(messageId);
+
+    audio.onended = () => {
+      setPlayingAudioId(null);
+      audioRef.current = null;
+    };
+
+    audio.onerror = () => {
+      console.error('Audio playback error');
+      setPlayingAudioId(null);
+      audioRef.current = null;
+    };
+
+    audio.play().catch(err => {
+      console.error('Failed to play audio:', err);
+      setPlayingAudioId(null);
+    });
+  };
+
+  const handlePauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingAudioId(null);
+  };
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
   if (localMessages.length === 0) {
     return (
       <Box
@@ -650,6 +816,9 @@ export default function ConversationViewerSimple({
               characters={characters}
               saving={saving}
               reanalyzing={reanalyzingId === message.id}
+              generatingAudioId={generatingAudioId}
+              audioUrls={audioUrls}
+              playingAudioId={playingAudioId}
               readonly={readonly}
               showInsertButton={!readonly && !!onAddMessage && !!characters && characters.length > 0}
               onEditClick={handleEditClick}
@@ -661,6 +830,9 @@ export default function ConversationViewerSimple({
               onCharacterChange={setEditCharacterId}
               onOpenTagSelector={handleOpenTagSelector}
               onInsertAfter={handleOpenAddDialog}
+              onGenerateAudio={onGenerateAudio ? handleGenerateAudio : undefined}
+              onPlayAudio={handlePlayAudio}
+              onPauseAudio={handlePauseAudio}
               textFieldRef={textFieldRef}
             />
           ))}

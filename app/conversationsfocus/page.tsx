@@ -281,6 +281,33 @@ export default function ConversationsFocusPage() {
     }
   };
 
+  const handleGenerateAudio = async (messageId: number): Promise<{ audioUrl: string } | null> => {
+    try {
+      const response = await fetch(`/api/conversations/messages/${messageId}/generate-audio`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Update message in local state with audio info
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId
+              ? { ...msg, ...result.data.message }
+              : msg
+          )
+        );
+        return { audioUrl: result.data.audioUrl };
+      } else {
+        throw new Error(result.error || 'Failed to generate audio');
+      }
+    } catch (error) {
+      console.error('Failed to generate audio:', error);
+      throw error;
+    }
+  };
+
   const handleCreateStudioClick = () => {
     if (!selectedConversation) return;
     setWorkflowSelectionDialogOpen(true);
@@ -463,6 +490,7 @@ export default function ConversationsFocusPage() {
                   onDeleteMessage={handleDeleteMessage}
                   onReanalyzeEmotion={handleReanalyzeEmotion}
                   onAddMessage={handleAddMessage}
+                  onGenerateAudio={handleGenerateAudio}
                 />
               </>
             ) : (
