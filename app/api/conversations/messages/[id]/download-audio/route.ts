@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { getFileFromStorage } from '@/lib/gcp-storage';
 
 /**
  * GET /api/conversations/messages/:id/download-audio
@@ -85,8 +86,7 @@ export async function GET(
     }
 
     // Download file from GCP Storage
-    const { downloadFileAsBuffer } = await import('@/lib/gcp-storage');
-    const buffer = await downloadFileAsBuffer(message.audio_storage_path);
+    const { data: buffer } = await getFileFromStorage(message.audio_storage_path);
 
     // Create filename
     const speakerName = message.speaker_name || 'audio';
