@@ -26,6 +26,7 @@ import AddIcon from '@mui/icons-material/Add';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
+import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
@@ -91,6 +92,7 @@ interface SortableMessageProps {
   onGenerateAudio?: (messageId: number) => void;
   onPlayAudio?: (messageId: number) => void;
   onPauseAudio?: () => void;
+  onDownloadAudio?: (messageId: number, speakerName: string) => void;
   textFieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -119,6 +121,7 @@ function SortableMessage({
   onGenerateAudio,
   onPlayAudio,
   onPauseAudio,
+  onDownloadAudio,
   textFieldRef
 }: SortableMessageProps) {
   const {
@@ -368,6 +371,25 @@ function SortableMessage({
                   ) : (
                     <PlayArrowIcon fontSize="small" />
                   )}
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Download Button */}
+            {audioUrls[message.id] && onDownloadAudio && (
+              <Tooltip title="音声をダウンロード">
+                <IconButton
+                  size="small"
+                  onClick={() => onDownloadAudio(message.id, message.speaker_name)}
+                  sx={{
+                    backgroundColor: 'success.light',
+                    color: 'white',
+                    '&:hover': {
+                      backgroundColor: 'success.main',
+                    },
+                  }}
+                >
+                  <DownloadIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
@@ -769,6 +791,27 @@ export default function ConversationViewerSimple({
     setPlayingAudioId(null);
   };
 
+  const handleDownloadAudio = async (messageId: number, speakerName: string) => {
+    const audioUrl = audioUrls[messageId];
+    if (!audioUrl) return;
+
+    try {
+      const response = await fetch(audioUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${speakerName}_${messageId}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download audio:', error);
+      alert('音声のダウンロードに失敗しました');
+    }
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -833,6 +876,7 @@ export default function ConversationViewerSimple({
               onGenerateAudio={onGenerateAudio ? handleGenerateAudio : undefined}
               onPlayAudio={handlePlayAudio}
               onPauseAudio={handlePauseAudio}
+              onDownloadAudio={handleDownloadAudio}
               textFieldRef={textFieldRef}
             />
           ))}
