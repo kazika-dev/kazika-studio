@@ -56,21 +56,24 @@ export default function ConversationsFocusPage() {
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
-  // Get story title for the selected conversation using story_scene_id
-  const getStoryTitleForConversation = (storySceneId: number | null | undefined): string | undefined => {
+  // Get story info for the selected conversation using story_scene_id
+  const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string } | undefined => {
     if (!storySceneId) return undefined;
     for (const storyNode of storyTree) {
       const foundScene = storyNode.scenes.find(sceneNode => sceneNode.scene.id === storySceneId);
       if (foundScene) {
-        return storyNode.story.title;
+        return { id: storyNode.story.id, title: storyNode.story.title };
       }
     }
     return undefined;
   };
 
-  const currentStoryTitle = selectedConversation
-    ? getStoryTitleForConversation(selectedConversation.story_scene_id)
+  const storyInfo = selectedConversation
+    ? getStoryInfoForConversation(selectedConversation.story_scene_id)
     : undefined;
+
+  // Use story title if available, otherwise use story ID as prefix
+  const currentStoryTitle = storyInfo?.title || (storyInfo?.id ? `story${storyInfo.id}` : undefined);
 
   useEffect(() => {
     loadStoryTree();
