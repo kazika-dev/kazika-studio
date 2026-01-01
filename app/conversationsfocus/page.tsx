@@ -56,36 +56,24 @@ export default function ConversationsFocusPage() {
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
-  // Get story title for the selected conversation
-  const getStoryTitleForConversation = (conversationId: number | undefined): string | undefined => {
-    if (!conversationId) return undefined;
+  // Get story title for the selected conversation using story_scene_id
+  const getStoryTitleForConversation = (storySceneId: number | null | undefined): string | undefined => {
+    if (!storySceneId) return undefined;
     for (const storyNode of storyTree) {
-      for (const sceneNode of storyNode.scenes) {
-        const found = sceneNode.conversations.find(c => c.id === conversationId);
-        if (found) {
-          return storyNode.story.title;
-        }
+      const foundScene = storyNode.scenes.find(sceneNode => sceneNode.scene.id === storySceneId);
+      if (foundScene) {
+        return storyNode.story.title;
       }
     }
     return undefined;
   };
 
   const currentStoryTitle = selectedConversation
-    ? getStoryTitleForConversation(selectedConversation.id)
+    ? getStoryTitleForConversation(selectedConversation.story_scene_id)
     : undefined;
 
-  // Debug log - more detailed
-  console.log('[DEBUG] storyTree:', storyTree.length, 'selectedConversation:', selectedConversation?.id, 'currentStoryTitle:', currentStoryTitle);
-  if (storyTree.length > 0 && selectedConversation) {
-    console.log('[DEBUG] All conversation IDs in storyTree:');
-    storyTree.forEach(storyNode => {
-      storyNode.scenes.forEach(sceneNode => {
-        sceneNode.conversations.forEach(c => {
-          console.log(`  Story: "${storyNode.story.title}", Conversation ID: ${c.id}`);
-        });
-      });
-    });
-  }
+  // Debug log
+  console.log('[DEBUG] selectedConversation.story_scene_id:', selectedConversation?.story_scene_id, 'currentStoryTitle:', currentStoryTitle);
 
   useEffect(() => {
     loadStoryTree();
