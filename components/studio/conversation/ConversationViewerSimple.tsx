@@ -943,6 +943,8 @@ export default function ConversationViewerSimple({
 
   // Batch audio download
   const handleBatchDownloadAudio = async () => {
+    console.log('[BatchDownload] storyTitle:', storyTitle);
+
     // Get selected messages that have audio, keeping conversation order
     const messagesWithAudio = localMessages
       .map((m, index) => ({ msg: m, conversationIndex: index }))
