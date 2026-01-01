@@ -14,7 +14,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Button
+  Button,
+  Checkbox,
+  LinearProgress
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -80,6 +82,10 @@ interface SortableMessageProps {
   playingAudioId: number | null;
   readonly?: boolean;
   showInsertButton?: boolean;
+  // Selection mode
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (messageId: number) => void;
   onEditClick: (message: ConversationMessageWithCharacter) => void;
   onSave: (messageId: number) => void;
   onCancel: () => void;
@@ -109,6 +115,9 @@ function SortableMessage({
   playingAudioId,
   readonly,
   showInsertButton,
+  selectionMode,
+  isSelected,
+  onToggleSelect,
   onEditClick,
   onSave,
   onCancel,
@@ -172,6 +181,10 @@ function SortableMessage({
         alignItems: 'flex-start',
         gap: 2,
         transition: 'all 0.2s',
+        cursor: selectionMode ? 'pointer' : 'default',
+        border: isSelected ? '2px solid' : '2px solid transparent',
+        borderColor: isSelected ? 'primary.main' : 'transparent',
+        backgroundColor: isSelected ? 'primary.50' : 'background.paper',
         '&:hover': {
           boxShadow: 3,
           '& .drag-handle': {
@@ -179,9 +192,20 @@ function SortableMessage({
           }
         }
       }}
+      onClick={selectionMode && onToggleSelect ? () => onToggleSelect(message.id) : undefined}
     >
+      {/* Selection Checkbox */}
+      {selectionMode && (
+        <Checkbox
+          checked={isSelected}
+          onChange={() => onToggleSelect?.(message.id)}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ padding: 0.5 }}
+        />
+      )}
+
       {/* Drag Handle */}
-      {!readonly && (
+      {!readonly && !selectionMode && (
         <Box
           className="drag-handle"
           {...attributes}
@@ -529,6 +553,12 @@ export default function ConversationViewerSimple({
   const [playingAudioId, setPlayingAudioId] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Selection mode state for batch audio generation
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(new Set());
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -843,6 +873,71 @@ export default function ConversationViewerSimple({
     }
   };
 
+  // Selection mode handlers
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // Exiting selection mode, clear selections
+      setSelectedMessageIds(new Set());
+    }
+  };
+
+  const handleToggleSelect = (messageId: number) => {
+    setSelectedMessageIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedMessageIds(new Set(localMessages.map(m => m.id)));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedMessageIds(new Set());
+  };
+
+  // Batch audio generation
+  const handleBatchGenerateAudio = async () => {
+    if (!onGenerateAudio || selectedMessageIds.size === 0) return;
+
+    setBatchGenerating(true);
+    setBatchProgress({ current: 0, total: selectedMessageIds.size });
+
+    const messageIds = Array.from(selectedMessageIds);
+    let successCount = 0;
+
+    for (let i = 0; i < messageIds.length; i++) {
+      const messageId = messageIds[i];
+      setBatchProgress({ current: i + 1, total: messageIds.length });
+      setGeneratingAudioId(messageId);
+
+      try {
+        const result = await onGenerateAudio(messageId);
+        if (result?.audioUrl) {
+          setAudioUrls(prev => ({ ...prev, [messageId]: result.audioUrl }));
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to generate audio for message ${messageId}:`, error);
+      }
+
+      setGeneratingAudioId(null);
+    }
+
+    setBatchGenerating(false);
+    setBatchProgress({ current: 0, total: 0 });
+    setSelectionMode(false);
+    setSelectedMessageIds(new Set());
+
+    alert(`${successCount}/${messageIds.length}件の音声を生成しました`);
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -871,6 +966,81 @@ export default function ConversationViewerSimple({
 
   return (
     <Box sx={{ maxWidth: 900, margin: '0 auto', padding: 2 }}>
+      {/* Batch Audio Generation Toolbar */}
+      {onGenerateAudio && (
+        <Paper
+          elevation={2}
+          sx={{
+            padding: 2,
+            marginBottom: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap'
+          }}
+        >
+          <Button
+            variant={selectionMode ? 'contained' : 'outlined'}
+            color={selectionMode ? 'secondary' : 'primary'}
+            onClick={handleToggleSelectionMode}
+            disabled={batchGenerating}
+            size="small"
+          >
+            {selectionMode ? '選択モードを終了' : '一括音声生成'}
+          </Button>
+
+          {selectionMode && (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleSelectAll}
+                disabled={batchGenerating}
+              >
+                すべて選択
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleDeselectAll}
+                disabled={batchGenerating || selectedMessageIds.size === 0}
+              >
+                選択解除
+              </Button>
+              <Chip
+                label={`${selectedMessageIds.size}件選択中`}
+                color="primary"
+                variant="outlined"
+              />
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleBatchGenerateAudio}
+                disabled={batchGenerating || selectedMessageIds.size === 0}
+                startIcon={batchGenerating ? <CircularProgress size={16} color="inherit" /> : <VolumeUpIcon />}
+              >
+                {batchGenerating
+                  ? `生成中 (${batchProgress.current}/${batchProgress.total})`
+                  : `選択した${selectedMessageIds.size}件を生成`}
+              </Button>
+            </>
+          )}
+        </Paper>
+      )}
+
+      {/* Batch Progress */}
+      {batchGenerating && (
+        <Box sx={{ marginBottom: 2 }}>
+          <LinearProgress
+            variant="determinate"
+            value={(batchProgress.current / batchProgress.total) * 100}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+            {batchProgress.current}/{batchProgress.total}件の音声を生成中...
+          </Typography>
+        </Box>
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -895,6 +1065,9 @@ export default function ConversationViewerSimple({
               playingAudioId={playingAudioId}
               readonly={readonly}
               showInsertButton={!readonly && !!onAddMessage && !!characters && characters.length > 0}
+              selectionMode={selectionMode}
+              isSelected={selectedMessageIds.has(message.id)}
+              onToggleSelect={handleToggleSelect}
               onEditClick={handleEditClick}
               onSave={handleSaveEdit}
               onCancel={handleCancelEdit}
