@@ -56,6 +56,24 @@ export default function ConversationsFocusPage() {
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
+  // Get story title for the selected conversation
+  const getStoryTitleForConversation = (conversationId: number | undefined): string | undefined => {
+    if (!conversationId) return undefined;
+    for (const storyNode of storyTree) {
+      for (const sceneNode of storyNode.scenes) {
+        const found = sceneNode.conversations.find(c => c.id === conversationId);
+        if (found) {
+          return storyNode.story.title;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const currentStoryTitle = selectedConversation
+    ? getStoryTitleForConversation(selectedConversation.id)
+    : undefined;
+
   useEffect(() => {
     loadStoryTree();
     loadAllCharacters();
@@ -485,6 +503,7 @@ export default function ConversationsFocusPage() {
                 <ConversationViewerSimple
                   messages={messages}
                   characters={characters}
+                  storyTitle={currentStoryTitle}
                   onUpdateMessage={handleUpdateMessage}
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}

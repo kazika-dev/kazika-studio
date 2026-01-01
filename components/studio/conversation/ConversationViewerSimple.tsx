@@ -60,6 +60,7 @@ interface Character {
 interface ConversationViewerSimpleProps {
   messages: ConversationMessageWithCharacter[];
   characters?: Character[];
+  storyTitle?: string;
   onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number }) => Promise<void>;
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
@@ -528,6 +529,7 @@ function SortableMessage({
 export default function ConversationViewerSimple({
   messages,
   characters,
+  storyTitle,
   onUpdateMessage,
   onReorderMessages,
   onDeleteMessage,
@@ -941,10 +943,10 @@ export default function ConversationViewerSimple({
 
   // Batch audio download
   const handleBatchDownloadAudio = async () => {
-    // Get selected messages that have audio
-    const messagesWithAudio = localMessages.filter(
-      m => selectedMessageIds.has(m.id) && audioUrls[m.id]
-    );
+    // Get selected messages that have audio, keeping conversation order
+    const messagesWithAudio = localMessages
+      .map((m, index) => ({ msg: m, conversationIndex: index }))
+      .filter(({ msg }) => selectedMessageIds.has(msg.id) && audioUrls[msg.id]);
 
     if (messagesWithAudio.length === 0) {
       alert('選択したメッセージに音声がありません');
@@ -957,7 +959,7 @@ export default function ConversationViewerSimple({
     let successCount = 0;
 
     for (let i = 0; i < messagesWithAudio.length; i++) {
-      const msg = messagesWithAudio[i];
+      const { msg, conversationIndex } = messagesWithAudio[i];
       setBatchProgress({ current: i + 1, total: messagesWithAudio.length });
 
       try {
@@ -969,9 +971,11 @@ export default function ConversationViewerSimple({
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        // Include sequence order in filename for proper ordering
-        const orderNum = String(msg.sequence_order + 1).padStart(3, '0');
-        a.download = `${orderNum}_${msg.speaker_name}_${msg.id}.mp3`;
+        // Use conversation order (1-based) for proper file ordering
+        const orderNum = String(conversationIndex + 1).padStart(3, '0');
+        // Include story title as prefix if available
+        const titlePrefix = storyTitle ? `${storyTitle}_` : '';
+        a.download = `${titlePrefix}${orderNum}_${msg.speaker_name}_${msg.id}.mp3`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
