@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
@@ -429,6 +430,14 @@ export default function ConversationsFocusPage() {
               ストーリーごとにシーンと会話を管理
             </Typography>
           </Box>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => router.push('/conversations')}
+          >
+            プロンプト生成
+          </Button>
           <Button
             variant="outlined"
             onClick={() => router.push('/studios')}

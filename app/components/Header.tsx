@@ -15,7 +15,7 @@ const navItems = [
   { href: '/', label: 'ホーム', icon: Home, matchExact: true },
   { href: '/outputs', label: 'アウトプット', icon: Image, matchExact: true },
   { href: '/studios', label: 'スタジオ', icon: Video, matchExact: false },
-  { href: '/conversations', label: '会話', icon: MessageCircle, matchExact: false },
+  { href: '/conversationsfocus', label: '会話', icon: MessageCircle, matchExact: false },
   { href: '/prompt-queue', label: 'プロンプトキュー', icon: ListOrdered, matchExact: false },
   { href: '/master', label: 'マスター管理', icon: Database, matchExact: false },
 ];
