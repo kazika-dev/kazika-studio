@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     // Build query based on whether studioId is provided
     let query = supabase
       .from('conversations')
-      .select('*, studios(id, name, user_id)')
+      .select('*, studios(id, name, user_id), story_scenes:story_scene_id(id, title, stories:story_id(id, title))')
       .order('created_at', { ascending: false });
 
     if (studioId) {
@@ -123,8 +123,16 @@ export async function GET(request: NextRequest) {
     // Add message counts and scene counts to conversations
     const conversationsWithCounts = (conversations || []).map(conv => ({
       ...conv,
-      messageCount: messageCounts[conv.id] || 0,
-      sceneCount: sceneCounts[conv.id] || 0
+      message_count: messageCounts[conv.id] || 0,
+      scene_count: sceneCounts[conv.id] || 0,
+      story_scene: conv.story_scenes ? {
+        id: conv.story_scenes.id,
+        title: conv.story_scenes.title,
+        story: conv.story_scenes.stories ? {
+          id: conv.story_scenes.stories.id,
+          title: conv.story_scenes.stories.title
+        } : null
+      } : null
     }));
 
     return NextResponse.json({
