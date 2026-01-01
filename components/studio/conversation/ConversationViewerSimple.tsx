@@ -865,7 +865,11 @@ export default function ConversationViewerSimple({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${speakerName}_${messageId}.mp3`;
+      // Find message index in conversation order
+      const messageIndex = localMessages.findIndex(m => m.id === messageId);
+      const orderNum = String(messageIndex + 1).padStart(3, '0');
+      const titlePrefix = storyTitle ? `${storyTitle}_` : '';
+      a.download = `${titlePrefix}${orderNum}_${speakerName}_${messageId}.mp3`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -943,8 +947,6 @@ export default function ConversationViewerSimple({
 
   // Batch audio download
   const handleBatchDownloadAudio = async () => {
-    console.log('[BatchDownload] storyTitle:', storyTitle);
-
     // Get selected messages that have audio, keeping conversation order
     const messagesWithAudio = localMessages
       .map((m, index) => ({ msg: m, conversationIndex: index }))
