@@ -30,7 +30,6 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
-import JSZip from 'jszip';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
@@ -946,7 +945,7 @@ export default function ConversationViewerSimple({
     alert(`${successCount}/${messageIds.length}件の音声を生成しました`);
   };
 
-  // Batch audio download as ZIP
+  // Batch audio download (individual files)
   const handleBatchDownloadAudio = async () => {
     // Get selected messages that have audio, keeping conversation order
     const messagesWithAudio = localMessages
@@ -961,11 +960,6 @@ export default function ConversationViewerSimple({
     setBatchDownloading(true);
     setBatchProgress({ current: 0, total: messagesWithAudio.length });
 
-    const zip = new JSZip();
-    // Use story title as folder name, or 'audio' as default
-    const folderName = storyTitle || 'audio';
-    const folder = zip.folder(folderName);
-
     let successCount = 0;
 
     for (let i = 0; i < messagesWithAudio.length; i++) {
@@ -978,39 +972,31 @@ export default function ConversationViewerSimple({
           throw new Error('Download failed');
         }
         const blob = await response.blob();
-        // Use conversation order (1-based) for proper file ordering
-        const orderNum = String(conversationIndex + 1).padStart(3, '0');
-        const fileName = `${orderNum}_${msg.speaker_name}_${msg.id}.mp3`;
-
-        // Add file to ZIP folder
-        folder?.file(fileName, blob);
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to download audio for message ${msg.id}:`, error);
-      }
-    }
-
-    // Generate and download ZIP file
-    if (successCount > 0) {
-      try {
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const url = window.URL.createObjectURL(zipBlob);
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${folderName}.zip`;
+        // Use conversation order (1-based) for proper file ordering
+        const orderNum = String(conversationIndex + 1).padStart(3, '0');
+        // Include story title as prefix if available
+        const titlePrefix = storyTitle ? `${storyTitle}_` : '';
+        a.download = `${titlePrefix}${orderNum}_${msg.speaker_name}_${msg.id}.mp3`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        successCount++;
+
+        // Small delay between downloads to avoid browser blocking
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (error) {
-        console.error('Failed to generate ZIP file:', error);
+        console.error(`Failed to download audio for message ${msg.id}:`, error);
       }
     }
 
     setBatchDownloading(false);
     setBatchProgress({ current: 0, total: 0 });
 
-    alert(`${successCount}/${messagesWithAudio.length}件の音声をZIPでダウンロードしました`);
+    alert(`${successCount}/${messagesWithAudio.length}件の音声をダウンロードしました`);
   };
 
   // Cleanup audio on unmount
