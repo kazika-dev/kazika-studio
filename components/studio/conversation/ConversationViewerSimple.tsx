@@ -541,6 +541,36 @@ export default function ConversationViewerSimple({
     setLocalMessages(messages);
   }, [messages]);
 
+  // Load existing audio URLs when messages change
+  useEffect(() => {
+    const loadExistingAudioUrls = async () => {
+      const messagesWithAudio = messages.filter((msg) => msg.audio_storage_path);
+      if (messagesWithAudio.length === 0) return;
+
+      const newAudioUrls: Record<number, string> = {};
+
+      await Promise.all(
+        messagesWithAudio.map(async (msg) => {
+          try {
+            const response = await fetch(`/api/conversations/messages/${msg.id}/generate-audio`);
+            const result = await response.json();
+            if (result.success && result.data?.audioUrl) {
+              newAudioUrls[msg.id] = result.data.audioUrl;
+            }
+          } catch (error) {
+            console.error(`Failed to load audio URL for message ${msg.id}:`, error);
+          }
+        })
+      );
+
+      if (Object.keys(newAudioUrls).length > 0) {
+        setAudioUrls(prev => ({ ...prev, ...newAudioUrls }));
+      }
+    };
+
+    loadExistingAudioUrls();
+  }, [messages]);
+
   // Update edit text when editing message changes
   useEffect(() => {
     if (editingMessageId !== null) {

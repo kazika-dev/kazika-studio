@@ -45,6 +45,13 @@ export interface ConversationMessage {
   created_at: string;
   scene_prompt_ja: string | null;
   scene_prompt_en: string | null;
+  // Audio fields
+  audio_storage_path: string | null;
+  audio_voice_id: string | null;
+  audio_model_id: string | null;
+  audio_duration_seconds: number | null;
+  audio_file_size_bytes: number | null;
+  audio_created_at: string | null;
   metadata: {
     emotion?: 'happy' | 'sad' | 'angry' | 'neutral' | 'surprised' | 'excited' | 'confused';
     emotionTag?: 'emotional' | 'calm' | 'energetic' | 'professional' | 'friendly' | 'serious';
