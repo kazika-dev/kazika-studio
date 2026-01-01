@@ -4,7 +4,7 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 
 const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'; // George
-const DEFAULT_MODEL_ID = 'eleven_turbo_v2_5';
+const DEFAULT_MODEL_ID = 'eleven_v3';
 
 /**
  * POST /api/conversations/messages/:id/generate-audio
