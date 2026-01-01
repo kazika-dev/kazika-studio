@@ -74,6 +74,9 @@ export default function ConversationsFocusPage() {
     ? getStoryTitleForConversation(selectedConversation.id)
     : undefined;
 
+  // Debug log
+  console.log('[DEBUG] storyTree:', storyTree.length, 'selectedConversation:', selectedConversation?.id, 'currentStoryTitle:', currentStoryTitle);
+
   useEffect(() => {
     loadStoryTree();
     loadAllCharacters();

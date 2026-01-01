@@ -30,6 +30,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
+import JSZip from 'jszip';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
@@ -869,6 +870,7 @@ export default function ConversationViewerSimple({
       const messageIndex = localMessages.findIndex(m => m.id === messageId);
       const orderNum = String(messageIndex + 1).padStart(3, '0');
       const titlePrefix = storyTitle ? `${storyTitle}_` : '';
+      console.log('[handleDownloadAudio] storyTitle:', storyTitle, 'titlePrefix:', titlePrefix);
       a.download = `${titlePrefix}${orderNum}_${speakerName}_${messageId}.mp3`;
       document.body.appendChild(a);
       a.click();
