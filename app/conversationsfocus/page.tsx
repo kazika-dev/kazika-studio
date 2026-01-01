@@ -74,8 +74,18 @@ export default function ConversationsFocusPage() {
     ? getStoryTitleForConversation(selectedConversation.id)
     : undefined;
 
-  // Debug log
+  // Debug log - more detailed
   console.log('[DEBUG] storyTree:', storyTree.length, 'selectedConversation:', selectedConversation?.id, 'currentStoryTitle:', currentStoryTitle);
+  if (storyTree.length > 0 && selectedConversation) {
+    console.log('[DEBUG] All conversation IDs in storyTree:');
+    storyTree.forEach(storyNode => {
+      storyNode.scenes.forEach(sceneNode => {
+        sceneNode.conversations.forEach(c => {
+          console.log(`  Story: "${storyNode.story.title}", Conversation ID: ${c.id}`);
+        });
+      });
+    });
+  }
 
   useEffect(() => {
     loadStoryTree();
