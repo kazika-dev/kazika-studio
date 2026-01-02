@@ -907,31 +907,27 @@ export default function ConversationViewer({
           <Typography>メッセージがありません</Typography>
         </Box>
 
-        {/* Action Buttons - show even when no messages */}
+        {/* Action Buttons - always show when not readonly */}
         {!readonly && (
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {onContinueConversation && (
-              <Button
-                variant="outlined"
-                color="primary"
-                startIcon={<AutoAwesomeIcon />}
-                onClick={onContinueConversation}
-                size="small"
-              >
-                会話を生成
-              </Button>
-            )}
-            {onAddMessage && (
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<AddIcon />}
-                onClick={() => setAddDialogOpen(true)}
-                size="small"
-              >
-                メッセージを追加
-              </Button>
-            )}
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AutoAwesomeIcon />}
+              onClick={onContinueConversation}
+              disabled={!onContinueConversation}
+            >
+              会話を生成
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<AddIcon />}
+              onClick={() => setAddDialogOpen(true)}
+              disabled={!onAddMessage}
+            >
+              メッセージを追加
+            </Button>
           </Box>
         )}
 
