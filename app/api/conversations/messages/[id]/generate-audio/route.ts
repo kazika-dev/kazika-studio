@@ -6,6 +6,96 @@ import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
 const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'; // George
 const DEFAULT_MODEL_ID = 'eleven_v3';
 
+// MP3 bitrate lookup table (kbps)
+const BITRATE_TABLE: Record<number, number[]> = {
+  // MPEG1 Layer III bitrates
+  1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0],
+  // MPEG2/2.5 Layer III bitrates
+  2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
+};
+
+// Sample rate lookup table
+const SAMPLE_RATE_TABLE: Record<number, number[]> = {
+  0: [44100, 48000, 32000, 0], // MPEG1
+  1: [22050, 24000, 16000, 0], // MPEG2
+  2: [11025, 12000, 8000, 0],  // MPEG2.5
+};
+
+/**
+ * Calculate MP3 duration by parsing frame headers
+ * Returns duration in seconds
+ */
+function calculateMp3Duration(buffer: Buffer): number {
+  let offset = 0;
+  let totalFrames = 0;
+  let totalDuration = 0;
+
+  // Skip ID3v2 tag if present
+  if (buffer.length >= 10 &&
+      buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
+    const size = ((buffer[6] & 0x7f) << 21) |
+                 ((buffer[7] & 0x7f) << 14) |
+                 ((buffer[8] & 0x7f) << 7) |
+                 (buffer[9] & 0x7f);
+    offset = 10 + size;
+  }
+
+  // Parse frames
+  while (offset < buffer.length - 4) {
+    // Look for frame sync (11 bits set to 1)
+    if (buffer[offset] === 0xff && (buffer[offset + 1] & 0xe0) === 0xe0) {
+      const header = buffer.readUInt32BE(offset);
+
+      // Extract header fields
+      const mpegVersion = (header >> 19) & 0x03; // 00=2.5, 01=reserved, 10=2, 11=1
+      const layer = (header >> 17) & 0x03;       // 01=Layer III
+      const bitrateIndex = (header >> 12) & 0x0f;
+      const sampleRateIndex = (header >> 10) & 0x03;
+      const padding = (header >> 9) & 0x01;
+
+      // Only process Layer III frames
+      if (layer !== 1 || sampleRateIndex === 3 || bitrateIndex === 0 || bitrateIndex === 15) {
+        offset++;
+        continue;
+      }
+
+      // Get version-specific values
+      const versionIndex = mpegVersion === 3 ? 0 : (mpegVersion === 2 ? 1 : 2);
+      const bitrateRow = mpegVersion === 3 ? 1 : 2;
+
+      const bitrate = BITRATE_TABLE[bitrateRow][bitrateIndex] * 1000;
+      const sampleRate = SAMPLE_RATE_TABLE[versionIndex][sampleRateIndex];
+
+      if (bitrate === 0 || sampleRate === 0) {
+        offset++;
+        continue;
+      }
+
+      // Calculate frame size
+      const samplesPerFrame = mpegVersion === 3 ? 1152 : 576;
+      const frameSize = Math.floor((samplesPerFrame * bitrate) / (8 * sampleRate)) + padding;
+
+      // Accumulate duration
+      totalDuration += samplesPerFrame / sampleRate;
+      totalFrames++;
+
+      // Move to next frame
+      offset += frameSize;
+    } else {
+      offset++;
+    }
+
+    // Limit iterations for safety
+    if (totalFrames > 100000) break;
+  }
+
+  if (totalFrames === 0) {
+    throw new Error('No valid MP3 frames found');
+  }
+
+  return totalDuration;
+}
+
 /**
  * POST /api/conversations/messages/:id/generate-audio
  * Generate audio from message text using ElevenLabs and save to GCP Storage
@@ -144,7 +234,21 @@ export async function POST(
     const audioBase64 = Buffer.from(audioBuffer).toString('base64');
     const fileSizeBytes = audioBuffer.byteLength;
 
-    console.log('[generate-audio] Audio generated, size:', fileSizeBytes, 'bytes');
+    // Calculate audio duration from MP3 file
+    // ElevenLabs typically returns 128kbps MP3
+    // Duration = file size in bits / bitrate
+    // For more accurate duration, we parse the MP3 header
+    let audioDurationSeconds: number | null = null;
+    try {
+      audioDurationSeconds = calculateMp3Duration(Buffer.from(audioBuffer));
+    } catch (durationError) {
+      console.warn('[generate-audio] Could not calculate duration, using estimate:', durationError);
+      // Fallback: estimate based on 128kbps bitrate
+      // duration = (fileSize * 8) / (128 * 1000)
+      audioDurationSeconds = (fileSizeBytes * 8) / (128 * 1000);
+    }
+
+    console.log('[generate-audio] Audio generated, size:', fileSizeBytes, 'bytes, duration:', audioDurationSeconds?.toFixed(2), 'seconds');
 
     // Upload to GCP Storage
     const fileName = `message-${messageId}-${Date.now()}.mp3`;
@@ -164,6 +268,7 @@ export async function POST(
         audio_storage_path: storagePath,
         audio_voice_id: voiceId,
         audio_model_id: modelId,
+        audio_duration_seconds: audioDurationSeconds,
         audio_file_size_bytes: fileSizeBytes,
         audio_created_at: new Date().toISOString(),
       })
