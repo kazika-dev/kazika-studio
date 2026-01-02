@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
 
       // Increment sequence_order for all messages after this position
       // Fetch all affected messages
+      console.log(`[Create Message] Fetching messages with sequence_order >= ${sequenceOrder} for conversation ${body.conversationId}`);
       const { data: affectedMessages, error: fetchError } = await supabase
         .from('conversation_messages')
         .select('id, sequence_order')
@@ -125,11 +126,13 @@ export async function POST(request: NextRequest) {
 
       if (fetchError) {
         console.error('Failed to fetch affected messages:', fetchError);
+        console.error('Fetch error details:', JSON.stringify(fetchError, null, 2));
         return NextResponse.json(
-          { success: false, error: 'Failed to adjust message positions' },
+          { success: false, error: `Failed to adjust message positions: ${fetchError.message}` },
           { status: 500 }
         );
       }
+      console.log(`[Create Message] Found ${affectedMessages?.length || 0} affected messages`);
 
       // Update each message individually
       if (affectedMessages && affectedMessages.length > 0) {
