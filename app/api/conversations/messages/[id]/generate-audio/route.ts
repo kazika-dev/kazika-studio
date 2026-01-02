@@ -176,14 +176,17 @@ export async function POST(
     const modelId = DEFAULT_MODEL_ID;
 
     // Get text to generate (remove emotion tags like [friendly] for cleaner audio)
-    const text = message.message_text.replace(/^\[[\w-]+\]\s*/, '');
+    const rawText = message.message_text.replace(/^\[[\w-]+\]\s*/, '');
 
-    if (!text.trim()) {
+    if (!rawText.trim()) {
       return NextResponse.json(
         { success: false, error: 'Message text is empty' },
         { status: 400 }
       );
     }
+
+    // Add pause markers before and after the text for natural pacing
+    const text = `……${rawText.trim()}……`;
 
     console.log('[generate-audio] Generating audio for message:', messageId, {
       voiceId,
