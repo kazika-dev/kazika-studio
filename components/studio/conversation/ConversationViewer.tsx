@@ -892,16 +892,57 @@ export default function ConversationViewer({
 
   if (localMessages.length === 0) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 400,
-          color: 'text.secondary'
-        }}
-      >
-        <Typography>メッセージがありません</Typography>
+      <Box sx={{ maxWidth: 900, margin: '0 auto', padding: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: 200,
+            color: 'text.secondary',
+            mb: 2
+          }}
+        >
+          <Typography>メッセージがありません</Typography>
+        </Box>
+
+        {/* Action Buttons - show even when no messages */}
+        {!readonly && (
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {onContinueConversation && (
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={onContinueConversation}
+                size="small"
+              >
+                会話を生成
+              </Button>
+            )}
+            {onAddMessage && (
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<AddIcon />}
+                onClick={() => setAddDialogOpen(true)}
+                size="small"
+              >
+                メッセージを追加
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {/* Message Add Dialog */}
+        <MessageAddDialog
+          open={addDialogOpen}
+          characters={characters || []}
+          insertAfterMessage={null}
+          onClose={() => setAddDialogOpen(false)}
+          onAdd={handleAddMessage}
+        />
       </Box>
     );
   }
