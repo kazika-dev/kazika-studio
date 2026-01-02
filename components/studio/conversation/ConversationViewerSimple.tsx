@@ -36,6 +36,7 @@ import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
 import ContinueConversationDialog from './ContinueConversationDialog';
+import GenerateMessagesDialog from './GenerateMessagesDialog';
 import {
   DndContext,
   closestCenter,
@@ -555,6 +556,7 @@ export default function ConversationViewerSimple({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
   const [continueDialogOpen, setContinueDialogOpen] = useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   // Audio state
@@ -1067,12 +1069,12 @@ export default function ConversationViewerSimple({
                 新しいメッセージを追加
               </Button>
             )}
-            {conversationId && (
+            {conversationId && characters && characters.length >= 2 && (
               <Button
                 variant="contained"
                 color="secondary"
                 startIcon={<AutoAwesomeIcon />}
-                onClick={() => setContinueDialogOpen(true)}
+                onClick={() => setGenerateDialogOpen(true)}
               >
                 AIで会話を生成
               </Button>
@@ -1092,13 +1094,18 @@ export default function ConversationViewerSimple({
             onAdd={handleAddMessage}
           />
         )}
-        {conversationId && (
-          <ContinueConversationDialog
-            open={continueDialogOpen}
+        {conversationId && characters && characters.length >= 2 && (
+          <GenerateMessagesDialog
+            open={generateDialogOpen}
             conversationId={conversationId}
-            onClose={() => setContinueDialogOpen(false)}
+            characters={characters.map(c => ({
+              id: c.id,
+              name: c.name,
+              image_url: c.image_url || null
+            }))}
+            onClose={() => setGenerateDialogOpen(false)}
             onGenerated={() => {
-              setContinueDialogOpen(false);
+              setGenerateDialogOpen(false);
               onContinueConversation?.();
             }}
           />
