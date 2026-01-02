@@ -18,6 +18,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import ConversationViewer from '@/components/studio/conversation/ConversationViewer';
 import ConversationGeneratorDialogStandalone from '@/components/studio/conversation/ConversationGeneratorDialogStandalone';
 import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
+import ContinueConversationDialog from '@/components/studio/conversation/ContinueConversationDialog';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
@@ -61,6 +62,7 @@ export default function ConversationsPage() {
   const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
   const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
+  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
 
   useEffect(() => {
     loadStoryTree();
@@ -475,11 +477,13 @@ export default function ConversationsPage() {
                 <ConversationViewer
                   messages={messages}
                   characters={characters}
+                  conversationId={selectedConversation.id}
                   onUpdateMessage={handleUpdateMessage}
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}
                   onReanalyzeEmotion={handleReanalyzeEmotion}
                   onAddMessage={handleAddMessage}
+                  onContinueConversation={() => setContinueDialogOpen(true)}
                 />
               </>
             ) : (
@@ -541,6 +545,18 @@ export default function ConversationsPage() {
         onClose={() => setWorkflowSelectionDialogOpen(false)}
         onSelect={handleWorkflowSelected}
       />
+
+      {selectedConversation && (
+        <ContinueConversationDialog
+          open={continueDialogOpen}
+          conversationId={selectedConversation.id}
+          onClose={() => setContinueDialogOpen(false)}
+          onGenerated={async () => {
+            // Reload conversation to get new messages
+            await loadConversation(selectedConversation.id);
+          }}
+        />
+      )}
 
     </Box>
   );

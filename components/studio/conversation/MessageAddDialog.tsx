@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,7 +14,9 @@ import {
   MenuItem,
   Box,
   Chip,
-  Typography
+  Typography,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import EmotionTagSelector from './EmotionTagSelector';
@@ -51,7 +53,40 @@ export default function MessageAddDialog({
   const [emotionTag, setEmotionTag] = useState<string | undefined>(undefined);
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingCharacters, setLoadingCharacters] = useState(false);
+  const [localCharacters, setLocalCharacters] = useState<Character[]>([]);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
+
+  // キャラクターを取得（propsから渡されたものがない場合はAPIから取得）
+  useEffect(() => {
+    if (open) {
+      if (characters && characters.length > 0) {
+        setLocalCharacters(characters);
+      } else {
+        // propsから渡されたキャラクターがない場合、APIから取得
+        const fetchCharacters = async () => {
+          setLoadingCharacters(true);
+          try {
+            const response = await fetch('/api/characters');
+            const result = await response.json();
+            if (result.success && result.data?.characters) {
+              const mapped = result.data.characters.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                image_url: c.image_url
+              }));
+              setLocalCharacters(mapped);
+            }
+          } catch (error) {
+            console.error('Failed to load characters:', error);
+          } finally {
+            setLoadingCharacters(false);
+          }
+        };
+        fetchCharacters();
+      }
+    }
+  }, [open, characters]);
 
   const handleClose = () => {
     if (saving) return;
@@ -138,21 +173,34 @@ export default function MessageAddDialog({
             )}
 
             {/* Character Selection */}
-            <FormControl fullWidth>
-              <InputLabel>キャラクター</InputLabel>
-              <Select
-                value={characterId}
-                onChange={(e) => setCharacterId(e.target.value as number)}
-                label="キャラクター"
-                disabled={saving}
-              >
-                {characters.map((char) => (
-                  <MenuItem key={char.id} value={char.id}>
-                    {char.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {loadingCharacters ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2" color="text.secondary">
+                  キャラクターを読み込み中...
+                </Typography>
+              </Box>
+            ) : localCharacters.length > 0 ? (
+              <FormControl fullWidth>
+                <InputLabel>キャラクター</InputLabel>
+                <Select
+                  value={characterId}
+                  onChange={(e) => setCharacterId(e.target.value as number)}
+                  label="キャラクター"
+                  disabled={saving}
+                >
+                  {localCharacters.map((char) => (
+                    <MenuItem key={char.id} value={char.id}>
+                      {char.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <Alert severity="warning">
+                キャラクターが登録されていません。先にキャラクターを登録してください。
+              </Alert>
+            )}
 
             {/* Emotion Tag Section */}
             <Box>
@@ -205,7 +253,7 @@ export default function MessageAddDialog({
           <Button
             onClick={handleAdd}
             variant="contained"
-            disabled={saving || !characterId || !messageText.trim()}
+            disabled={saving || !characterId || !messageText.trim() || loadingCharacters || localCharacters.length === 0}
           >
             {saving ? '追加中...' : '追加'}
           </Button>

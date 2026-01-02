@@ -25,6 +25,7 @@ import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import TranslateIcon from '@mui/icons-material/Translate';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
@@ -56,11 +57,13 @@ interface Character {
 interface ConversationViewerProps {
   messages: ConversationMessageWithCharacter[];
   characters?: Character[];
+  conversationId?: number;
   onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number; scenePromptJa?: string; scenePromptEn?: string }) => Promise<void>;
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
   onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
+  onContinueConversation?: () => void;
   readonly?: boolean;
 }
 
@@ -565,11 +568,13 @@ function SortableMessage({
 export default function ConversationViewer({
   messages,
   characters,
+  conversationId,
   onUpdateMessage,
   onReorderMessages,
   onDeleteMessage,
   onReanalyzeEmotion,
   onAddMessage,
+  onContinueConversation,
   readonly = false
 }: ConversationViewerProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -927,7 +932,7 @@ export default function ConversationViewer({
               reanalyzing={reanalyzingId === message.id}
               translating={translating}
               readonly={readonly}
-              showInsertButton={!readonly && !!onAddMessage && !!characters && characters.length > 0}
+              showInsertButton={!readonly && !!onAddMessage}
               onEditClick={handleEditClick}
               onSave={handleSaveEdit}
               onCancel={handleCancelEdit}
@@ -949,6 +954,37 @@ export default function ConversationViewer({
         </SortableContext>
       </DndContext>
 
+      {/* Action Buttons */}
+      {!readonly && (
+        <Box sx={{ display: 'flex', gap: 1, mt: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {onContinueConversation && (
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<AutoAwesomeIcon />}
+              onClick={onContinueConversation}
+              size="small"
+            >
+              続きを生成
+            </Button>
+          )}
+          {onAddMessage && (
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setInsertAfterMessageId(undefined);
+                setAddDialogOpen(true);
+              }}
+              size="small"
+            >
+              メッセージを追加
+            </Button>
+          )}
+        </Box>
+      )}
+
       {/* Emotion Tag Selector Dialog */}
       <EmotionTagSelector
         open={tagSelectorOpen}
@@ -957,22 +993,20 @@ export default function ConversationViewer({
       />
 
       {/* Message Add Dialog */}
-      {characters && characters.length > 0 && (
-        <MessageAddDialog
-          open={addDialogOpen}
-          characters={characters}
-          insertAfterMessage={
-            insertAfterMessageId
-              ? localMessages.find(m => m.id === insertAfterMessageId)
-              : null
-          }
-          onClose={() => {
-            setAddDialogOpen(false);
-            setInsertAfterMessageId(undefined);
-          }}
-          onAdd={handleAddMessage}
-        />
-      )}
+      <MessageAddDialog
+        open={addDialogOpen}
+        characters={characters || []}
+        insertAfterMessage={
+          insertAfterMessageId
+            ? localMessages.find(m => m.id === insertAfterMessageId)
+            : null
+        }
+        onClose={() => {
+          setAddDialogOpen(false);
+          setInsertAfterMessageId(undefined);
+        }}
+        onAdd={handleAddMessage}
+      />
     </Box>
   );
 }
