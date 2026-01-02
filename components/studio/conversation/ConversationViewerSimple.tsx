@@ -25,6 +25,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import AddIcon from '@mui/icons-material/Add';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -34,6 +35,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
+import ContinueConversationDialog from './ContinueConversationDialog';
 import {
   DndContext,
   closestCenter,
@@ -62,12 +64,14 @@ interface ConversationViewerSimpleProps {
   messages: ConversationMessageWithCharacter[];
   characters?: Character[];
   storyTitle?: string;
+  conversationId?: number;
   onUpdateMessage?: (messageId: number, updates: { messageText?: string; characterId?: number }) => Promise<void>;
   onReorderMessages?: (messages: ConversationMessageWithCharacter[]) => Promise<void>;
   onDeleteMessage?: (messageId: number) => Promise<void>;
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
   onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
   onGenerateAudio?: (messageId: number) => Promise<{ audioUrl: string } | null>;
+  onContinueConversation?: () => void;
   readonly?: boolean;
 }
 
@@ -531,12 +535,14 @@ export default function ConversationViewerSimple({
   messages,
   characters,
   storyTitle,
+  conversationId,
   onUpdateMessage,
   onReorderMessages,
   onDeleteMessage,
   onReanalyzeEmotion,
   onAddMessage,
   onGenerateAudio,
+  onContinueConversation,
   readonly = false
 }: ConversationViewerSimpleProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -548,6 +554,7 @@ export default function ConversationViewerSimple({
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
+  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   // Audio state
@@ -1042,33 +1049,59 @@ export default function ConversationViewerSimple({
         }}
       >
         <Typography color="text.secondary">メッセージがありません</Typography>
-        {!readonly && onAddMessage && characters && characters.length > 0 && (
-          <>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenAddDialog()}
-              sx={{
-                borderStyle: 'dashed',
-                '&:hover': {
-                  borderStyle: 'solid'
-                }
-              }}
-            >
-              新しいメッセージを追加
-            </Button>
-            <MessageAddDialog
-              open={addDialogOpen}
-              characters={characters}
-              insertAfterMessage={null}
-              onClose={() => {
-                setAddDialogOpen(false);
-                setInsertAfterMessageId(undefined);
-              }}
-              onAdd={handleAddMessage}
-            />
-          </>
+        {!readonly && (
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            {onAddMessage && characters && characters.length > 0 && (
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenAddDialog()}
+                sx={{
+                  borderStyle: 'dashed',
+                  '&:hover': {
+                    borderStyle: 'solid'
+                  }
+                }}
+              >
+                新しいメッセージを追加
+              </Button>
+            )}
+            {conversationId && (
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={() => setContinueDialogOpen(true)}
+              >
+                AIで会話を生成
+              </Button>
+            )}
+          </Box>
+        )}
+        {/* Dialogs */}
+        {characters && characters.length > 0 && (
+          <MessageAddDialog
+            open={addDialogOpen}
+            characters={characters}
+            insertAfterMessage={null}
+            onClose={() => {
+              setAddDialogOpen(false);
+              setInsertAfterMessageId(undefined);
+            }}
+            onAdd={handleAddMessage}
+          />
+        )}
+        {conversationId && (
+          <ContinueConversationDialog
+            open={continueDialogOpen}
+            conversationId={conversationId}
+            onClose={() => setContinueDialogOpen(false)}
+            onGenerated={() => {
+              setContinueDialogOpen(false);
+              onContinueConversation?.();
+            }}
+          />
         )}
       </Box>
     );
@@ -1243,6 +1276,37 @@ export default function ConversationViewerSimple({
           }}
           onAdd={handleAddMessage}
         />
+      )}
+
+      {/* Continue Conversation Button and Dialog */}
+      {!readonly && conversationId && (
+        <>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              mt: 2
+            }}
+          >
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<AutoAwesomeIcon />}
+              onClick={() => setContinueDialogOpen(true)}
+            >
+              会話の続きを生成
+            </Button>
+          </Box>
+          <ContinueConversationDialog
+            open={continueDialogOpen}
+            conversationId={conversationId}
+            onClose={() => setContinueDialogOpen(false)}
+            onGenerated={() => {
+              setContinueDialogOpen(false);
+              onContinueConversation?.();
+            }}
+          />
+        </>
       )}
     </Box>
   );
