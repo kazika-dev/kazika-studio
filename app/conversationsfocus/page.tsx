@@ -18,6 +18,7 @@ import ConversationViewerSimple from '@/components/studio/conversation/Conversat
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
+import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import type {
   Conversation,
@@ -55,6 +56,8 @@ export default function ConversationsFocusPage() {
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
+  const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
@@ -370,6 +373,16 @@ export default function ConversationsFocusPage() {
     setSceneDialogOpen(true);
   };
 
+  const handleCreateConversation = (sceneId: number) => {
+    setSelectedSceneId(sceneId);
+    setConversationDialogOpen(true);
+  };
+
+  const handleConversationGenerated = async (conversationId: number) => {
+    await loadStoryTree();
+    await loadConversation(conversationId);
+  };
+
   const handleDeleteStory = async (storyId: number) => {
     try {
       const response = await fetch(`/api/stories/${storyId}`, {
@@ -469,6 +482,7 @@ export default function ConversationsFocusPage() {
               onSelectConversation={handleSelectConversation}
               onCreateStory={() => setStoryDialogOpen(true)}
               onCreateScene={handleCreateScene}
+              onCreateConversation={handleCreateConversation}
               onDeleteStory={handleDeleteStory}
               onDeleteScene={handleDeleteScene}
               onDeleteConversation={handleDeleteConversation}
@@ -564,6 +578,16 @@ export default function ConversationsFocusPage() {
         onCreated={async () => {
           await loadStoryTree();
         }}
+      />
+
+      <ConversationGeneratorDialogWithScene
+        open={conversationDialogOpen}
+        sceneId={selectedSceneId}
+        onClose={() => {
+          setConversationDialogOpen(false);
+          setSelectedSceneId(null);
+        }}
+        onGenerated={handleConversationGenerated}
       />
 
       <WorkflowSelectionDialog
