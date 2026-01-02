@@ -29,6 +29,7 @@ import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import DownloadIcon from '@mui/icons-material/Download';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
@@ -1009,6 +1010,25 @@ export default function ConversationViewerSimple({
     };
   }, []);
 
+  // Calculate total audio duration
+  const totalAudioDuration = localMessages.reduce((total, msg) => {
+    return total + (msg.audio_duration_seconds || 0);
+  }, 0);
+
+  const messagesWithAudioCount = localMessages.filter(msg => msg.audio_storage_path).length;
+
+  // Format duration as MM:SS or HH:MM:SS
+  const formatDuration = (seconds: number): string => {
+    if (seconds <= 0) return '0:00';
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hours > 0) {
+      return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
   if (localMessages.length === 0) {
     return (
       <Box
@@ -1049,6 +1069,17 @@ export default function ConversationViewerSimple({
           >
             {selectionMode ? '選択モードを終了' : '一括音声生成'}
           </Button>
+
+          {/* Total Audio Duration Display */}
+          {messagesWithAudioCount > 0 && (
+            <Chip
+              icon={<AccessTimeIcon />}
+              label={`${messagesWithAudioCount}件 / ${formatDuration(totalAudioDuration)}`}
+              color="info"
+              variant="outlined"
+              sx={{ ml: 'auto' }}
+            />
+          )}
 
           {selectionMode && (
             <>

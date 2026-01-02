@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
-import type { ListConversationsResponse } from '@/types/conversation';
+import type { ListConversationsResponse, CreateConversationRequest, CreateConversationResponse } from '@/types/conversation';
 
 /**
  * GET /api/conversations
@@ -145,6 +145,96 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('List conversations error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/conversations
+ * Create a new empty conversation
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const body: CreateConversationRequest = await request.json();
+    const { title, description, storySceneId } = body;
+
+    if (!title?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'タイトルは必須です' },
+        { status: 400 }
+      );
+    }
+
+    if (!storySceneId) {
+      return NextResponse.json(
+        { success: false, error: 'シーンIDは必須です' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createClient();
+
+    // Verify scene ownership
+    const { data: scene, error: sceneError } = await supabase
+      .from('story_scenes')
+      .select('id, story_id, stories!inner(user_id)')
+      .eq('id', storySceneId)
+      .single();
+
+    if (sceneError || !scene) {
+      return NextResponse.json(
+        { success: false, error: 'シーンが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    if ((scene.stories as any).user_id !== user.id) {
+      return NextResponse.json(
+        { success: false, error: 'このシーンにアクセスする権限がありません' },
+        { status: 403 }
+      );
+    }
+
+    // Create conversation
+    const { data: conversation, error: insertError } = await supabase
+      .from('conversations')
+      .insert({
+        title: title.trim(),
+        description: description?.trim() || null,
+        story_scene_id: storySceneId,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Failed to create conversation:', insertError);
+      return NextResponse.json(
+        { success: false, error: '会話の作成に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        conversation
+      }
+    } as CreateConversationResponse);
+
+  } catch (error: any) {
+    console.error('Create conversation error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

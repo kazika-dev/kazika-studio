@@ -180,12 +180,7 @@ export default function StoryTreeView({
                               <Button
                                 size="small"
                                 startIcon={<AddIcon />}
-                                onClick={() => {
-                                  console.log('会話を追加ボタンクリック:', sceneNode.scene.id, onCreateConversation);
-                                  if (onCreateConversation) {
-                                    onCreateConversation(sceneNode.scene.id);
-                                  }
-                                }}
+                                onClick={() => onCreateConversation?.(sceneNode.scene.id)}
                                 sx={{ mb: 0.5, fontSize: '0.7rem' }}
                               >
                                 会話を追加

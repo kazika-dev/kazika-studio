@@ -212,6 +212,21 @@ export interface ListConversationsResponse {
   error?: string;
 }
 
+// Create conversation types
+export interface CreateConversationRequest {
+  title: string;
+  description?: string;
+  storySceneId: number;
+}
+
+export interface CreateConversationResponse {
+  success: boolean;
+  data?: {
+    conversation: Conversation;
+  };
+  error?: string;
+}
+
 // AI Prompt types
 
 export interface ConversationPromptInput {
