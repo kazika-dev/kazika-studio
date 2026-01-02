@@ -528,12 +528,14 @@ export default function ConversationsFocusPage() {
                   messages={messages}
                   characters={characters}
                   storyTitle={currentStoryTitle}
+                  conversationId={selectedConversation.id}
                   onUpdateMessage={handleUpdateMessage}
                   onReorderMessages={handleReorderMessages}
                   onDeleteMessage={handleDeleteMessage}
                   onReanalyzeEmotion={handleReanalyzeEmotion}
                   onAddMessage={handleAddMessage}
                   onGenerateAudio={handleGenerateAudio}
+                  onContinueConversation={() => loadConversation(selectedConversation.id)}
                 />
               </>
             ) : (
