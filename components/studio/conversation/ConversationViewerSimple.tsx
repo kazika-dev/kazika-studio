@@ -1034,13 +1034,42 @@ export default function ConversationViewerSimple({
       <Box
         sx={{
           display: 'flex',
+          flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: 400,
-          color: 'text.secondary'
+          gap: 2
         }}
       >
-        <Typography>メッセージがありません</Typography>
+        <Typography color="text.secondary">メッセージがありません</Typography>
+        {!readonly && onAddMessage && characters && characters.length > 0 && (
+          <>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenAddDialog()}
+              sx={{
+                borderStyle: 'dashed',
+                '&:hover': {
+                  borderStyle: 'solid'
+                }
+              }}
+            >
+              新しいメッセージを追加
+            </Button>
+            <MessageAddDialog
+              open={addDialogOpen}
+              characters={characters}
+              insertAfterMessage={null}
+              onClose={() => {
+                setAddDialogOpen(false);
+                setInsertAfterMessageId(undefined);
+              }}
+              onAdd={handleAddMessage}
+            />
+          </>
+        )}
       </Box>
     );
   }
