@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button, Box, IconButton, Typography, Paper, Slider, ToggleButtonGroup, ToggleButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree, FileCopy, ContentCopy, ContentPaste } from '@mui/icons-material';
+import { Save, Undo, Close, Edit, Circle, Square, Delete, Highlight, TextFields, OpenWith, CropFree, FileCopy, ContentCopy, ContentPaste, ZoomIn, ZoomOut } from '@mui/icons-material';
 
 interface ImageEditorProps {
   imageUrl: string;
@@ -16,6 +16,8 @@ interface ImageEditorProps {
 
 type DrawingMode = 'pen' | 'marker' | 'circle' | 'square' | 'erase' | 'text' | 'move' | 'select';
 
+type ResizeHandle = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'left' | 'right' | null;
+
 interface SelectionArea {
   startX: number;
   startY: number;
@@ -26,6 +28,9 @@ interface SelectionArea {
   originalX?: number;  // 選択時の元のX座標
   originalY?: number;  // 選択時の元のY座標
   savedImageBeforeMove?: HTMLImageElement;  // 移動前の画像状態（キャンセル用）
+  originalWidth?: number;  // リサイズ用の元の幅
+  originalHeight?: number;  // リサイズ用の元の高さ
+  scaledImageData?: ImageData;  // スケール後の画像データ
 }
 
 interface DrawingPath {
@@ -70,9 +75,13 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   const [redrawTrigger, setRedrawTrigger] = useState(0);  // Canvas再描画のトリガー
   const [saveModeDialogOpen, setSaveModeDialogOpen] = useState(false);
   const [pendingSaveBlob, setPendingSaveBlob] = useState<Blob | null>(null);
-  const [pastedImage, setPastedImage] = useState<{ imageData: ImageData; x: number; y: number } | null>(null);
+  const [pastedImage, setPastedImage] = useState<{ imageData: ImageData; x: number; y: number; originalWidth?: number; originalHeight?: number; scaledImageData?: ImageData } | null>(null);
   const [isDraggingPasted, setIsDraggingPasted] = useState(false);
   const [pastedDragOffset, setPastedDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [currentCursor, setCurrentCursor] = useState<string>('crosshair');
 
   // 画像を読み込んでキャンバスに描画
   useEffect(() => {
@@ -197,15 +206,16 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !selection) return;
 
-    const { startX, startY, endX, endY } = selection;
-    const x = Math.min(startX, endX);
-    const y = Math.min(startY, endY);
-    const width = Math.abs(endX - startX);
-    const height = Math.abs(endY - startY);
+    // スケール後のImageDataがあればそちらを使用
+    const currentImageData = selection.scaledImageData || selection.imageData;
+    const x = Math.min(selection.startX, selection.endX);
+    const y = Math.min(selection.startY, selection.endY);
+    const width = currentImageData ? currentImageData.width : Math.abs(selection.endX - selection.startX);
+    const height = currentImageData ? currentImageData.height : Math.abs(selection.endY - selection.startY);
 
-    // 移動中の場合は画像データを表示
-    if (isDraggingSelection && selection.imageData) {
-      ctx.putImageData(selection.imageData, x, y);
+    // 移動中またはリサイズ中の場合は画像データを表示
+    if ((isDraggingSelection || isResizing) && currentImageData) {
+      ctx.putImageData(currentImageData, x, y);
     }
 
     // 選択範囲の枠線を描画（点線）
@@ -215,7 +225,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     ctx.strokeRect(x, y, width, height);
     ctx.setLineDash([]);
 
-    // コーナーのハンドルを描画
+    // コーナーのハンドルを描画（リサイズ用）
     ctx.fillStyle = '#1976d2';
     const handleSize = 8;
     const corners = [
@@ -226,6 +236,17 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     ];
     corners.forEach(corner => {
       ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+    });
+
+    // 辺の中点にもハンドルを描画
+    const midPoints = [
+      { x: x + width / 2, y: y },  // top
+      { x: x + width / 2, y: y + height },  // bottom
+      { x: x, y: y + height / 2 },  // left
+      { x: x + width, y: y + height / 2 },  // right
+    ];
+    midPoints.forEach(point => {
+      ctx.fillRect(point.x - handleSize / 2, point.y - handleSize / 2, handleSize, handleSize);
     });
   };
 
@@ -322,6 +343,70 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     return x >= sx && x <= ex && y >= sy && y <= ey;
   };
 
+  // リサイズハンドルを取得
+  const getResizeHandle = (x: number, y: number, area: { x: number; y: number; width: number; height: number }): ResizeHandle => {
+    const handleSize = 12; // ハンドルの当たり判定サイズ
+    const { x: ax, y: ay, width, height } = area;
+
+    // 四隅のハンドル
+    if (Math.abs(x - ax) < handleSize && Math.abs(y - ay) < handleSize) return 'top-left';
+    if (Math.abs(x - (ax + width)) < handleSize && Math.abs(y - ay) < handleSize) return 'top-right';
+    if (Math.abs(x - ax) < handleSize && Math.abs(y - (ay + height)) < handleSize) return 'bottom-left';
+    if (Math.abs(x - (ax + width)) < handleSize && Math.abs(y - (ay + height)) < handleSize) return 'bottom-right';
+
+    // 辺のハンドル
+    if (Math.abs(y - ay) < handleSize && x > ax && x < ax + width) return 'top';
+    if (Math.abs(y - (ay + height)) < handleSize && x > ax && x < ax + width) return 'bottom';
+    if (Math.abs(x - ax) < handleSize && y > ay && y < ay + height) return 'left';
+    if (Math.abs(x - (ax + width)) < handleSize && y > ay && y < ay + height) return 'right';
+
+    return null;
+  };
+
+  // ImageDataをスケーリング
+  const scaleImageData = (imageData: ImageData, newWidth: number, newHeight: number): ImageData => {
+    const canvas = document.createElement('canvas');
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return imageData;
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const scaledCanvas = document.createElement('canvas');
+    scaledCanvas.width = Math.max(1, Math.round(newWidth));
+    scaledCanvas.height = Math.max(1, Math.round(newHeight));
+    const scaledCtx = scaledCanvas.getContext('2d');
+    if (!scaledCtx) return imageData;
+
+    // スムージングを有効にして高品質なリサイズ
+    scaledCtx.imageSmoothingEnabled = true;
+    scaledCtx.imageSmoothingQuality = 'high';
+    scaledCtx.drawImage(canvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+
+    return scaledCtx.getImageData(0, 0, scaledCanvas.width, scaledCanvas.height);
+  };
+
+  // リサイズハンドルに応じたカーソルを取得
+  const getResizeCursor = (handle: ResizeHandle): string => {
+    switch (handle) {
+      case 'top-left':
+      case 'bottom-right':
+        return 'nwse-resize';
+      case 'top-right':
+      case 'bottom-left':
+        return 'nesw-resize';
+      case 'top':
+      case 'bottom':
+        return 'ns-resize';
+      case 'left':
+      case 'right':
+        return 'ew-resize';
+      default:
+        return 'crosshair';
+    }
+  };
+
   // 描画開始
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -397,6 +482,84 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
 
     // 選択モードの場合
     if (drawingMode === 'select') {
+      // 貼り付け画像のリサイズハンドルをチェック
+      if (pastedImage) {
+        const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
+        const handle = getResizeHandle(x, y, {
+          x: pastedImage.x,
+          y: pastedImage.y,
+          width: currentImageData.width,
+          height: currentImageData.height,
+        });
+        if (handle) {
+          setIsResizing(true);
+          setResizeHandle(handle);
+          setResizeStart({
+            x: pastedImage.x,
+            y: pastedImage.y,
+            width: currentImageData.width,
+            height: currentImageData.height,
+          });
+          return;
+        }
+      }
+
+      // 選択範囲のリサイズハンドルをチェック
+      if (selection && selection.imageData) {
+        const currentImageData = selection.scaledImageData || selection.imageData;
+        const selX = Math.min(selection.startX, selection.endX);
+        const selY = Math.min(selection.startY, selection.endY);
+        const handle = getResizeHandle(x, y, {
+          x: selX,
+          y: selY,
+          width: currentImageData.width,
+          height: currentImageData.height,
+        });
+        if (handle) {
+          // リサイズ開始時に元の位置を白で塗りつぶす（初回のみ）
+          if (selection.originalX !== undefined && selection.originalY !== undefined && ctx && imageRef.current && !selection.savedImageBeforeMove) {
+            saveImageToHistory();
+            const savedImage = new Image();
+            savedImage.src = imageRef.current.src;
+
+            const width = selection.originalWidth || Math.abs(selection.endX - selection.startX);
+            const height = selection.originalHeight || Math.abs(selection.endY - selection.startY);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx) {
+              tempCtx.drawImage(imageRef.current, 0, 0);
+              history.forEach(path => drawPath(tempCtx, path));
+              tempCtx.fillStyle = '#FFFFFF';
+              tempCtx.fillRect(selection.originalX, selection.originalY, width, height);
+
+              const img = new Image();
+              img.onload = () => {
+                imageRef.current = img;
+              };
+              img.src = tempCanvas.toDataURL();
+            }
+
+            setSelection({
+              ...selection,
+              savedImageBeforeMove: savedImage,
+            });
+          }
+
+          setIsResizing(true);
+          setResizeHandle(handle);
+          setResizeStart({
+            x: selX,
+            y: selY,
+            width: currentImageData.width,
+            height: currentImageData.height,
+          });
+          return;
+        }
+      }
+
       // 貼り付け画像内をクリックした場合は移動モード
       if (pastedImage && isInsidePastedImage(x, y)) {
         setIsDraggingPasted(true);
@@ -562,11 +725,137 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // カーソル更新（選択モード時のみ）
+    if (drawingMode === 'select' && !isResizing && !isDraggingSelection && !isDraggingPasted && !isCreatingSelection) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const my = (e.clientY - rect.top) * scaleY;
+
+      let newCursor = 'crosshair';
+
+      // 貼り付け画像のリサイズハンドルをチェック
+      if (pastedImage) {
+        const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
+        const handle = getResizeHandle(mx, my, {
+          x: pastedImage.x,
+          y: pastedImage.y,
+          width: currentImageData.width,
+          height: currentImageData.height,
+        });
+        if (handle) {
+          newCursor = getResizeCursor(handle);
+        } else if (isInsidePastedImage(mx, my)) {
+          newCursor = 'move';
+        }
+      }
+
+      // 選択範囲のリサイズハンドルをチェック
+      if (selection && selection.imageData && newCursor === 'crosshair') {
+        const currentImageData = selection.scaledImageData || selection.imageData;
+        const selX = Math.min(selection.startX, selection.endX);
+        const selY = Math.min(selection.startY, selection.endY);
+        const handle = getResizeHandle(mx, my, {
+          x: selX,
+          y: selY,
+          width: currentImageData.width,
+          height: currentImageData.height,
+        });
+        if (handle) {
+          newCursor = getResizeCursor(handle);
+        } else if (isInsideSelection(mx, my)) {
+          newCursor = 'move';
+        }
+      }
+
+      if (currentCursor !== newCursor) {
+        setCurrentCursor(newCursor);
+      }
+    }
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    // リサイズ中
+    if (isResizing && resizeHandle && resizeStart) {
+      const deltaX = x - resizeStart.x;
+      const deltaY = y - resizeStart.y;
+      let newWidth = resizeStart.width;
+      let newHeight = resizeStart.height;
+      let newX = resizeStart.x;
+      let newY = resizeStart.y;
+
+      // ハンドルに応じてサイズと位置を計算
+      switch (resizeHandle) {
+        case 'bottom-right':
+          newWidth = Math.max(20, deltaX + resizeStart.width);
+          newHeight = Math.max(20, deltaY + resizeStart.height);
+          break;
+        case 'bottom-left':
+          newWidth = Math.max(20, resizeStart.width - deltaX);
+          newHeight = Math.max(20, deltaY + resizeStart.height);
+          newX = resizeStart.x + resizeStart.width - newWidth;
+          break;
+        case 'top-right':
+          newWidth = Math.max(20, deltaX + resizeStart.width);
+          newHeight = Math.max(20, resizeStart.height - deltaY);
+          newY = resizeStart.y + resizeStart.height - newHeight;
+          break;
+        case 'top-left':
+          newWidth = Math.max(20, resizeStart.width - deltaX);
+          newHeight = Math.max(20, resizeStart.height - deltaY);
+          newX = resizeStart.x + resizeStart.width - newWidth;
+          newY = resizeStart.y + resizeStart.height - newHeight;
+          break;
+        case 'right':
+          newWidth = Math.max(20, deltaX + resizeStart.width);
+          break;
+        case 'left':
+          newWidth = Math.max(20, resizeStart.width - deltaX);
+          newX = resizeStart.x + resizeStart.width - newWidth;
+          break;
+        case 'bottom':
+          newHeight = Math.max(20, deltaY + resizeStart.height);
+          break;
+        case 'top':
+          newHeight = Math.max(20, resizeStart.height - deltaY);
+          newY = resizeStart.y + resizeStart.height - newHeight;
+          break;
+      }
+
+      // 貼り付け画像のリサイズ
+      if (pastedImage) {
+        const scaledImageData = scaleImageData(pastedImage.imageData, newWidth, newHeight);
+        setPastedImage({
+          ...pastedImage,
+          x: newX,
+          y: newY,
+          scaledImageData,
+        });
+        redrawCanvas();
+        drawPastedImageOverlay();
+      }
+
+      // 選択範囲のリサイズ
+      if (selection && selection.imageData) {
+        const scaledImageData = scaleImageData(selection.imageData, newWidth, newHeight);
+        setSelection({
+          ...selection,
+          startX: newX,
+          startY: newY,
+          endX: newX + newWidth,
+          endY: newY + newHeight,
+          scaledImageData,
+        });
+        redrawCanvas();
+        drawSelectionOverlay();
+      }
+      return;
+    }
 
     // 貼り付け画像をドラッグ中
     if (isDraggingPasted && pastedImage) {
@@ -584,8 +873,9 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
 
     // 選択範囲をドラッグ中
     if (isDraggingSelection && selection) {
-      const width = Math.abs(selection.endX - selection.startX);
-      const height = Math.abs(selection.endY - selection.startY);
+      const currentImageData = selection.scaledImageData || selection.imageData;
+      const width = currentImageData ? currentImageData.width : Math.abs(selection.endX - selection.startX);
+      const height = currentImageData ? currentImageData.height : Math.abs(selection.endY - selection.startY);
       const newX = x - dragOffset.x;
       const newY = y - dragOffset.y;
 
@@ -643,6 +933,13 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   const stopDrawing = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
+
+    if (isResizing) {
+      setIsResizing(false);
+      setResizeHandle(null);
+      setResizeStart(null);
+      return;
+    }
 
     if (isDraggingPasted) {
       setIsDraggingPasted(false);
@@ -846,6 +1143,8 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
       saveImageToHistory();
     }
 
+    // スケール後のImageDataがあればそちらを使用
+    const currentImageData = selection.scaledImageData || selection.imageData;
     const x = Math.min(selection.startX, selection.endX);
     const y = Math.min(selection.startY, selection.endY);
 
@@ -864,7 +1163,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
       });
 
       // 現在の位置に画像データを貼り付け
-      tempCtx.putImageData(selection.imageData, x, y);
+      tempCtx.putImageData(currentImageData, x, y);
     }
 
     // 即座に選択範囲をクリアして再描画
@@ -899,18 +1198,17 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     if (!canvas || !ctx || !selection || !selection.imageData) return;
 
     try {
-      // 選択範囲の画像データを一時Canvasに描画
-      const width = Math.abs(selection.endX - selection.startX);
-      const height = Math.abs(selection.endY - selection.startY);
+      // スケール後のImageDataがあればそちらを使用
+      const currentImageData = selection.scaledImageData || selection.imageData;
 
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = width;
-      tempCanvas.height = height;
+      tempCanvas.width = currentImageData.width;
+      tempCanvas.height = currentImageData.height;
       const tempCtx = tempCanvas.getContext('2d');
 
       if (!tempCtx) return;
 
-      tempCtx.putImageData(selection.imageData, 0, 0);
+      tempCtx.putImageData(currentImageData, 0, 0);
 
       // Blobに変換してクリップボードに書き込み
       const blob = await new Promise<Blob>((resolve, reject) => {
@@ -996,27 +1294,41 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !pastedImage) return;
 
+    // スケール後のImageDataがあればそちらを使用
+    const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
+
     // 画像を描画
-    ctx.putImageData(pastedImage.imageData, pastedImage.x, pastedImage.y);
+    ctx.putImageData(currentImageData, pastedImage.x, pastedImage.y);
 
     // 選択範囲の枠線を描画（点線）
     ctx.strokeStyle = '#1976d2';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
-    ctx.strokeRect(pastedImage.x, pastedImage.y, pastedImage.imageData.width, pastedImage.imageData.height);
+    ctx.strokeRect(pastedImage.x, pastedImage.y, currentImageData.width, currentImageData.height);
     ctx.setLineDash([]);
 
-    // コーナーのハンドルを描画
+    // コーナーのハンドルを描画（リサイズ用）
     ctx.fillStyle = '#1976d2';
     const handleSize = 8;
     const corners = [
       { x: pastedImage.x, y: pastedImage.y },
-      { x: pastedImage.x + pastedImage.imageData.width, y: pastedImage.y },
-      { x: pastedImage.x, y: pastedImage.y + pastedImage.imageData.height },
-      { x: pastedImage.x + pastedImage.imageData.width, y: pastedImage.y + pastedImage.imageData.height },
+      { x: pastedImage.x + currentImageData.width, y: pastedImage.y },
+      { x: pastedImage.x, y: pastedImage.y + currentImageData.height },
+      { x: pastedImage.x + currentImageData.width, y: pastedImage.y + currentImageData.height },
     ];
     corners.forEach(corner => {
       ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+    });
+
+    // 辺の中点にもハンドルを描画
+    const midPoints = [
+      { x: pastedImage.x + currentImageData.width / 2, y: pastedImage.y },  // top
+      { x: pastedImage.x + currentImageData.width / 2, y: pastedImage.y + currentImageData.height },  // bottom
+      { x: pastedImage.x, y: pastedImage.y + currentImageData.height / 2 },  // left
+      { x: pastedImage.x + currentImageData.width, y: pastedImage.y + currentImageData.height / 2 },  // right
+    ];
+    midPoints.forEach(point => {
+      ctx.fillRect(point.x - handleSize / 2, point.y - handleSize / 2, handleSize, handleSize);
     });
   }, [pastedImage]);
 
@@ -1029,6 +1341,9 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     // Undo用に履歴を保存
     saveImageToHistory();
 
+    // スケール後のImageDataがあればそちらを使用
+    const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
+
     // 一時Canvasに現在の状態を構築
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
@@ -1038,7 +1353,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
     if (tempCtx && imageRef.current) {
       tempCtx.drawImage(imageRef.current, 0, 0);
       history.forEach(path => drawPath(tempCtx, path));
-      tempCtx.putImageData(pastedImage.imageData, pastedImage.x, pastedImage.y);
+      tempCtx.putImageData(currentImageData, pastedImage.x, pastedImage.y);
 
       // 画像参照を更新
       const img = new Image();
@@ -1060,10 +1375,11 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
   // 貼り付け画像内かチェック
   const isInsidePastedImage = (x: number, y: number) => {
     if (!pastedImage) return false;
+    const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
     return x >= pastedImage.x &&
-           x <= pastedImage.x + pastedImage.imageData.width &&
+           x <= pastedImage.x + currentImageData.width &&
            y >= pastedImage.y &&
-           y <= pastedImage.y + pastedImage.imageData.height;
+           y <= pastedImage.y + currentImageData.height;
   };
 
   // 選択をキャンセル
@@ -1310,7 +1626,13 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
 
           {/* 選択範囲の操作ボタン */}
           {selection && selection.imageData && drawingMode === 'select' && (
-            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2, alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 80 }}>
+                {(() => {
+                  const currentImageData = selection.scaledImageData || selection.imageData;
+                  return `${currentImageData.width} × ${currentImageData.height}`;
+                })()}
+              </Typography>
               <Button
                 variant="outlined"
                 size="small"
@@ -1347,7 +1669,13 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
 
           {/* 貼り付け画像の操作ボタン */}
           {pastedImage && drawingMode === 'select' && (
-            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, borderLeft: '1px solid #ddd', pl: 2, ml: 2, alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 80 }}>
+                {(() => {
+                  const currentImageData = pastedImage.scaledImageData || pastedImage.imageData;
+                  return `${currentImageData.width} × ${currentImageData.height}`;
+                })()}
+              </Typography>
               <Button
                 variant="outlined"
                 size="small"
@@ -1469,7 +1797,7 @@ export default function ImageEditor({ imageUrl, onSave, onClose, disableDefaultS
             maxWidth: '100%',
             maxHeight: '100%',
             cursor:
-              drawingMode === 'select' ? 'crosshair' :
+              drawingMode === 'select' ? currentCursor :
               drawingMode === 'move' ? 'move' :
               drawingMode === 'text' ? 'text' :
               drawingMode === 'erase' ? 'crosshair' :
