@@ -148,6 +148,7 @@ export default function SplitPage() {
   const [promptGenSettings, setPromptGenSettings] = useState({
     model: 'gemini-3-pro-preview',
     language: 'en' as 'ja' | 'en',
+    basePrompt: '',
   });
   const [generatingPrompts, setGeneratingPrompts] = useState(false);
 
@@ -209,6 +210,8 @@ export default function SplitPage() {
         const template = data.data?.find((t: { id: number; content?: string }) => t.id === TEMPLATE_ID);
         if (template?.content) {
           setBulkSettings((prev) => ({ ...prev, prompt: template.content }));
+          // プロンプト生成設定にも同じテンプレートを設定
+          setPromptGenSettings((prev) => ({ ...prev, basePrompt: template.content }));
         }
       }
     } catch (error) {
@@ -484,6 +487,7 @@ export default function SplitPage() {
           queues: validRequests,
           model: promptGenSettings.model,
           language: promptGenSettings.language,
+          basePrompt: promptGenSettings.basePrompt,
         }),
       });
 
@@ -584,8 +588,8 @@ export default function SplitPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           待機中のキューの参照画像を分析して、AIが自動的にプロンプトを生成します
         </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid size={{ xs: 12, md: 3 }}>
+        <Grid container spacing={2} alignItems="flex-start">
+          <Grid size={{ xs: 12, md: 2 }}>
             <FormControl fullWidth size="small">
               <InputLabel>AIモデル</InputLabel>
               <Select
@@ -617,6 +621,18 @@ export default function SplitPage() {
               </Select>
             </FormControl>
           </Grid>
+          <Grid size={{ xs: 12, md: 5 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="ベースプロンプト（AIへの指示）"
+              multiline
+              rows={2}
+              value={promptGenSettings.basePrompt}
+              onChange={(e) => setPromptGenSettings((prev) => ({ ...prev, basePrompt: e.target.value }))}
+              placeholder="画像からプロンプトを生成する際のAIへの追加指示"
+            />
+          </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <Button
               variant="contained"
@@ -625,14 +641,10 @@ export default function SplitPage() {
               onClick={handleBulkGeneratePrompts}
               disabled={generatingPrompts}
               startIcon={generatingPrompts ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+              sx={{ height: 56 }}
             >
               {generatingPrompts ? 'プロンプト生成中...' : '画像からプロンプト生成'}
             </Button>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Typography variant="caption" color="text.secondary">
-              ※ 待機中キューの参照画像（最大4枚）を分析してプロンプトを生成します
-            </Typography>
           </Grid>
         </Grid>
       </Paper>

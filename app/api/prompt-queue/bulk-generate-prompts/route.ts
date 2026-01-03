@@ -13,6 +13,7 @@ interface BulkGeneratePromptsRequest {
   queues: QueueGenerateRequest[];
   model?: string; // Gemini model for prompt generation (default: gemini-2.5-flash)
   language?: 'ja' | 'en'; // Output language (default: en)
+  basePrompt?: string; // Additional instructions for prompt generation
 }
 
 /**
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as BulkGeneratePromptsRequest;
-    const { queues, model = 'gemini-2.5-flash', language = 'en' } = body;
+    const { queues, model = 'gemini-2.5-flash', language = 'en', basePrompt = '' } = body;
 
     if (!queues || !Array.isArray(queues) || queues.length === 0) {
       return NextResponse.json({ error: 'queues is required and must be a non-empty array' }, { status: 400 });
@@ -56,7 +57,9 @@ export async function POST(request: NextRequest) {
     let failedCount = 0;
 
     // 言語に応じたシステムプロンプトを生成
-    const buildSystemPrompt = (lang: 'ja' | 'en') => {
+    const buildSystemPrompt = (lang: 'ja' | 'en', additionalPrompt: string) => {
+      const baseInstructions = additionalPrompt ? `\n\n追加の指示:\n${additionalPrompt}` : '';
+
       if (lang === 'ja') {
         return `あなたは画像生成AIのプロンプト作成専門家です。
 提供された参照画像を分析し、その画像を再現するための詳細なプロンプトを日本語で作成してください。
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
 3. カメラアングル、視点、被写体の配置を明確にする
 4. 画像生成に効果的なキーワードを適切に含める
 5. 出力はプロンプトのみを返す（説明や解説は不要）
-6. プロンプトは1つの段落にまとめ、読点で区切る
+6. プロンプトは1つの段落にまとめ、読点で区切る${baseInstructions}
 
 参照画像を分析して、画像生成用の日本語プロンプトを出力してください:`;
       } else {
@@ -80,7 +83,7 @@ Follow these guidelines:
 3. Clearly describe camera angle, viewpoint, and subject placement
 4. Include effective keywords for image generation (lighting, composition, style, quality, etc.)
 5. Return only the prompt (no explanations or commentary)
-6. Combine the prompt into one paragraph, separated by commas
+6. Combine the prompt into one paragraph, separated by commas${additionalPrompt ? `\n\nAdditional instructions:\n${additionalPrompt}` : ''}
 
 Analyze the reference image(s) and output an English prompt for image generation:`;
       }
@@ -108,7 +111,7 @@ Analyze the reference image(s) and output an English prompt for image generation
           continue;
         }
 
-        const systemPrompt = buildSystemPrompt(language);
+        const systemPrompt = buildSystemPrompt(language, basePrompt);
 
         // マルチモーダルリクエスト
         console.log(`Queue ${queueRequest.queueId}: Generating prompt from ${queueRequest.images.length} image(s) using ${model} in ${language}`);
