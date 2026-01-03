@@ -588,8 +588,8 @@ export default function SplitPage() {
                     <Box
                       onClick={() => setEnlargedImageUrl(getImageUrl(queue.source_output_url!))}
                       sx={{
-                        width: 80,
-                        height: 80,
+                        width: 120,
+                        height: 120,
                         mr: 2,
                         borderRadius: 1,
                         border: '3px solid #e91e63',
@@ -615,8 +615,8 @@ export default function SplitPage() {
                       <Box
                         onClick={() => setEnlargedImageUrl(getImageUrl(queue.images[0].image_url!))}
                         sx={{
-                          width: 80,
-                          height: 80,
+                          width: 120,
+                          height: 120,
                           borderRadius: 1,
                           overflow: 'hidden',
                           cursor: 'pointer',
@@ -634,8 +634,8 @@ export default function SplitPage() {
                   ) : (
                     <Box
                       sx={{
-                        width: 80,
-                        height: 80,
+                        width: 120,
+                        height: 120,
                         borderRadius: 1,
                         bgcolor: 'grey.300',
                         display: 'flex',
@@ -643,7 +643,7 @@ export default function SplitPage() {
                         justifyContent: 'center',
                       }}
                     >
-                      <ImageIcon sx={{ fontSize: 32, color: 'grey.500' }} />
+                      <ImageIcon sx={{ fontSize: 48, color: 'grey.500' }} />
                     </Box>
                   )}
                 </Box>
