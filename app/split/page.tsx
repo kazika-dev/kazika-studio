@@ -37,6 +37,7 @@ import {
   Image as ImageIcon,
   Settings as SettingsIcon,
   Close as CloseIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
 import ImageGridSplitDialog from '@/components/prompt-queue/ImageGridSplitDialog';
 import ImageSelectorDialog from '@/components/prompt-queue/ImageSelectorDialog';
@@ -50,6 +51,18 @@ const TEMPLATE_ID = 8;
 const MODEL_OPTIONS = [
   { value: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image (推奨)' },
   { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image Preview (高品質)' },
+];
+
+// プロンプト生成用のGeminiモデル
+const PROMPT_GEN_MODEL_OPTIONS = [
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (推奨)' },
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview (最新)' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (高性能)' },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: 'ja', label: '日本語' },
+  { value: 'en', label: '英語' },
 ];
 
 const ASPECT_RATIO_OPTIONS = [
@@ -130,6 +143,13 @@ export default function SplitPage() {
 
   // 一括適用中
   const [applyingBulk, setApplyingBulk] = useState(false);
+
+  // プロンプト生成設定
+  const [promptGenSettings, setPromptGenSettings] = useState({
+    model: 'gemini-2.5-flash',
+    language: 'en' as 'ja' | 'en',
+  });
+  const [generatingPrompts, setGeneratingPrompts] = useState(false);
 
   // 画像拡大表示用
   const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
@@ -390,6 +410,98 @@ export default function SplitPage() {
     }
   };
 
+  // 一括プロンプト生成
+  const handleBulkGeneratePrompts = async () => {
+    const pendingQueues = queues.filter((q) => q.status === 'pending');
+    if (pendingQueues.length === 0) {
+      alert('待機中のキューがありません');
+      return;
+    }
+
+    // 画像を持つキューのみ対象
+    const queuesWithImages = pendingQueues.filter((q) => q.images && q.images.length > 0);
+    if (queuesWithImages.length === 0) {
+      alert('画像を持つ待機中のキューがありません');
+      return;
+    }
+
+    const languageLabel = promptGenSettings.language === 'ja' ? '日本語' : '英語';
+    if (!confirm(`${queuesWithImages.length}件のキューに対して${languageLabel}でプロンプトを生成しますか？\n\n※各キューの参照画像からプロンプトを自動生成します。`)) return;
+
+    setGeneratingPrompts(true);
+    try {
+      // 各キューの画像を取得してbase64に変換
+      const queueRequests = await Promise.all(
+        queuesWithImages.map(async (queue) => {
+          const images: { mimeType: string; data: string }[] = [];
+
+          for (const img of queue.images.slice(0, 4)) {
+            if (img.image_url) {
+              try {
+                const imageUrl = getImageUrl(img.image_url);
+                const response = await fetch(imageUrl);
+                const blob = await response.blob();
+                const base64 = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const result = reader.result as string;
+                    // data:image/png;base64,... の形式から base64 部分を抽出
+                    const base64Data = result.split(',')[1];
+                    resolve(base64Data);
+                  };
+                  reader.readAsDataURL(blob);
+                });
+                images.push({
+                  mimeType: blob.type || 'image/png',
+                  data: base64,
+                });
+              } catch (error) {
+                console.error(`Failed to fetch image for queue ${queue.id}:`, error);
+              }
+            }
+          }
+
+          return {
+            queueId: queue.id,
+            images,
+          };
+        })
+      );
+
+      // 画像が取得できたキューのみをフィルタ
+      const validRequests = queueRequests.filter((req) => req.images.length > 0);
+
+      if (validRequests.length === 0) {
+        alert('画像を取得できませんでした');
+        setGeneratingPrompts(false);
+        return;
+      }
+
+      const res = await fetch('/api/prompt-queue/bulk-generate-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queues: validRequests,
+          model: promptGenSettings.model,
+          language: promptGenSettings.language,
+        }),
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        alert(`プロンプト生成完了\n成功: ${result.success}件\n失敗: ${result.failed}件`);
+        await fetchQueues();
+      } else {
+        alert(`エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk generate prompts:', error);
+      alert('プロンプト生成に失敗しました');
+    } finally {
+      setGeneratingPrompts(false);
+    }
+  };
+
   const totalOutputPages = Math.ceil(outputTotal / PAGE_SIZE);
 
   return (
@@ -459,6 +571,68 @@ export default function SplitPage() {
             >
               {applyingBulk ? '適用中...' : '全キューに適用'}
             </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* 一括プロンプト生成パネル */}
+      <Paper sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AutoAwesomeIcon />
+          一括プロンプト生成（画像から）
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          待機中のキューの参照画像を分析して、AIが自動的にプロンプトを生成します
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid size={{ xs: 12, md: 3 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>AIモデル</InputLabel>
+              <Select
+                value={promptGenSettings.model}
+                label="AIモデル"
+                onChange={(e) => setPromptGenSettings((prev) => ({ ...prev, model: e.target.value }))}
+              >
+                {PROMPT_GEN_MODEL_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>出力言語</InputLabel>
+              <Select
+                value={promptGenSettings.language}
+                label="出力言語"
+                onChange={(e) => setPromptGenSettings((prev) => ({ ...prev, language: e.target.value as 'ja' | 'en' }))}
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid size={{ xs: 12, md: 3 }}>
+            <Button
+              variant="contained"
+              color="secondary"
+              fullWidth
+              onClick={handleBulkGeneratePrompts}
+              disabled={generatingPrompts}
+              startIcon={generatingPrompts ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+            >
+              {generatingPrompts ? 'プロンプト生成中...' : '画像からプロンプト生成'}
+            </Button>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Typography variant="caption" color="text.secondary">
+              ※ 待機中キューの参照画像（最大4枚）を分析してプロンプトを生成します
+            </Typography>
           </Grid>
         </Grid>
       </Paper>
