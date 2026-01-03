@@ -24,6 +24,8 @@ import {
   Avatar,
   Dialog,
   DialogContent,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   GridOn as GridIcon,
@@ -151,6 +153,36 @@ export default function SplitPage() {
     basePrompt: '',
   });
   const [generatingPrompts, setGeneratingPrompts] = useState(false);
+
+  // プロンプト生成対象の選択
+  const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set());
+
+  // 選択可能なキュー（待機中かつ画像あり）
+  const selectableQueues = queues.filter((q) => q.status === 'pending' && q.images && q.images.length > 0);
+
+  // キュー選択のトグル
+  const handleToggleQueueSelection = (queueId: number) => {
+    setSelectedQueueIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(queueId)) {
+        newSet.delete(queueId);
+      } else {
+        newSet.add(queueId);
+      }
+      return newSet;
+    });
+  };
+
+  // 全選択/全解除
+  const handleSelectAllQueues = () => {
+    if (selectedQueueIds.size === selectableQueues.length) {
+      // 全解除
+      setSelectedQueueIds(new Set());
+    } else {
+      // 全選択
+      setSelectedQueueIds(new Set(selectableQueues.map((q) => q.id)));
+    }
+  };
 
   // 画像拡大表示用
   const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
@@ -415,27 +447,28 @@ export default function SplitPage() {
 
   // 一括プロンプト生成
   const handleBulkGeneratePrompts = async () => {
-    const pendingQueues = queues.filter((q) => q.status === 'pending');
-    if (pendingQueues.length === 0) {
-      alert('待機中のキューがありません');
-      return;
+    // 選択されたキューが対象（選択がなければ全ての選択可能なキューが対象）
+    let targetQueues: PromptQueueWithImages[];
+    if (selectedQueueIds.size > 0) {
+      targetQueues = queues.filter((q) => selectedQueueIds.has(q.id));
+    } else {
+      // 選択がない場合は選択可能なキュー全て
+      targetQueues = selectableQueues;
     }
 
-    // 画像を持つキューのみ対象
-    const queuesWithImages = pendingQueues.filter((q) => q.images && q.images.length > 0);
-    if (queuesWithImages.length === 0) {
-      alert('画像を持つ待機中のキューがありません');
+    if (targetQueues.length === 0) {
+      alert('プロンプト生成対象のキューがありません。\n待機中かつ画像を持つキューを選択してください。');
       return;
     }
 
     const languageLabel = promptGenSettings.language === 'ja' ? '日本語' : '英語';
-    if (!confirm(`${queuesWithImages.length}件のキューに対して${languageLabel}でプロンプトを生成しますか？\n\n※各キューの参照画像からプロンプトを自動生成します。`)) return;
+    if (!confirm(`${targetQueues.length}件のキューに対して${languageLabel}でプロンプトを生成しますか？\n\n※各キューの参照画像からプロンプトを自動生成します。`)) return;
 
     setGeneratingPrompts(true);
     try {
       // 各キューの画像を取得してbase64に変換
       const queueRequests = await Promise.all(
-        queuesWithImages.map(async (queue) => {
+        targetQueues.map(async (queue) => {
           const images: { mimeType: string; data: string }[] = [];
 
           for (const img of queue.images.slice(0, 4)) {
@@ -581,12 +614,27 @@ export default function SplitPage() {
 
       {/* 一括プロンプト生成パネル */}
       <Paper sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <AutoAwesomeIcon />
-          一括プロンプト生成（画像から）
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AutoAwesomeIcon />
+            一括プロンプト生成（画像から）
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              対象: {selectedQueueIds.size > 0 ? `${selectedQueueIds.size}件選択中` : `全${selectableQueues.length}件`}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleSelectAllQueues}
+              disabled={selectableQueues.length === 0}
+            >
+              {selectedQueueIds.size === selectableQueues.length && selectableQueues.length > 0 ? '全解除' : '全選択'}
+            </Button>
+          </Box>
+        </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          待機中のキューの参照画像を分析して、AIが自動的にプロンプトを生成します
+          待機中のキューの参照画像を分析して、AIが自動的にプロンプトを生成します（下のキュー一覧でチェックして対象を選択）
         </Typography>
         <Grid container spacing={2} alignItems="flex-start">
           <Grid size={{ xs: 12, md: 2 }}>
@@ -639,11 +687,11 @@ export default function SplitPage() {
               color="secondary"
               fullWidth
               onClick={handleBulkGeneratePrompts}
-              disabled={generatingPrompts}
+              disabled={generatingPrompts || selectableQueues.length === 0}
               startIcon={generatingPrompts ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
               sx={{ height: 56 }}
             >
-              {generatingPrompts ? 'プロンプト生成中...' : '画像からプロンプト生成'}
+              {generatingPrompts ? 'プロンプト生成中...' : `プロンプト生成 (${selectedQueueIds.size > 0 ? selectedQueueIds.size : selectableQueues.length}件)`}
             </Button>
           </Grid>
         </Grid>
@@ -758,16 +806,29 @@ export default function SplitPage() {
           </Typography>
         ) : (
           <List>
-            {queues.map((queue) => (
+            {queues.map((queue) => {
+              const isSelectable = queue.status === 'pending' && queue.images && queue.images.length > 0;
+              const isSelected = selectedQueueIds.has(queue.id);
+
+              return (
               <ListItem
                 key={queue.id}
                 sx={{
-                  border: '1px solid #e0e0e0',
+                  border: isSelected ? '2px solid #9c27b0' : '1px solid #e0e0e0',
                   borderRadius: 1,
                   mb: 1,
-                  bgcolor: 'background.paper',
+                  bgcolor: isSelected ? 'rgba(156, 39, 176, 0.05)' : 'background.paper',
                 }}
               >
+                {/* プロンプト生成対象選択チェックボックス */}
+                {isSelectable && (
+                  <Checkbox
+                    checked={isSelected}
+                    onChange={() => handleToggleQueueSelection(queue.id)}
+                    sx={{ mr: 1 }}
+                    color="secondary"
+                  />
+                )}
                 {/* 分割元画像（大きめに表示） */}
                 {queue.source_output_url && (
                   <Tooltip title="分割元画像（クリックで拡大）">
@@ -971,7 +1032,8 @@ export default function SplitPage() {
                   </Box>
                 </ListItemSecondaryAction>
               </ListItem>
-            ))}
+              );
+            })}
           </List>
         )}
       </Paper>
