@@ -157,8 +157,10 @@ export default function SplitPage() {
   // プロンプト生成対象の選択
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set());
 
-  // 選択可能なキュー（待機中かつ画像あり）
-  const selectableQueues = queues.filter((q) => q.status === 'pending' && q.images && q.images.length > 0);
+  // 選択可能なキュー（画像あり、完了・キャンセル以外）
+  const selectableQueues = queues.filter(
+    (q) => q.images && q.images.length > 0 && q.status !== 'completed' && q.status !== 'cancelled'
+  );
 
   // キュー選択のトグル
   const handleToggleQueueSelection = (queueId: number) => {
@@ -634,7 +636,7 @@ export default function SplitPage() {
           </Box>
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          待機中のキューの参照画像を分析して、AIが自動的にプロンプトを生成します（下のキュー一覧でチェックして対象を選択）
+          キューの参照画像を分析して、AIが自動的にプロンプトを生成します（下のキュー一覧でチェックして対象を選択、enhanced_promptに保存）
         </Typography>
         <Grid container spacing={2} alignItems="flex-start">
           <Grid size={{ xs: 12, md: 2 }}>
@@ -807,7 +809,9 @@ export default function SplitPage() {
         ) : (
           <List>
             {queues.map((queue) => {
-              const isSelectable = queue.status === 'pending' && queue.images && queue.images.length > 0;
+              // 画像あり、完了・キャンセル以外なら選択可能
+              const isSelectable =
+                queue.images && queue.images.length > 0 && queue.status !== 'completed' && queue.status !== 'cancelled';
               const isSelected = selectedQueueIds.has(queue.id);
 
               return (

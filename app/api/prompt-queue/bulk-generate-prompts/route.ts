@@ -131,10 +131,10 @@ Analyze the reference image(s) and output an English prompt for image generation
         const generatedPrompt = result.response.text().trim();
         console.log(`Queue ${queueRequest.queueId}: Generated prompt: ${generatedPrompt.substring(0, 150)}...`);
 
-        // データベースを更新
+        // データベースを更新（enhanced_prompt に保存、enhance_prompt を 'enhance' に設定）
         await query(
           `UPDATE kazikastudio.prompt_queues
-           SET prompt = $1, updated_at = NOW()
+           SET enhanced_prompt = $1, enhance_prompt = 'enhance', updated_at = NOW()
            WHERE id = $2 AND user_id = $3`,
           [generatedPrompt, queueRequest.queueId, user.id]
         );
