@@ -22,6 +22,8 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Avatar,
+  Dialog,
+  DialogContent,
 } from '@mui/material';
 import {
   GridOn as GridIcon,
@@ -128,6 +130,9 @@ export default function SplitPage() {
 
   // 一括適用中
   const [applyingBulk, setApplyingBulk] = useState(false);
+
+  // 画像拡大表示用
+  const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
 
   // 初期ロード
   useEffect(() => {
@@ -574,27 +579,33 @@ export default function SplitPage() {
               >
                 {/* 分割元画像 */}
                 {queue.source_output_url && (
-                  <Tooltip title="分割元画像">
+                  <Tooltip title="分割元画像（クリックで拡大）">
                     <Avatar
                       src={getImageUrl(queue.source_output_url)}
                       variant="rounded"
+                      onClick={() => setEnlargedImageUrl(getImageUrl(queue.source_output_url!))}
                       sx={{
                         width: 40,
                         height: 40,
                         mr: 1,
                         border: '2px solid #e91e63',
                         opacity: 0.8,
+                        cursor: 'pointer',
+                        '&:hover': { opacity: 1 },
                       }}
                     />
                   </Tooltip>
                 )}
                 <ListItemAvatar>
                   {queue.images.length > 0 && queue.images[0].image_url ? (
-                    <Avatar
-                      src={getImageUrl(queue.images[0].image_url)}
-                      variant="rounded"
-                      sx={{ width: 56, height: 56 }}
-                    />
+                    <Tooltip title="クリックで拡大">
+                      <Avatar
+                        src={getImageUrl(queue.images[0].image_url)}
+                        variant="rounded"
+                        onClick={() => setEnlargedImageUrl(getImageUrl(queue.images[0].image_url!))}
+                        sx={{ width: 56, height: 56, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
+                      />
+                    </Tooltip>
                   ) : (
                     <Avatar variant="rounded" sx={{ width: 56, height: 56, bgcolor: 'grey.300' }}>
                       <ImageIcon />
@@ -635,14 +646,16 @@ export default function SplitPage() {
                       {/* 参照画像サムネイル */}
                       <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
                         {queue.images.map((img, idx) => (
-                          <Tooltip key={idx} title={`${img.image_type}: ${img.name || img.reference_id}`}>
+                          <Tooltip key={idx} title={`${img.image_type}: ${img.name || img.reference_id}（クリックで拡大）`}>
                             <Box
+                              onClick={() => img.image_url && setEnlargedImageUrl(getImageUrl(img.image_url))}
                               sx={{
                                 position: 'relative',
                                 width: 32,
                                 height: 32,
                                 borderRadius: 0.5,
                                 overflow: 'hidden',
+                                cursor: img.image_url ? 'pointer' : 'default',
                                 border: `2px solid ${
                                   img.image_type === 'character_sheet'
                                     ? '#1976d2'
@@ -652,6 +665,7 @@ export default function SplitPage() {
                                     ? '#9c27b0'
                                     : '#ff9800'
                                 }`,
+                                '&:hover': img.image_url ? { opacity: 0.8 } : {},
                               }}
                             >
                               {img.image_url ? (
@@ -682,7 +696,10 @@ export default function SplitPage() {
                               )}
                               <IconButton
                                 size="small"
-                                onClick={() => handleRemoveImage(queue.id, img.image_type, img.reference_id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(queue.id, img.image_type, img.reference_id);
+                                }}
                                 sx={{
                                   position: 'absolute',
                                   top: -8,
@@ -798,6 +815,49 @@ export default function SplitPage() {
           </Paper>
         </Box>
       )}
+
+      {/* 画像拡大ダイアログ */}
+      <Dialog
+        open={!!enlargedImageUrl}
+        onClose={() => setEnlargedImageUrl(null)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogContent
+          sx={{
+            p: 1,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            bgcolor: 'black',
+            position: 'relative',
+          }}
+        >
+          <IconButton
+            onClick={() => setEnlargedImageUrl(null)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              bgcolor: 'rgba(255,255,255,0.8)',
+              '&:hover': { bgcolor: 'rgba(255,255,255,1)' },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+          {enlargedImageUrl && (
+            <img
+              src={enlargedImageUrl}
+              alt="拡大画像"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }
