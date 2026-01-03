@@ -55,8 +55,8 @@ const MODEL_OPTIONS = [
 
 // プロンプト生成用のGeminiモデル
 const PROMPT_GEN_MODEL_OPTIONS = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (推奨)' },
-  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview (最新)' },
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview (推奨)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (高速)' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (高性能)' },
 ];
 
@@ -146,7 +146,7 @@ export default function SplitPage() {
 
   // プロンプト生成設定
   const [promptGenSettings, setPromptGenSettings] = useState({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3-pro-preview',
     language: 'en' as 'ja' | 'en',
   });
   const [generatingPrompts, setGeneratingPrompts] = useState(false);
