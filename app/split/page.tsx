@@ -157,10 +157,13 @@ export default function SplitPage() {
   // プロンプト生成対象の選択
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set());
 
-  // 選択可能なキュー（画像あり、完了・キャンセル以外）
-  const selectableQueues = queues.filter(
-    (q) => q.images && q.images.length > 0 && q.status !== 'completed' && q.status !== 'cancelled'
+  // 表示するキュー（source_output_id > 0 かつ status === 'pending'）
+  const displayQueues = queues.filter(
+    (q) => q.source_output_id && q.source_output_id > 0 && q.status === 'pending'
   );
+
+  // 選択可能なキュー（表示キューの中で画像あり）
+  const selectableQueues = displayQueues.filter((q) => q.images && q.images.length > 0);
 
   // キュー選択のトグル
   const handleToggleQueueSelection = (queueId: number) => {
@@ -791,7 +794,7 @@ export default function SplitPage() {
       <Paper sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">
-            登録済みキュー（{queues.length}件）
+            登録済みキュー（{displayQueues.length}件）
           </Typography>
           <IconButton onClick={fetchQueues} size="small">
             <RefreshIcon />
@@ -802,16 +805,15 @@ export default function SplitPage() {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
-        ) : queues.length === 0 ? (
+        ) : displayQueues.length === 0 ? (
           <Typography color="text.secondary" textAlign="center" py={4}>
             キューがありません。上の画像をクリックして分割・登録してください。
           </Typography>
         ) : (
           <List>
-            {queues.map((queue) => {
-              // 画像あり、完了・キャンセル以外なら選択可能
-              const isSelectable =
-                queue.images && queue.images.length > 0 && queue.status !== 'completed' && queue.status !== 'cancelled';
+            {displayQueues.map((queue) => {
+              // 画像ありなら選択可能
+              const isSelectable = queue.images && queue.images.length > 0;
               const isSelected = selectedQueueIds.has(queue.id);
 
               return (
