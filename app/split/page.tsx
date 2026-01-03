@@ -159,11 +159,11 @@ export default function SplitPage() {
     fetchOutputs();
   }, [outputPage, fetchOutputs]);
 
-  // キュー一覧取得
+  // キュー一覧取得（分割で作成されたもののみ）
   const fetchQueues = async () => {
     setLoadingQueues(true);
     try {
-      const res = await fetch('/api/prompt-queue?limit=100');
+      const res = await fetch('/api/prompt-queue?limit=100&hasSplitSource=true');
       if (res.ok) {
         const data = await res.json();
         setQueues(data.queues || []);
@@ -223,7 +223,7 @@ export default function SplitPage() {
         if (saveRes.ok) {
           const { output } = await saveRes.json();
 
-          // 2. prompt-queueに登録
+          // 2. prompt-queueに登録（source_output_idで分割元を記録）
           await fetch('/api/prompt-queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -232,6 +232,7 @@ export default function SplitPage() {
               prompt: bulkSettings.prompt,
               model: bulkSettings.model,
               aspect_ratio: bulkSettings.aspectRatio,
+              source_output_id: selectedOutput?.id,
               images: [{ image_type: 'output', reference_id: output.id }],
             }),
           });
@@ -570,6 +571,22 @@ export default function SplitPage() {
                   bgcolor: 'background.paper',
                 }}
               >
+                {/* 分割元画像 */}
+                {queue.source_output_url && (
+                  <Tooltip title="分割元画像">
+                    <Avatar
+                      src={getImageUrl(queue.source_output_url)}
+                      variant="rounded"
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        mr: 1,
+                        border: '2px solid #e91e63',
+                        opacity: 0.8,
+                      }}
+                    />
+                  </Tooltip>
+                )}
                 <ListItemAvatar>
                   {queue.images.length > 0 && queue.images[0].image_url ? (
                     <Avatar

@@ -2135,42 +2135,58 @@ export async function getPromptQueuesByUserId(
   userId: string,
   options?: {
     status?: PromptQueueStatus;
+    hasSplitSource?: boolean;  // true: source_output_idがあるものだけ、false: ないものだけ
     limit?: number;
     offset?: number;
   }
 ): Promise<{ queues: PromptQueueWithImages[]; total: number }> {
-  const { status, limit = 50, offset = 0 } = options || {};
+  const { status, hasSplitSource, limit = 50, offset = 0 } = options || {};
 
   // 件数取得
   let countQuery = `SELECT COUNT(*) as count FROM kazikastudio.prompt_queues WHERE user_id = $1`;
   const countParams: any[] = [userId];
+  let countParamIndex = 2;
 
   if (status) {
-    countQuery += ` AND status = $2`;
+    countQuery += ` AND status = $${countParamIndex++}`;
     countParams.push(status);
+  }
+
+  if (hasSplitSource === true) {
+    countQuery += ` AND source_output_id IS NOT NULL`;
+  } else if (hasSplitSource === false) {
+    countQuery += ` AND source_output_id IS NULL`;
   }
 
   const countResult = await query(countQuery, countParams);
   const total = parseInt(countResult.rows[0].count, 10);
 
-  // キュー取得
+  // キュー取得（source_output_idがある場合はその画像URLも取得）
   let queuesQuery = `
-    SELECT * FROM kazikastudio.prompt_queues
-    WHERE user_id = $1
+    SELECT pq.*, wo.content_url as source_output_url
+    FROM kazikastudio.prompt_queues pq
+    LEFT JOIN kazikastudio.workflow_outputs wo ON pq.source_output_id = wo.id
+    WHERE pq.user_id = $1
   `;
   const queuesParams: any[] = [userId];
   let paramIndex = 2;
 
   if (status) {
-    queuesQuery += ` AND status = $${paramIndex++}`;
+    queuesQuery += ` AND pq.status = $${paramIndex++}`;
     queuesParams.push(status);
   }
 
-  queuesQuery += ` ORDER BY priority DESC, created_at ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+  if (hasSplitSource === true) {
+    queuesQuery += ` AND pq.source_output_id IS NOT NULL`;
+  } else if (hasSplitSource === false) {
+    queuesQuery += ` AND pq.source_output_id IS NULL`;
+  }
+
+  queuesQuery += ` ORDER BY pq.priority DESC, pq.created_at ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
   queuesParams.push(limit, offset);
 
   const queuesResult = await query(queuesQuery, queuesParams);
-  const queues = queuesResult.rows as PromptQueue[];
+  const queues = queuesResult.rows as (PromptQueue & { source_output_url?: string | null })[];
 
   // 各キューの参照画像を取得
   const queuesWithImages: PromptQueueWithImages[] = await Promise.all(
@@ -2266,6 +2282,7 @@ export async function createPromptQueue(
     priority?: number;
     enhance_prompt?: PromptEnhanceMode;
     enhanced_prompt?: string | null;
+    source_output_id?: number;
     metadata?: Record<string, any>;
     images?: { image_type: PromptQueueImageType; reference_id: number }[];
   }
@@ -2279,8 +2296,8 @@ export async function createPromptQueue(
     // キューを作成
     const queueResult = await client.query(
       `INSERT INTO kazikastudio.prompt_queues
-       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, enhance_prompt, enhanced_prompt, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (user_id, name, prompt, negative_prompt, model, aspect_ratio, priority, enhance_prompt, enhanced_prompt, source_output_id, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         userId,
@@ -2292,6 +2309,7 @@ export async function createPromptQueue(
         data.priority || 0,
         data.enhance_prompt || 'none',
         data.enhanced_prompt || null,
+        data.source_output_id || null,
         JSON.stringify(data.metadata || {}),
       ]
     );

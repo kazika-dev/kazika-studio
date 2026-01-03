@@ -27,6 +27,7 @@ export interface PromptQueue {
   metadata: Record<string, any>;
   error_message: string | null;
   output_id: number | null;
+  source_output_id: number | null;     // 分割元のworkflow_outputs.id（/splitページで使用）
   created_at: string;
   updated_at: string;
   executed_at: string | null;
@@ -52,6 +53,7 @@ export interface PromptQueueImageWithDetails extends PromptQueueImage {
 export interface PromptQueueWithImages extends PromptQueue {
   images: PromptQueueImageWithDetails[];
   image_count: number;
+  source_output_url?: string | null;  // 分割元画像のURL（JOINで取得）
 }
 
 // --- リクエスト/レスポンス型 ---
@@ -66,6 +68,7 @@ export interface CreatePromptQueueRequest {
   priority?: number;
   enhance_prompt?: PromptEnhanceMode;
   enhanced_prompt?: string | null;  // 補完後のプロンプト（作成時に補完した場合）
+  source_output_id?: number;        // 分割元のworkflow_outputs.id（/splitページで使用）
   images?: {
     image_type: PromptQueueImageType;
     reference_id: number;

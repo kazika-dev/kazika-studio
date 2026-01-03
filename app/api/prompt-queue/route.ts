@@ -23,12 +23,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as PromptQueueStatus | null;
+    const hasSplitSourceParam = searchParams.get('hasSplitSource');
+    const hasSplitSource = hasSplitSourceParam === 'true' ? true : hasSplitSourceParam === 'false' ? false : undefined;
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const offset = (page - 1) * limit;
 
     const { queues, total } = await getPromptQueuesByUserId(user.id, {
       status: status || undefined,
+      hasSplitSource,
       limit,
       offset,
     });
@@ -113,6 +116,7 @@ export async function POST(request: NextRequest) {
       priority: body.priority,
       enhance_prompt: body.enhance_prompt,
       enhanced_prompt: body.enhanced_prompt,
+      source_output_id: body.source_output_id,
       metadata: body.metadata,
       images: body.images,
     });
