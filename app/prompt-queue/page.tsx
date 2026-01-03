@@ -23,6 +23,7 @@ import {
   Refresh as RefreshIcon,
   CheckBox as CheckBoxIcon,
   Settings as SettingsIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
 import type {
   PromptQueueWithImages,
@@ -33,6 +34,7 @@ import type {
 import PromptQueueCard from '@/components/prompt-queue/PromptQueueCard';
 import PromptQueueDialog from '@/components/prompt-queue/PromptQueueDialog';
 import BulkSettingsDialog, { BulkUpdateData } from '@/components/prompt-queue/BulkSettingsDialog';
+import BulkGenerateDialog from '@/components/prompt-queue/BulkGenerateDialog';
 
 export default function PromptQueuePage() {
   const [queues, setQueues] = useState<PromptQueueWithImages[]>([]);
@@ -52,6 +54,7 @@ export default function PromptQueuePage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkSettingsOpen, setBulkSettingsOpen] = useState(false);
+  const [bulkGenerateOpen, setBulkGenerateOpen] = useState(false);
 
   const fetchQueues = useCallback(async () => {
     setLoading(true);
@@ -265,6 +268,14 @@ export default function PromptQueuePage() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
+            variant="outlined"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => setBulkGenerateOpen(true)}
+            color="secondary"
+          >
+            一括生成
+          </Button>
+          <Button
             variant={selectionMode ? 'contained' : 'outlined'}
             startIcon={<CheckBoxIcon />}
             onClick={handleToggleSelectionMode}
@@ -402,6 +413,20 @@ export default function PromptQueuePage() {
         }}
         selectedQueues={selectedQueues}
         onApply={handleBulkApply}
+      />
+
+      {/* 一括プロンプト生成ダイアログ */}
+      <BulkGenerateDialog
+        open={bulkGenerateOpen}
+        onClose={() => setBulkGenerateOpen(false)}
+        onSuccess={() => {
+          fetchQueues();
+          setSnackbar({
+            open: true,
+            message: 'プロンプトを生成してキューに追加しました',
+            severity: 'success',
+          });
+        }}
       />
 
       {/* スナックバー */}
