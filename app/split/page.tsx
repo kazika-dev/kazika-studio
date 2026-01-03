@@ -277,26 +277,31 @@ export default function SplitPage() {
       return;
     }
 
-    // 既存の画像に新しい画像を追加
+    // 既存の画像に新しい画像を追加（reference_id を確実に数値に変換）
     const existingImages = queue.images.map((img) => ({
       image_type: img.image_type,
-      reference_id: img.reference_id,
+      reference_id: typeof img.reference_id === 'number' ? img.reference_id : parseInt(String(img.reference_id), 10),
     }));
 
     const newImages = [
       ...existingImages,
       ...selectedImages.map((img) => ({
         image_type: img.image_type,
-        reference_id: img.reference_id,
+        reference_id: typeof img.reference_id === 'number' ? img.reference_id : parseInt(String(img.reference_id), 10),
       })),
     ];
 
     try {
-      await fetch(`/api/prompt-queue/${editingQueueId}`, {
+      console.log('Updating queue images:', { queueId: editingQueueId, images: newImages });
+      const res = await fetch(`/api/prompt-queue/${editingQueueId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ images: newImages }),
       });
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('Failed to update queue images:', res.status, errorData);
+      }
       await fetchQueues();
     } catch (error) {
       console.error('Failed to update queue images:', error);
@@ -315,7 +320,7 @@ export default function SplitPage() {
       .filter((img) => !(img.image_type === imageType && img.reference_id === referenceId))
       .map((img) => ({
         image_type: img.image_type,
-        reference_id: img.reference_id,
+        reference_id: typeof img.reference_id === 'number' ? img.reference_id : parseInt(String(img.reference_id), 10),
       }));
 
     try {
@@ -518,7 +523,7 @@ export default function SplitPage() {
                 >
                   <img
                     src={getImageUrl(output.content_url)}
-                    alt={output.metadata?.name || `Output #${output.id}`}
+                    alt={(output.metadata?.name as string) || `Output #${output.id}`}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                   <Box
@@ -577,41 +582,71 @@ export default function SplitPage() {
                   bgcolor: 'background.paper',
                 }}
               >
-                {/* 分割元画像 */}
+                {/* 分割元画像（大きめに表示） */}
                 {queue.source_output_url && (
                   <Tooltip title="分割元画像（クリックで拡大）">
-                    <Avatar
-                      src={getImageUrl(queue.source_output_url)}
-                      variant="rounded"
+                    <Box
                       onClick={() => setEnlargedImageUrl(getImageUrl(queue.source_output_url!))}
                       sx={{
-                        width: 40,
-                        height: 40,
-                        mr: 1,
-                        border: '2px solid #e91e63',
-                        opacity: 0.8,
+                        width: 80,
+                        height: 80,
+                        mr: 2,
+                        borderRadius: 1,
+                        border: '3px solid #e91e63',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        opacity: 0.9,
                         cursor: 'pointer',
-                        '&:hover': { opacity: 1 },
+                        '&:hover': { opacity: 1, borderColor: '#c2185b' },
                       }}
-                    />
+                    >
+                      <img
+                        src={getImageUrl(queue.source_output_url)}
+                        alt="分割元"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </Box>
                   </Tooltip>
                 )}
-                <ListItemAvatar>
+                {/* メインサムネイル（大きめに表示） */}
+                <Box sx={{ flexShrink: 0, mr: 2 }}>
                   {queue.images.length > 0 && queue.images[0].image_url ? (
                     <Tooltip title="クリックで拡大">
-                      <Avatar
-                        src={getImageUrl(queue.images[0].image_url)}
-                        variant="rounded"
+                      <Box
                         onClick={() => setEnlargedImageUrl(getImageUrl(queue.images[0].image_url!))}
-                        sx={{ width: 56, height: 56, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
-                      />
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: '2px solid #1976d2',
+                          '&:hover': { opacity: 0.8, borderColor: '#1565c0' },
+                        }}
+                      >
+                        <img
+                          src={getImageUrl(queue.images[0].image_url)}
+                          alt="メイン"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </Box>
                     </Tooltip>
                   ) : (
-                    <Avatar variant="rounded" sx={{ width: 56, height: 56, bgcolor: 'grey.300' }}>
-                      <ImageIcon />
-                    </Avatar>
+                    <Box
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 1,
+                        bgcolor: 'grey.300',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <ImageIcon sx={{ fontSize: 32, color: 'grey.500' }} />
+                    </Box>
                   )}
-                </ListItemAvatar>
+                </Box>
 
                 <ListItemText
                   sx={{ ml: 2 }}
@@ -764,7 +799,7 @@ export default function SplitPage() {
             setSelectedOutput(null);
           }}
           imageUrl={getImageUrl(selectedOutput.content_url)}
-          imageName={selectedOutput.metadata?.name || `Output_${selectedOutput.id}`}
+          imageName={(selectedOutput.metadata?.name as string) || `Output_${selectedOutput.id}`}
           onSelectSplitImages={handleSelectSplitImages}
           maxSelections={99}
         />

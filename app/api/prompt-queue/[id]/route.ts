@@ -88,6 +88,8 @@ export async function PUT(
 
     const body: UpdatePromptQueueRequest = await request.json();
 
+    console.log('[PUT /api/prompt-queue] Received body:', JSON.stringify(body, null, 2));
+
     // 画像数のバリデーション
     if (body.images && body.images.length > 8) {
       return NextResponse.json(
@@ -98,19 +100,32 @@ export async function PUT(
 
     // 画像のバリデーション
     if (body.images) {
-      for (const img of body.images) {
+      for (let i = 0; i < body.images.length; i++) {
+        const img = body.images[i];
+        console.log(`[PUT /api/prompt-queue] Image ${i}:`, {
+          image_type: img.image_type,
+          reference_id: img.reference_id,
+          reference_id_type: typeof img.reference_id
+        });
+
         if (!['character_sheet', 'output', 'scene', 'prop'].includes(img.image_type)) {
+          console.log(`[PUT /api/prompt-queue] Invalid image_type: ${img.image_type}`);
           return NextResponse.json(
             { error: `Invalid image_type: ${img.image_type}` },
             { status: 400 }
           );
         }
-        if (!img.reference_id || typeof img.reference_id !== 'number') {
+        // reference_id は数値または数値文字列を許容
+        const refId = typeof img.reference_id === 'string' ? parseInt(img.reference_id, 10) : img.reference_id;
+        if (!refId || typeof refId !== 'number' || isNaN(refId)) {
+          console.log(`[PUT /api/prompt-queue] Invalid reference_id:`, img.reference_id, typeof img.reference_id);
           return NextResponse.json(
-            { error: 'reference_id must be a number' },
+            { error: `reference_id must be a number, got: ${img.reference_id} (${typeof img.reference_id})` },
             { status: 400 }
           );
         }
+        // 数値に変換して格納
+        img.reference_id = refId;
       }
     }
 

@@ -193,19 +193,27 @@ export default function ImageSelectorDialog({
   }, [tabValue, csPage, outputPage, scenePage, propPage]);
 
   const handleToggleImage = (image: SelectedImage) => {
+    // reference_id を確実に数値に変換
+    const normalizedImage = {
+      ...image,
+      reference_id: typeof image.reference_id === 'number'
+        ? image.reference_id
+        : parseInt(String(image.reference_id), 10),
+    };
+
     setSelectedImages((prev) => {
       const exists = prev.some(
-        (img) => img.image_type === image.image_type && img.reference_id === image.reference_id
+        (img) => img.image_type === normalizedImage.image_type && img.reference_id === normalizedImage.reference_id
       );
       if (exists) {
         return prev.filter(
-          (img) => !(img.image_type === image.image_type && img.reference_id === image.reference_id)
+          (img) => !(img.image_type === normalizedImage.image_type && img.reference_id === normalizedImage.reference_id)
         );
       }
       if (prev.length >= maxSelections) {
         return prev;
       }
-      return [...prev, image];
+      return [...prev, normalizedImage];
     });
   };
 
