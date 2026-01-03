@@ -218,19 +218,22 @@ export default function ImageSelectorDialog({
   };
 
   const isSelected = (imageType: PromptQueueImageType, referenceId: number) => {
+    // reference_id の型を正規化して比較
+    const normalizedRefId = typeof referenceId === 'number' ? referenceId : parseInt(String(referenceId), 10);
     return (
       selectedImages.some(
-        (img) => img.image_type === imageType && img.reference_id === referenceId
+        (img) => img.image_type === imageType && Number(img.reference_id) === normalizedRefId
       ) ||
       currentSelections.some(
-        (img) => img.image_type === imageType && img.reference_id === referenceId
+        (img) => img.image_type === imageType && Number(img.reference_id) === normalizedRefId
       )
     );
   };
 
   const isAlreadySelected = (imageType: PromptQueueImageType, referenceId: number) => {
+    const normalizedRefId = typeof referenceId === 'number' ? referenceId : parseInt(String(referenceId), 10);
     return currentSelections.some(
-      (img) => img.image_type === imageType && img.reference_id === referenceId
+      (img) => img.image_type === imageType && Number(img.reference_id) === normalizedRefId
     );
   };
 
