@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const originalOutputId = formData.get('originalOutputId') as string | null;
     const customPrompt = formData.get('prompt') as string | null;
+    const isSplitImage = formData.get('is_split_image') === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         prompt,
         metadata,
         favorite: false,
+        is_split_image: isSplitImage,
       })
       .select()
       .single();

@@ -137,12 +137,12 @@ export default function SplitPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Output画像一覧取得
+  // Output画像一覧取得（分割画像は除外）
   const fetchOutputs = useCallback(async () => {
     setLoadingOutputs(true);
     try {
       const offset = outputPage * PAGE_SIZE;
-      const res = await fetch(`/api/outputs?type=image&limit=${PAGE_SIZE}&offset=${offset}`);
+      const res = await fetch(`/api/outputs?type=image&limit=${PAGE_SIZE}&offset=${offset}&exclude_split=true`);
       if (res.ok) {
         const data = await res.json();
         setOutputs(data.outputs || []);
@@ -211,6 +211,7 @@ export default function SplitPage() {
         const formData = new FormData();
         formData.append('file', blob, `${img.name}.png`);
         formData.append('prompt', `Split: ${img.name}`);
+        formData.append('is_split_image', 'true');
         if (selectedOutput?.id) {
           formData.append('originalOutputId', selectedOutput.id.toString());
         }

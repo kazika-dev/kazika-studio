@@ -96,6 +96,12 @@ export async function GET(request: NextRequest) {
       conditions.push(`favorite = true`);
     }
 
+    // 分割画像を除外するフィルタ
+    const excludeSplit = searchParams.get('exclude_split');
+    if (excludeSplit === 'true') {
+      conditions.push(`(is_split_image IS NULL OR is_split_image = false)`);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     // 総件数を取得
