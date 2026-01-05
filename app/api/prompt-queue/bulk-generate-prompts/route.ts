@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // モデル名のバリデーション
-    const validModels = GEMINI_MODEL_OPTIONS.map((m) => m.value);
+    const validModels = GEMINI_MODEL_OPTIONS.map((m) => m.value) as string[];
     if (!validModels.includes(model)) {
       return NextResponse.json(
         { error: `Invalid model. Valid options: ${validModels.join(', ')}` },
