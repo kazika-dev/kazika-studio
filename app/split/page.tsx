@@ -48,6 +48,51 @@ import type { PromptQueueWithImages, PromptQueueImageType } from '@/types/prompt
 const PAGE_SIZE = 12;
 const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
 const DEFAULT_ASPECT_RATIO = '9:16';
+
+// クライアント側で画像を圧縮するヘルパー関数
+async function compressImageClient(
+  base64Data: string,
+  mimeType: string,
+  maxSizeKB: number = 500
+): Promise<{ data: string; mimeType: string }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+
+      // 最大1024pxにリサイズ
+      const maxDim = 1024;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      // JPEG品質を調整して目標サイズに近づける
+      let quality = 0.8;
+      let result = canvas.toDataURL('image/jpeg', quality);
+
+      while (result.length > maxSizeKB * 1024 * 1.37 && quality > 0.1) {
+        quality -= 0.1;
+        result = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      const compressedBase64 = result.split(',')[1];
+      resolve({ data: compressedBase64, mimeType: 'image/jpeg' });
+    };
+    img.src = `data:${mimeType};base64,${base64Data}`;
+  });
+}
 const TEMPLATE_ID = 8;
 
 const MODEL_OPTIONS = [
@@ -492,9 +537,11 @@ export default function SplitPage() {
                   };
                   reader.readAsDataURL(blob);
                 });
+                // 画像を圧縮（各画像500KB以下に）
+                const compressed = await compressImageClient(base64, blob.type || 'image/png', 500);
                 images.push({
-                  mimeType: blob.type || 'image/png',
-                  data: base64,
+                  mimeType: compressed.mimeType,
+                  data: compressed.data,
                 });
               } catch (error) {
                 console.error(`Failed to fetch image for queue ${queue.id}:`, error);
