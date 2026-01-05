@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { LogOut, User, Workflow, Home, Image, Video, MessageCircle, Database, Key, Menu as MenuIcon, X, ListOrdered } from 'lucide-react';
+import { LogOut, User, Workflow, Home, Image, Video, MessageCircle, Database, Key, Menu as MenuIcon, X, ListOrdered, Scissors } from 'lucide-react';
 
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/studios', label: 'スタジオ', icon: Video, matchExact: false },
   { href: '/conversationsfocus', label: '会話', icon: MessageCircle, matchExact: false },
   { href: '/prompt-queue', label: 'プロンプトキュー', icon: ListOrdered, matchExact: false },
+  { href: '/split', label: '画像分割', icon: Scissors, matchExact: true },
   { href: '/master', label: 'マスター管理', icon: Database, matchExact: false },
 ];
 

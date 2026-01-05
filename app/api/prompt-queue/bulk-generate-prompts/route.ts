@@ -3,6 +3,7 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { query } from '@/lib/db';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL_OPTIONS } from '@/lib/gemini/constants';
+import { compressImagesForApi } from '@/lib/utils/imageCompression';
 
 interface QueueGenerateRequest {
   queueId: number;
@@ -113,12 +114,17 @@ Analyze the reference image(s) and output an English prompt for image generation
 
         const systemPrompt = buildSystemPrompt(language, basePrompt);
 
+        // 画像を圧縮（合計4MB以下に）
+        const imagesToProcess = queueRequest.images.slice(0, 4);
+        console.log(`Queue ${queueRequest.queueId}: Compressing ${imagesToProcess.length} image(s)...`);
+        const compressedImages = await compressImagesForApi(imagesToProcess, 4 * 1024 * 1024);
+
         // マルチモーダルリクエスト
-        console.log(`Queue ${queueRequest.queueId}: Generating prompt from ${queueRequest.images.length} image(s) using ${model} in ${language}`);
+        console.log(`Queue ${queueRequest.queueId}: Generating prompt from ${compressedImages.length} image(s) using ${model} in ${language}`);
         const parts: any[] = [{ text: systemPrompt }];
 
-        // 参照画像を追加（最大4枚）
-        queueRequest.images.slice(0, 4).forEach((img) => {
+        // 参照画像を追加（圧縮済み）
+        compressedImages.forEach((img) => {
           parts.push({
             inline_data: {
               mime_type: img.mimeType,
