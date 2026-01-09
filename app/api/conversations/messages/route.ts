@@ -134,25 +134,27 @@ export async function POST(request: NextRequest) {
       }
       console.log(`[Create Message] Found ${affectedMessages?.length || 0} affected messages`);
 
-      // Update each message individually
+      // Update each message individually, in REVERSE order (highest sequence_order first)
+      // to avoid unique constraint violations
       if (affectedMessages && affectedMessages.length > 0) {
-        const updatePromises = affectedMessages.map(msg =>
-          supabase
+        // Sort by sequence_order descending so we update from the end first
+        const sortedMessages = [...affectedMessages].sort((a, b) => b.sequence_order - a.sequence_order);
+
+        for (const msg of sortedMessages) {
+          const { error: updateError } = await supabase
             .from('conversation_messages')
             .update({ sequence_order: msg.sequence_order + 1 })
-            .eq('id', msg.id)
-        );
+            .eq('id', msg.id);
 
-        const results = await Promise.all(updatePromises);
-        const updateError = results.find(r => r.error)?.error;
-
-        if (updateError) {
-          console.error('Failed to update sequence orders:', updateError);
-          return NextResponse.json(
-            { success: false, error: 'Failed to adjust message positions' },
-            { status: 500 }
-          );
+          if (updateError) {
+            console.error('Failed to update sequence order for message:', msg.id, updateError);
+            return NextResponse.json(
+              { success: false, error: 'Failed to adjust message positions' },
+              { status: 500 }
+            );
+          }
         }
+        console.log(`[Create Message] Updated ${sortedMessages.length} message sequence orders`);
       }
     } else {
       // Insert at the end
