@@ -52,9 +52,15 @@ export async function GET(
       );
     }
 
+    // Convert storage path to API proxy URL if needed
+    let sheetWithApiUrl = characterSheet;
+    if (characterSheet.image_url && !characterSheet.image_url.startsWith('http') && !characterSheet.image_url.startsWith('/api/')) {
+      sheetWithApiUrl = { ...characterSheet, image_url: `/api/storage/${characterSheet.image_url}` };
+    }
+
     return NextResponse.json({
       success: true,
-      characterSheet,
+      characterSheet: sheetWithApiUrl,
     });
   } catch (error: any) {
     console.error('Failed to get character sheet:', error);

@@ -30,9 +30,17 @@ export async function GET(request: NextRequest) {
     const allSheets = await getCharacterSheetsByUserId(user.id);
     const total = allSheets.length;
 
+    // Convert storage paths to API proxy URLs
+    const sheetsWithApiUrls = characterSheets.map((sheet: { id: number; user_id: string; name: string; image_url?: string; description?: string; elevenlabs_voice_id?: string; metadata?: unknown; created_at: string; updated_at: string }) => {
+      if (sheet.image_url && !sheet.image_url.startsWith('http') && !sheet.image_url.startsWith('/api/')) {
+        return { ...sheet, image_url: `/api/storage/${sheet.image_url}` };
+      }
+      return sheet;
+    });
+
     return NextResponse.json({
       success: true,
-      characterSheets,
+      characterSheets: sheetsWithApiUrls,
       total,
     });
   } catch (error: any) {
