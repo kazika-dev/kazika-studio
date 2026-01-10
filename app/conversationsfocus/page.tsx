@@ -14,6 +14,7 @@ import {
 import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
@@ -26,6 +27,7 @@ import type {
   GetConversationResponse,
   StoryTreeNode,
 } from '@/types/conversation';
+import { generateSrt, downloadSrt } from '@/lib/utils/srt';
 
 interface ConversationWithCount extends Conversation {
   messageCount?: number;
@@ -368,6 +370,14 @@ export default function ConversationsFocusPage() {
     }
   };
 
+  const handleDownloadSrt = () => {
+    if (!selectedConversation || messages.length === 0) return;
+
+    const srtContent = generateSrt(messages);
+    const filename = selectedConversation.title.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '_');
+    downloadSrt(srtContent, filename);
+  };
+
   const handleCreateScene = (storyId: number) => {
     setSelectedStoryId(storyId);
     setSceneDialogOpen(true);
@@ -511,16 +521,25 @@ export default function ConversationsFocusPage() {
                         </Typography>
                       )}
                     </Box>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<MovieIcon />}
-                      onClick={handleCreateStudioClick}
-                      disabled={creatingStudio || messages.length === 0}
-                      sx={{ ml: 2 }}
-                    >
-                      {creatingStudio ? 'スタジオを作成中...' : 'スタジオを作成'}
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<SubtitlesIcon />}
+                        onClick={handleDownloadSrt}
+                        disabled={messages.length === 0}
+                      >
+                        SRTダウンロード
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<MovieIcon />}
+                        onClick={handleCreateStudioClick}
+                        disabled={creatingStudio || messages.length === 0}
+                      >
+                        {creatingStudio ? 'スタジオを作成中...' : 'スタジオを作成'}
+                      </Button>
+                    </Box>
                   </Box>
                   <Divider />
                 </Box>
