@@ -373,7 +373,9 @@ export default function ConversationsFocusPage() {
   const handleDownloadSrt = () => {
     if (!selectedConversation || messages.length === 0) return;
 
-    const srtContent = generateSrt(messages);
+    const srtContent = generateSrt(messages, {
+      maxCharsPerChunk: 11,  // 11文字以内で文節区切り
+    });
     const filename = selectedConversation.title.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '_');
     downloadSrt(srtContent, filename);
   };
