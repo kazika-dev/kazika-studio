@@ -967,14 +967,17 @@ export default function ConversationViewerSimple({
       return;
     }
 
+    // Reverse the order to download from last message first
+    const reversedMessages = [...messagesWithAudio].reverse();
+
     setBatchDownloading(true);
-    setBatchProgress({ current: 0, total: messagesWithAudio.length });
+    setBatchProgress({ current: 0, total: reversedMessages.length });
 
     let successCount = 0;
 
-    for (let i = 0; i < messagesWithAudio.length; i++) {
-      const { msg, conversationIndex } = messagesWithAudio[i];
-      setBatchProgress({ current: i + 1, total: messagesWithAudio.length });
+    for (let i = 0; i < reversedMessages.length; i++) {
+      const { msg, conversationIndex } = reversedMessages[i];
+      setBatchProgress({ current: i + 1, total: reversedMessages.length });
 
       try {
         const response = await fetch(`/api/conversations/messages/${msg.id}/download-audio`);
@@ -1006,7 +1009,7 @@ export default function ConversationViewerSimple({
     setBatchDownloading(false);
     setBatchProgress({ current: 0, total: 0 });
 
-    alert(`${successCount}/${messagesWithAudio.length}件の音声をダウンロードしました`);
+    alert(`${successCount}/${reversedMessages.length}件の音声をダウンロードしました`);
   };
 
   // Cleanup audio on unmount
