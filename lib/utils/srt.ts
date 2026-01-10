@@ -43,7 +43,7 @@ export interface SrtOptions {
 
   /**
    * Gap between subtitles in milliseconds
-   * @default 100
+   * @default 0 (no gap to match audio file duration)
    */
   gapMs?: number;
 }
@@ -61,7 +61,7 @@ export function generateSrt(
   const {
     includeSpeakerName = false,
     defaultDurationMs = 3000,
-    gapMs = 100,
+    gapMs = 0,  // No gap by default to match audio file duration
   } = options;
 
   // Sort messages by sequence_order
