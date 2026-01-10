@@ -59,7 +59,7 @@ export function generateSrt(
   options: SrtOptions = {}
 ): string {
   const {
-    includeSpeakerName = true,
+    includeSpeakerName = false,
     defaultDurationMs = 3000,
     gapMs = 100,
   } = options;
