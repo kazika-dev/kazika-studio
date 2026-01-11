@@ -605,6 +605,9 @@ export default function SplitPage() {
   };
 
   // 一括プロンプト生成
+  // プロンプト生成進捗状態
+  const [promptGenProgress, setPromptGenProgress] = useState({ current: 0, total: 0 });
+
   const handleBulkGeneratePrompts = async () => {
     // 選択されたキューが対象（選択がなければ全ての選択可能なキューが対象）
     let targetQueues: PromptQueueWithImages[];
@@ -624,10 +627,19 @@ export default function SplitPage() {
     if (!confirm(`${targetQueues.length}件のキューに対して${languageLabel}でプロンプトを生成しますか？\n\n※各キューの参照画像からプロンプトを自動生成します。`)) return;
 
     setGeneratingPrompts(true);
+    setPromptGenProgress({ current: 0, total: targetQueues.length });
+
+    let successCount = 0;
+    let failedCount = 0;
+
     try {
-      // 各キューの画像を取得してbase64に変換
-      const queueRequests = await Promise.all(
-        targetQueues.map(async (queue) => {
+      // キューごとに順次処理（Vercelタイムアウト対策）
+      for (let i = 0; i < targetQueues.length; i++) {
+        const queue = targetQueues[i];
+        setPromptGenProgress({ current: i + 1, total: targetQueues.length });
+
+        try {
+          // 画像を取得してbase64に変換
           const images: { mimeType: string; data: string }[] = [];
 
           for (const img of queue.images.slice(0, 4)) {
@@ -658,45 +670,46 @@ export default function SplitPage() {
             }
           }
 
-          return {
-            queueId: queue.id,
-            images,
-          };
-        })
-      );
+          if (images.length === 0) {
+            console.warn(`No images for queue ${queue.id}, skipping`);
+            failedCount++;
+            continue;
+          }
 
-      // 画像が取得できたキューのみをフィルタ
-      const validRequests = queueRequests.filter((req) => req.images.length > 0);
+          // 1キューずつAPIを呼び出し
+          const res = await fetch('/api/prompt-queue/generate-prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              queueId: queue.id,
+              images,
+              model: promptGenSettings.model,
+              language: promptGenSettings.language,
+              basePrompt: promptGenSettings.basePrompt,
+            }),
+          });
 
-      if (validRequests.length === 0) {
-        alert('画像を取得できませんでした');
-        setGeneratingPrompts(false);
-        return;
+          if (res.ok) {
+            successCount++;
+          } else {
+            const error = await res.json();
+            console.error(`Failed to generate prompt for queue ${queue.id}:`, error);
+            failedCount++;
+          }
+        } catch (error) {
+          console.error(`Error processing queue ${queue.id}:`, error);
+          failedCount++;
+        }
       }
 
-      const res = await fetch('/api/prompt-queue/bulk-generate-prompts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queues: validRequests,
-          model: promptGenSettings.model,
-          language: promptGenSettings.language,
-          basePrompt: promptGenSettings.basePrompt,
-        }),
-      });
-
-      const result = await res.json();
-      if (res.ok) {
-        alert(`プロンプト生成完了\n成功: ${result.success}件\n失敗: ${result.failed}件`);
-        await fetchQueues();
-      } else {
-        alert(`エラー: ${result.error}`);
-      }
+      alert(`プロンプト生成完了\n成功: ${successCount}件\n失敗: ${failedCount}件`);
+      await fetchQueues();
     } catch (error) {
       console.error('Failed to bulk generate prompts:', error);
       alert('プロンプト生成に失敗しました');
     } finally {
       setGeneratingPrompts(false);
+      setPromptGenProgress({ current: 0, total: 0 });
     }
   };
 
@@ -927,7 +940,9 @@ export default function SplitPage() {
               startIcon={generatingPrompts ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
               sx={{ height: 56 }}
             >
-              {generatingPrompts ? 'プロンプト生成中...' : `プロンプト生成 (${selectedQueueIds.size > 0 ? selectedQueueIds.size : selectableQueues.length}件)`}
+              {generatingPrompts
+                ? `生成中... (${promptGenProgress.current}/${promptGenProgress.total})`
+                : `プロンプト生成 (${selectedQueueIds.size > 0 ? selectedQueueIds.size : selectableQueues.length}件)`}
             </Button>
           </Grid>
         </Grid>
@@ -1186,6 +1201,22 @@ export default function SplitPage() {
                       >
                         {queue.prompt}
                       </Typography>
+                      {queue.enhanced_prompt && (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            mt: 0.5,
+                            color: 'secondary.main',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: 400,
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          ✨ {queue.enhanced_prompt}
+                        </Typography>
+                      )}
                       {/* 参照画像サムネイル */}
                       <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
                         {queue.images.map((img, idx) => (
