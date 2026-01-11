@@ -519,7 +519,14 @@ export default function SplitPage() {
       return;
     }
 
-    const targetQueues = displayQueues;
+    // 選択されたキューが対象（選択がなければ全キューが対象）
+    let targetQueues: PromptQueueWithImages[];
+    if (selectedQueueIds.size > 0) {
+      targetQueues = queues.filter((q) => selectedQueueIds.has(q.id));
+    } else {
+      targetQueues = displayQueues;
+    }
+
     if (targetQueues.length === 0) {
       alert('適用対象のキューがありません');
       return;
@@ -786,7 +793,7 @@ export default function SplitPage() {
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <Typography variant="body2" color="text.secondary">
-              対象: {displayQueues.length}件のキュー
+              対象: {selectedQueueIds.size > 0 ? `${selectedQueueIds.size}件選択中` : `全${displayQueues.length}件`}
             </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
@@ -798,7 +805,7 @@ export default function SplitPage() {
               disabled={applyingBulkCharacters || bulkCharacterSheetIds.length === 0 || displayQueues.length === 0}
               startIcon={applyingBulkCharacters ? <CircularProgress size={16} /> : <PersonIcon />}
             >
-              {applyingBulkCharacters ? '適用中...' : '全キューに適用'}
+              {applyingBulkCharacters ? '適用中...' : `適用 (${selectedQueueIds.size > 0 ? selectedQueueIds.size : displayQueues.length}件)`}
             </Button>
           </Grid>
         </Grid>
