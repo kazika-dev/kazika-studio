@@ -228,12 +228,12 @@ export default function SplitPage() {
 
   // 全選択/全解除
   const handleSelectAllQueues = () => {
-    if (selectedQueueIds.size === selectableQueues.length) {
+    if (selectedQueueIds.size === displayQueues.length) {
       // 全解除
       setSelectedQueueIds(new Set());
     } else {
       // 全選択
-      setSelectedQueueIds(new Set(selectableQueues.map((q) => q.id)));
+      setSelectedQueueIds(new Set(displayQueues.map((q) => q.id)));
     }
   };
 
@@ -748,12 +748,27 @@ export default function SplitPage() {
 
       {/* 一括キャラクターシート設定パネル */}
       <Paper sx={{ p: 2, mb: 3, bgcolor: 'info.50' }}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PersonIcon />
-          一括キャラクターシート設定
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PersonIcon />
+            一括キャラクターシート設定
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              対象: {selectedQueueIds.size > 0 ? `${selectedQueueIds.size}件選択中` : `全${displayQueues.length}件`}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleSelectAllQueues}
+              disabled={displayQueues.length === 0}
+            >
+              {selectedQueueIds.size === displayQueues.length && displayQueues.length > 0 ? '全解除' : '全選択'}
+            </Button>
+          </Box>
+        </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          選択したキャラクターシートを全ての待機中キューに追加します（既存の画像に追加、最大8枚）
+          選択したキャラクターシートをキューに追加します（既存の画像に追加、最大8枚。下のキュー一覧でチェックして対象を選択）
         </Typography>
         <Grid container spacing={2} alignItems="center">
           <Grid size={{ xs: 12, md: 6 }}>
@@ -790,11 +805,6 @@ export default function SplitPage() {
                 </>
               )}
             </Box>
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <Typography variant="body2" color="text.secondary">
-              対象: {selectedQueueIds.size > 0 ? `${selectedQueueIds.size}件選択中` : `全${displayQueues.length}件`}
-            </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <Button
