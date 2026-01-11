@@ -17,8 +17,9 @@ import {
   DialogContentText,
   DialogActions,
   Container,
+  IconButton,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Download as DownloadIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Download as DownloadIcon, Star as StarIcon, StarBorder as StarBorderIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 
@@ -32,6 +33,7 @@ interface CharacterSheet {
   metadata: any;
   created_at: string;
   updated_at: string;
+  is_favorite: boolean;
 }
 
 export default function CharacterSheetsPage() {
@@ -97,6 +99,33 @@ export default function CharacterSheetsPage() {
 
   const handleEdit = (sheet: CharacterSheet) => {
     router.push(`/character-sheets/${sheet.id}/edit`);
+  };
+
+  const handleToggleFavorite = async (sheet: CharacterSheet) => {
+    try {
+      const response = await fetch(`/api/character-sheets/${sheet.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_favorite: !sheet.is_favorite,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // ローカル状態を更新してリロード（ソート順が変わるため）
+        toast.success(sheet.is_favorite ? 'お気に入りを解除しました' : 'お気に入りに追加しました');
+        loadCharacterSheets();
+      } else {
+        toast.error('お気に入りの更新に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      toast.error('お気に入りの更新に失敗しました');
+    }
   };
 
   const handleDownload = async (sheet: CharacterSheet) => {
@@ -205,7 +234,28 @@ export default function CharacterSheetsPage() {
           }}
         >
           {characterSheets.map((sheet) => (
-            <Card key={sheet.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Card key={sheet.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              {/* お気に入りボタン（画像右上に配置） */}
+              <IconButton
+                size="small"
+                onClick={() => handleToggleFavorite(sheet)}
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  zIndex: 1,
+                  bgcolor: 'rgba(255, 255, 255, 0.9)',
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 1)',
+                  },
+                }}
+              >
+                {sheet.is_favorite ? (
+                  <StarIcon sx={{ color: 'warning.main' }} />
+                ) : (
+                  <StarBorderIcon sx={{ color: 'action.active' }} />
+                )}
+              </IconButton>
               <CardMedia
                 component="img"
                 image={getImageUrl(sheet.image_url)}

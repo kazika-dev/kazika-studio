@@ -99,6 +99,7 @@ export interface CharacterSheet {
   }>;
   metadata: Record<string, any>;
   created_at: string;
+  is_favorite: boolean;
 }
 
 // API Request/Response types

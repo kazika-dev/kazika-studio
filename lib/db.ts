@@ -657,7 +657,8 @@ export async function getWorkflowOutputById(id: number) {
  * @param offset 開始位置（省略時は0）
  */
 export async function getCharacterSheetsByUserId(userId: string, limit?: number, offset?: number) {
-  let sql = 'SELECT * FROM kazikastudio.character_sheets WHERE user_id = $1 ORDER BY created_at DESC';
+  // お気に入り優先 → 作成日時降順でソート
+  let sql = 'SELECT * FROM kazikastudio.character_sheets WHERE user_id = $1 ORDER BY is_favorite DESC, created_at DESC';
   const params: any[] = [userId];
 
   if (limit !== undefined && limit > 0) {
@@ -725,6 +726,7 @@ export async function updateCharacterSheet(id: number, data: {
   description?: string;
   elevenlabs_voice_id?: string;
   metadata?: any;
+  is_favorite?: boolean;
 }) {
   const updates: string[] = [];
   const values: any[] = [];
@@ -749,6 +751,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.metadata !== undefined) {
     updates.push(`metadata = $${paramIndex++}`);
     values.push(data.metadata);
+  }
+  if (data.is_favorite !== undefined) {
+    updates.push(`is_favorite = $${paramIndex++}`);
+    values.push(data.is_favorite);
   }
 
   if (updates.length === 0) {
