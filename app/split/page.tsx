@@ -202,14 +202,8 @@ export default function SplitPage() {
   // プロンプト生成対象の選択
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set());
 
-  // 表示するキュー（source_output_id > 0 かつ status === 'pending'）
-  const displayQueues = queues.filter(
-    (q) => q.source_output_id && q.source_output_id > 0 && q.status === 'pending'
-  );
-
-  // デバッグ: フィルタリング結果を確認
-  console.log('All queues:', queues.length, queues.map(q => ({ id: q.id, source_output_id: q.source_output_id, status: q.status })));
-  console.log('Display queues (filtered):', displayQueues.length);
+  // 表示するキュー（APIで既にフィルタ済み: hasSplitSource=true & status=pending）
+  const displayQueues = queues;
 
   // 選択可能なキュー（表示キューの中で画像あり）
   const selectableQueues = displayQueues.filter((q) => q.images && q.images.length > 0);
@@ -271,15 +265,14 @@ export default function SplitPage() {
     fetchOutputs();
   }, [outputPage, fetchOutputs]);
 
-  // キュー一覧取得（分割で作成されたもののみ）
+  // キュー一覧取得（分割で作成されたもの かつ pending のみ）
   const fetchQueues = async () => {
     setLoadingQueues(true);
     try {
-      const res = await fetch('/api/prompt-queue?limit=100&hasSplitSource=true');
+      const res = await fetch('/api/prompt-queue?limit=100&hasSplitSource=true&status=pending');
       if (res.ok) {
         const data = await res.json();
-        console.log('Fetched queues (hasSplitSource=true):', data.queues);
-        console.log('Queues with source_output_id:', data.queues?.filter((q: PromptQueueWithImages) => q.source_output_id));
+        console.log('Fetched queues (hasSplitSource=true, status=pending):', data.queues?.length);
         setQueues(data.queues || []);
       }
     } catch (error) {
