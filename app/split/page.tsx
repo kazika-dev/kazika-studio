@@ -207,6 +207,10 @@ export default function SplitPage() {
     (q) => q.source_output_id && q.source_output_id > 0 && q.status === 'pending'
   );
 
+  // デバッグ: フィルタリング結果を確認
+  console.log('All queues:', queues.length, queues.map(q => ({ id: q.id, source_output_id: q.source_output_id, status: q.status })));
+  console.log('Display queues (filtered):', displayQueues.length);
+
   // 選択可能なキュー（表示キューの中で画像あり）
   const selectableQueues = displayQueues.filter((q) => q.images && q.images.length > 0);
 
@@ -274,6 +278,8 @@ export default function SplitPage() {
       const res = await fetch('/api/prompt-queue?limit=100&hasSplitSource=true');
       if (res.ok) {
         const data = await res.json();
+        console.log('Fetched queues (hasSplitSource=true):', data.queues);
+        console.log('Queues with source_output_id:', data.queues?.filter((q: PromptQueueWithImages) => q.source_output_id));
         setQueues(data.queues || []);
       }
     } catch (error) {
@@ -311,6 +317,8 @@ export default function SplitPage() {
   const handleSelectSplitImages = async (images: { dataUrl: string; name: string }[]) => {
     if (images.length === 0) return;
 
+    console.log('handleSelectSplitImages called, selectedOutput:', selectedOutput);
+
     setSavingSplitImages(true);
     try {
       for (const img of images) {
@@ -334,19 +342,24 @@ export default function SplitPage() {
         if (saveRes.ok) {
           const { output } = await saveRes.json();
 
+          const queueData = {
+            name: img.name,
+            prompt: bulkSettings.prompt,
+            model: bulkSettings.model,
+            aspect_ratio: bulkSettings.aspectRatio,
+            source_output_id: selectedOutput?.id,
+            images: [{ image_type: 'output', reference_id: output.id }],
+          };
+          console.log('Creating queue with data:', queueData);
+
           // 2. prompt-queueに登録（source_output_idで分割元を記録）
-          await fetch('/api/prompt-queue', {
+          const queueRes = await fetch('/api/prompt-queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: img.name,
-              prompt: bulkSettings.prompt,
-              model: bulkSettings.model,
-              aspect_ratio: bulkSettings.aspectRatio,
-              source_output_id: selectedOutput?.id,
-              images: [{ image_type: 'output', reference_id: output.id }],
-            }),
+            body: JSON.stringify(queueData),
           });
+          const queueResult = await queueRes.json();
+          console.log('Queue created:', queueResult);
         }
       }
 
