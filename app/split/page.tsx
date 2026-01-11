@@ -23,7 +23,9 @@ import {
   ListItemSecondaryAction,
   Avatar,
   Dialog,
+  DialogTitle,
   DialogContent,
+  DialogActions,
   Checkbox,
   FormControlLabel,
 } from '@mui/material';
@@ -40,6 +42,7 @@ import {
   Settings as SettingsIcon,
   Close as CloseIcon,
   AutoAwesome as AutoAwesomeIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import ImageGridSplitDialog from '@/components/prompt-queue/ImageGridSplitDialog';
 import ImageSelectorDialog from '@/components/prompt-queue/ImageSelectorDialog';
@@ -206,6 +209,12 @@ export default function SplitPage() {
 
   // プロンプト生成対象の選択
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set());
+
+  // enhanced_prompt編集ダイアログ
+  const [enhancedPromptDialogOpen, setEnhancedPromptDialogOpen] = useState(false);
+  const [editingEnhancedPromptQueue, setEditingEnhancedPromptQueue] = useState<PromptQueueWithImages | null>(null);
+  const [editingEnhancedPromptValue, setEditingEnhancedPromptValue] = useState('');
+  const [savingEnhancedPrompt, setSavingEnhancedPrompt] = useState(false);
 
   // 表示するキュー（APIで既にフィルタ済み: hasSplitSource=true & status=pending）
   const displayQueues = queues;
@@ -601,6 +610,50 @@ export default function SplitPage() {
       alert('キャラクターシートの一括適用に失敗しました');
     } finally {
       setApplyingBulkCharacters(false);
+    }
+  };
+
+  // enhanced_prompt編集ダイアログを開く
+  const handleOpenEnhancedPromptDialog = (queue: PromptQueueWithImages) => {
+    setEditingEnhancedPromptQueue(queue);
+    setEditingEnhancedPromptValue(queue.enhanced_prompt || '');
+    setEnhancedPromptDialogOpen(true);
+  };
+
+  // enhanced_promptを保存
+  const handleSaveEnhancedPrompt = async () => {
+    if (!editingEnhancedPromptQueue) return;
+
+    setSavingEnhancedPrompt(true);
+    try {
+      const res = await fetch(`/api/prompt-queue/${editingEnhancedPromptQueue.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enhanced_prompt: editingEnhancedPromptValue || null,
+          enhance_prompt: editingEnhancedPromptValue ? 'enhance' : 'none',
+        }),
+      });
+
+      if (res.ok) {
+        // ローカル状態を更新
+        setQueues((prev) =>
+          prev.map((q) =>
+            q.id === editingEnhancedPromptQueue.id
+              ? { ...q, enhanced_prompt: editingEnhancedPromptValue || null }
+              : q
+          )
+        );
+        setEnhancedPromptDialogOpen(false);
+      } else {
+        const error = await res.json();
+        alert(`保存に失敗しました: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to save enhanced prompt:', error);
+      alert('保存に失敗しました');
+    } finally {
+      setSavingEnhancedPrompt(false);
     }
   };
 
@@ -1201,22 +1254,50 @@ export default function SplitPage() {
                       >
                         {queue.prompt}
                       </Typography>
-                      {queue.enhanced_prompt && (
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            mt: 0.5,
-                            color: 'secondary.main',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            maxWidth: 400,
-                            fontStyle: 'italic',
-                          }}
-                        >
-                          ✨ {queue.enhanced_prompt}
-                        </Typography>
-                      )}
+                      {/* enhanced_prompt表示・編集 */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          mt: 0.5,
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: 'action.hover' },
+                          borderRadius: 0.5,
+                          p: 0.5,
+                          ml: -0.5,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEnhancedPromptDialog(queue);
+                        }}
+                      >
+                        <Tooltip title="クリックで編集">
+                          <EditIcon sx={{ fontSize: 14, color: 'secondary.main' }} />
+                        </Tooltip>
+                        {queue.enhanced_prompt ? (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'secondary.main',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: 380,
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            ✨ {queue.enhanced_prompt}
+                          </Typography>
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{ color: 'text.disabled', fontStyle: 'italic' }}
+                          >
+                            (enhanced_promptなし - クリックで追加)
+                          </Typography>
+                        )}
+                      </Box>
                       {/* 参照画像サムネイル */}
                       <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
                         {queue.images.map((img, idx) => (
@@ -1441,6 +1522,139 @@ export default function SplitPage() {
             />
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* enhanced_prompt編集ダイアログ */}
+      <Dialog
+        open={enhancedPromptDialogOpen}
+        onClose={() => setEnhancedPromptDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AutoAwesomeIcon color="secondary" />
+          Enhanced Prompt 編集
+          {editingEnhancedPromptQueue && (
+            <Chip
+              label={`キュー #${editingEnhancedPromptQueue.id}`}
+              size="small"
+              variant="outlined"
+              sx={{ ml: 1 }}
+            />
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {editingEnhancedPromptQueue && (
+            <Box>
+              {/* 元のプロンプト表示 */}
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
+                元のプロンプト:
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  p: 1,
+                  bgcolor: 'grey.100',
+                  borderRadius: 1,
+                  mb: 2,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {editingEnhancedPromptQueue.prompt || '(なし)'}
+              </Typography>
+
+              {/* 参照画像表示 */}
+              {editingEnhancedPromptQueue.images && editingEnhancedPromptQueue.images.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
+                    参照画像:
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {editingEnhancedPromptQueue.images.map((img, idx) => (
+                      <Tooltip key={idx} title={`${img.image_type}: ${img.name || img.reference_id}`}>
+                        <Box
+                          sx={{
+                            width: 60,
+                            height: 60,
+                            borderRadius: 1,
+                            overflow: 'hidden',
+                            border: '2px solid',
+                            borderColor:
+                              img.image_type === 'character_sheet'
+                                ? 'primary.main'
+                                : img.image_type === 'scene'
+                                ? 'info.main'
+                                : img.image_type === 'output'
+                                ? 'secondary.main'
+                                : 'warning.main',
+                          }}
+                        >
+                          {img.image_url ? (
+                            <img
+                              src={getImageUrl(img.image_url)}
+                              alt={img.name || ''}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <Box
+                              sx={{
+                                width: '100%',
+                                height: '100%',
+                                bgcolor: 'grey.200',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <ImageIcon />
+                            </Box>
+                          )}
+                        </Box>
+                      </Tooltip>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* enhanced_prompt編集 */}
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
+                Enhanced Prompt (AI生成/手動編集):
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={8}
+                value={editingEnhancedPromptValue}
+                onChange={(e) => setEditingEnhancedPromptValue(e.target.value)}
+                placeholder="画像生成用のプロンプトを入力..."
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  },
+                }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                ※ このプロンプトが画像生成時に使用されます（enhance_prompt: enhance の場合）
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEnhancedPromptDialogOpen(false)} disabled={savingEnhancedPrompt}>
+            キャンセル
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSaveEnhancedPrompt}
+            disabled={savingEnhancedPrompt}
+            startIcon={savingEnhancedPrompt ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+          >
+            {savingEnhancedPrompt ? '保存中...' : '保存'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
