@@ -131,8 +131,8 @@ export default function CharacterSheetsPage() {
   };
 
   const getImageUrl = (imageUrl: string) => {
-    // 既に絶対URLの場合はそのまま返す
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    // 既に絶対URLまたはAPI経由のURLの場合はそのまま返す
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/api/')) {
       return imageUrl;
     }
     // 相対パスの場合はストレージプロキシAPIを経由
