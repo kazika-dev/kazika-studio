@@ -191,6 +191,11 @@ export default function SplitPage() {
   // 一括適用中
   const [applyingBulk, setApplyingBulk] = useState(false);
 
+  // 一括キャラクターシート設定
+  const [bulkCharacterSelectorOpen, setBulkCharacterSelectorOpen] = useState(false);
+  const [bulkCharacterSheetIds, setBulkCharacterSheetIds] = useState<SelectedImage[]>([]);
+  const [applyingBulkCharacters, setApplyingBulkCharacters] = useState(false);
+
   // プロンプト生成設定
   const [promptGenSettings, setPromptGenSettings] = useState({
     model: 'gemini-3-pro-preview',
@@ -501,6 +506,70 @@ export default function SplitPage() {
     }
   };
 
+  // 一括キャラクターシート選択確定
+  const handleBulkCharacterSelect = (images: SelectedImage[]) => {
+    setBulkCharacterSheetIds(images);
+    setBulkCharacterSelectorOpen(false);
+  };
+
+  // 一括キャラクターシート適用
+  const handleApplyBulkCharacters = async () => {
+    if (bulkCharacterSheetIds.length === 0) {
+      alert('キャラクターシートを選択してください');
+      return;
+    }
+
+    const targetQueues = displayQueues;
+    if (targetQueues.length === 0) {
+      alert('適用対象のキューがありません');
+      return;
+    }
+
+    if (!confirm(`${targetQueues.length}件のキューに${bulkCharacterSheetIds.length}枚のキャラクターシートを追加しますか？`)) return;
+
+    setApplyingBulkCharacters(true);
+    try {
+      for (const queue of targetQueues) {
+        // 既存の画像に新しいキャラクターシートを追加（重複を除外）
+        const existingImages = queue.images.map((img) => ({
+          image_type: img.image_type,
+          reference_id: typeof img.reference_id === 'number' ? img.reference_id : parseInt(String(img.reference_id), 10),
+        }));
+
+        const newImages = [...existingImages];
+        for (const cs of bulkCharacterSheetIds) {
+          const refId = typeof cs.reference_id === 'number' ? cs.reference_id : parseInt(String(cs.reference_id), 10);
+          const exists = existingImages.some(
+            (img) => img.image_type === cs.image_type && img.reference_id === refId
+          );
+          if (!exists) {
+            newImages.push({
+              image_type: cs.image_type,
+              reference_id: refId,
+            });
+          }
+        }
+
+        // 最大8枚に制限
+        const limitedImages = newImages.slice(0, 8);
+
+        await fetch(`/api/prompt-queue/${queue.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ images: limitedImages }),
+        });
+      }
+
+      await fetchQueues();
+      alert(`${targetQueues.length}件のキューにキャラクターシートを追加しました`);
+    } catch (error) {
+      console.error('Failed to apply bulk characters:', error);
+      alert('キャラクターシートの一括適用に失敗しました');
+    } finally {
+      setApplyingBulkCharacters(false);
+    }
+  };
+
   // 一括プロンプト生成
   const handleBulkGeneratePrompts = async () => {
     // 選択されたキューが対象（選択がなければ全ての選択可能なキューが対象）
@@ -665,6 +734,71 @@ export default function SplitPage() {
               startIcon={applyingBulk ? <CircularProgress size={16} /> : undefined}
             >
               {applyingBulk ? '適用中...' : '全キューに適用'}
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* 一括キャラクターシート設定パネル */}
+      <Paper sx={{ p: 2, mb: 3, bgcolor: 'info.50' }}>
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PersonIcon />
+          一括キャラクターシート設定
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          選択したキャラクターシートを全ての待機中キューに追加します（既存の画像に追加、最大8枚）
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                startIcon={<PersonIcon />}
+                onClick={() => setBulkCharacterSelectorOpen(true)}
+              >
+                キャラクターを選択
+              </Button>
+              {bulkCharacterSheetIds.length > 0 && (
+                <>
+                  <Typography variant="body2" color="text.secondary">
+                    {bulkCharacterSheetIds.length}枚選択中:
+                  </Typography>
+                  {bulkCharacterSheetIds.map((cs, idx) => (
+                    <Chip
+                      key={idx}
+                      label={cs.name || `#${cs.reference_id}`}
+                      size="small"
+                      onDelete={() => {
+                        setBulkCharacterSheetIds((prev) =>
+                          prev.filter((_, i) => i !== idx)
+                        );
+                      }}
+                      avatar={
+                        cs.image_url ? (
+                          <Avatar src={getImageUrl(cs.image_url)} />
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                </>
+              )}
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, md: 3 }}>
+            <Typography variant="body2" color="text.secondary">
+              対象: {displayQueues.length}件のキュー
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, md: 3 }}>
+            <Button
+              variant="contained"
+              color="info"
+              fullWidth
+              onClick={handleApplyBulkCharacters}
+              disabled={applyingBulkCharacters || bulkCharacterSheetIds.length === 0 || displayQueues.length === 0}
+              startIcon={applyingBulkCharacters ? <CircularProgress size={16} /> : <PersonIcon />}
+            >
+              {applyingBulkCharacters ? '適用中...' : '全キューに適用'}
             </Button>
           </Grid>
         </Grid>
@@ -1133,6 +1267,15 @@ export default function SplitPage() {
                 })) || []
             : []
         }
+      />
+
+      {/* 一括キャラクターシート選択ダイアログ */}
+      <ImageSelectorDialog
+        open={bulkCharacterSelectorOpen}
+        onClose={() => setBulkCharacterSelectorOpen(false)}
+        onSelect={handleBulkCharacterSelect}
+        maxSelections={4}
+        currentSelections={bulkCharacterSheetIds}
       />
 
       {/* 保存中オーバーレイ */}
