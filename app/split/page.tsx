@@ -463,6 +463,33 @@ export default function SplitPage() {
     }
   };
 
+  // 一括削除
+  const [deletingBulk, setDeletingBulk] = useState(false);
+  const handleBulkDelete = async () => {
+    if (selectedQueueIds.size === 0) {
+      alert('削除するキューを選択してください');
+      return;
+    }
+
+    if (!confirm(`${selectedQueueIds.size}件のキューを削除しますか？この操作は取り消せません。`)) return;
+
+    setDeletingBulk(true);
+    try {
+      const deletePromises = Array.from(selectedQueueIds).map((queueId) =>
+        fetch(`/api/prompt-queue/${queueId}`, { method: 'DELETE' })
+      );
+      await Promise.all(deletePromises);
+      setSelectedQueueIds(new Set());
+      await fetchQueues();
+      alert(`${selectedQueueIds.size}件のキューを削除しました`);
+    } catch (error) {
+      console.error('Failed to bulk delete queues:', error);
+      alert('一括削除に失敗しました');
+    } finally {
+      setDeletingBulk(false);
+    }
+  };
+
   // キュー実行
   const handleExecuteQueue = async (queueId: number) => {
     try {
@@ -997,12 +1024,36 @@ export default function SplitPage() {
       {/* キュー一覧 */}
       <Paper sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">
-            登録済みキュー（{displayQueues.length}件）
-          </Typography>
-          <IconButton onClick={fetchQueues} size="small">
-            <RefreshIcon />
-          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6">
+              登録済みキュー（{displayQueues.length}件）
+            </Typography>
+            {selectedQueueIds.size > 0 && (
+              <Chip
+                label={`${selectedQueueIds.size}件選択中`}
+                size="small"
+                color="primary"
+                onDelete={() => setSelectedQueueIds(new Set())}
+              />
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {selectedQueueIds.size > 0 && (
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={handleBulkDelete}
+                disabled={deletingBulk}
+                startIcon={deletingBulk ? <CircularProgress size={14} /> : <DeleteIcon />}
+              >
+                {deletingBulk ? '削除中...' : `一括削除 (${selectedQueueIds.size}件)`}
+              </Button>
+            )}
+            <IconButton onClick={fetchQueues} size="small">
+              <RefreshIcon />
+            </IconButton>
+          </Box>
         </Box>
 
         {loadingQueues ? (
