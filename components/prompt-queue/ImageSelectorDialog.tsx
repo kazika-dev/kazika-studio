@@ -28,6 +28,7 @@ import {
   GridOn as GridIcon,
   Landscape as LandscapeIcon,
   Category as CategoryIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import ImageGridSplitDialog from './ImageGridSplitDialog';
 import type { PromptQueueImageType } from '@/types/prompt-queue';
@@ -53,6 +54,7 @@ interface CharacterSheet {
   id: number;
   name: string;
   image_url: string;
+  is_favorite?: boolean;
 }
 
 interface OutputImage {
@@ -492,6 +494,18 @@ export default function ImageSelectorDialog({
                               borderRadius: '0 0 0 4px',
                             }}
                           />
+                          {cs.is_favorite && (
+                            <StarIcon
+                              sx={{
+                                position: 'absolute',
+                                top: 2,
+                                left: 2,
+                                color: '#ffc107',
+                                fontSize: 20,
+                                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                              }}
+                            />
+                          )}
                           <Typography
                             variant="caption"
                             sx={{
