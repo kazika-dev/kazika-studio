@@ -34,7 +34,8 @@ import { GEMINI_MODEL_OPTIONS } from '@/lib/gemini/constants';
  */
 function getImageUrl(url: string | undefined): string {
   if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  // 既にHTTP(S) URLまたはAPIプロキシURLの場合はそのまま返す
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/api/')) {
     return url;
   }
   return `/api/storage/${url}`;
