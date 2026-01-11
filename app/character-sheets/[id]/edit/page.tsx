@@ -256,7 +256,7 @@ export default function EditCharacterSheetPage() {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <Box sx={{ maxWidth: '400px', mx: 'auto' }}>
                       <img
-                        src={imagePreview.startsWith('data:') || imagePreview.startsWith('http') ? imagePreview : `/api/storage/${imagePreview}`}
+                        src={imagePreview.startsWith('data:') || imagePreview.startsWith('http') || imagePreview.startsWith('/api/') ? imagePreview : `/api/storage/${imagePreview}`}
                         alt="プレビュー"
                         style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
                       />
