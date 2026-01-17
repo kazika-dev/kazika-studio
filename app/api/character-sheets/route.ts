@@ -32,8 +32,19 @@ export async function GET(request: NextRequest) {
 
     // Convert storage paths to API proxy URLs
     const sheetsWithApiUrls = characterSheets.map((sheet: { id: number; user_id: string; name: string; image_url?: string; description?: string; elevenlabs_voice_id?: string; metadata?: unknown; created_at: string; updated_at: string }) => {
-      if (sheet.image_url && !sheet.image_url.startsWith('http') && !sheet.image_url.startsWith('/api/')) {
-        return { ...sheet, image_url: `/api/storage/${sheet.image_url}` };
+      if (sheet.image_url) {
+        let imageUrl = sheet.image_url;
+        // Strip any existing api/storage prefix (with or without leading /)
+        if (imageUrl.startsWith('/api/storage/')) {
+          imageUrl = imageUrl.replace('/api/storage/', '');
+        } else if (imageUrl.startsWith('api/storage/')) {
+          imageUrl = imageUrl.replace('api/storage/', '');
+        }
+        // Only add prefix if it's not already an HTTP URL or API URL
+        if (!imageUrl.startsWith('http')) {
+          return { ...sheet, image_url: `/api/storage/${imageUrl}` };
+        }
+        return { ...sheet, image_url: imageUrl };
       }
       return sheet;
     });

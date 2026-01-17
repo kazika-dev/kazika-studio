@@ -80,8 +80,19 @@ export async function GET(
 
     // Convert storage paths to API proxy URLs for character images
     const messagesWithApiUrls = (messages || []).map((msg: { character?: { id: number; name: string; image_url?: string } }) => {
-      if (msg.character?.image_url && !msg.character.image_url.startsWith('http') && !msg.character.image_url.startsWith('/api/')) {
-        return { ...msg, character: { ...msg.character, image_url: `/api/storage/${msg.character.image_url}` } };
+      if (msg.character?.image_url) {
+        let imageUrl = msg.character.image_url;
+        // Strip any existing api/storage prefix (with or without leading /)
+        if (imageUrl.startsWith('/api/storage/')) {
+          imageUrl = imageUrl.replace('/api/storage/', '');
+        } else if (imageUrl.startsWith('api/storage/')) {
+          imageUrl = imageUrl.replace('api/storage/', '');
+        }
+        // Only add prefix if it's not already an HTTP URL
+        if (!imageUrl.startsWith('http')) {
+          return { ...msg, character: { ...msg.character, image_url: `/api/storage/${imageUrl}` } };
+        }
+        return { ...msg, character: { ...msg.character, image_url: imageUrl } };
       }
       return msg;
     });

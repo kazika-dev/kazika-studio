@@ -124,6 +124,19 @@ export default function EditCharacterSheetPage() {
     return data.storagePath;
   };
 
+  // Strip /api/storage/ prefix from URL to get the actual storage path
+  const stripApiStoragePrefix = (url: string | undefined): string | undefined => {
+    if (!url) return url;
+    // Handle both /api/storage/ and api/storage/ (without leading slash)
+    if (url.startsWith('/api/storage/')) {
+      return url.replace('/api/storage/', '');
+    }
+    if (url.startsWith('api/storage/')) {
+      return url.replace('api/storage/', '');
+    }
+    return url;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -135,7 +148,8 @@ export default function EditCharacterSheetPage() {
     try {
       setSaving(true);
 
-      let imageUrl = characterSheet?.image_url;
+      // Strip the API prefix to get the actual storage path
+      let imageUrl = stripApiStoragePrefix(characterSheet?.image_url);
 
       // 画像が変更された場合はアップロード
       if (imageFile) {

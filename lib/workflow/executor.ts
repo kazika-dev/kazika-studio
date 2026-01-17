@@ -82,16 +82,30 @@ async function executeNode(
 
           // サーバーサイドの場合は直接GCP Storageから取得
           if (typeof window === 'undefined') {
-            console.log('Loading character sheet image from GCP Storage (server-side):', characterSheet.image_url);
+            // Strip any existing api/storage prefix for server-side loading
+            let serverStoragePath = characterSheet.image_url;
+            if (serverStoragePath.startsWith('/api/storage/')) {
+              serverStoragePath = serverStoragePath.replace('/api/storage/', '');
+            } else if (serverStoragePath.startsWith('api/storage/')) {
+              serverStoragePath = serverStoragePath.replace('api/storage/', '');
+            }
+            console.log('Loading character sheet image from GCP Storage (server-side):', serverStoragePath);
             const { getFileFromStorage } = await import('@/lib/gcp-storage');
-            const { data, contentType } = await getFileFromStorage(characterSheet.image_url);
+            const { data, contentType } = await getFileFromStorage(serverStoragePath);
             base64Data = Buffer.from(data).toString('base64');
             mimeType = contentType;
           } else {
             // クライアントサイドの場合はストレージプロキシAPI経由
-            const imageUrl = characterSheet.image_url.startsWith('http')
-              ? characterSheet.image_url
-              : `${getApiUrl('')}/api/storage/${characterSheet.image_url}`;
+            let storagePath = characterSheet.image_url;
+            // Strip any existing api/storage prefix
+            if (storagePath.startsWith('/api/storage/')) {
+              storagePath = storagePath.replace('/api/storage/', '');
+            } else if (storagePath.startsWith('api/storage/')) {
+              storagePath = storagePath.replace('api/storage/', '');
+            }
+            const imageUrl = storagePath.startsWith('http')
+              ? storagePath
+              : `${getApiUrl('')}/api/storage/${storagePath}`;
 
             console.log('Fetching character sheet image (client-side):', imageUrl);
 

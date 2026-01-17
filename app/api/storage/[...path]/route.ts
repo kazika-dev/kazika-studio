@@ -31,7 +31,15 @@ export async function GET(
     const resolvedParams = await params;
 
     // ファイルパスを構築
-    const filePath = resolvedParams.path.join('/');
+    let filePath = resolvedParams.path.join('/');
+
+    // Strip any accidentally included api/storage prefix from the path
+    // This handles cases where the database has malformed paths like "api/storage/charactersheets/..."
+    if (filePath.startsWith('api/storage/')) {
+      console.log('[Storage Proxy] Stripping malformed api/storage prefix from path');
+      filePath = filePath.replace('api/storage/', '');
+    }
+
     console.log('[Storage Proxy] Fetching file:', filePath);
 
     if (!filePath) {
