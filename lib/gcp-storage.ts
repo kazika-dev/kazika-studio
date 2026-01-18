@@ -268,3 +268,74 @@ export async function downloadFileAsBuffer(filePath: string): Promise<Buffer> {
   const { data } = await getFileFromStorage(filePath);
   return data;
 }
+
+/**
+ * テキストテンプレートのメディア（画像・動画）をGCP Storageにアップロード
+ * @param fileBuffer ファイルのBuffer
+ * @param fileName ファイル名
+ * @param mimeType ファイルのMIMEタイプ
+ * @param templateId テンプレートID
+ * @returns ファイルパス
+ */
+export async function uploadTextTemplateMedia(
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  templateId: number
+): Promise<string> {
+  const storage = getStorageClient();
+  const bucketName = process.env.GCP_STORAGE_BUCKET;
+
+  if (!bucketName) {
+    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  }
+
+  const bucket = storage.bucket(bucketName);
+
+  // ファイル名を生成（テンプレートID + タイムスタンプ + ランダム文字列）
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  const extension = fileName.split('.').pop() || 'bin';
+  const baseName = fileName.split('.').slice(0, -1).join('.').replace(/[^a-zA-Z0-9-_]/g, '-');
+  const finalFileName = `${templateId}-${baseName}-${timestamp}-${randomStr}.${extension}`;
+
+  // フォルダを決定（画像/動画で分ける）
+  const folder = mimeType.startsWith('video/') ? 'text-template-media/videos' : 'text-template-media/images';
+  const filePath = `${folder}/${finalFileName}`;
+  console.log('[gcp-storage] Uploading text template media to path:', filePath);
+
+  const file = bucket.file(filePath);
+
+  // ファイルをアップロード（非公開）
+  await file.save(fileBuffer, {
+    metadata: {
+      contentType: mimeType,
+      cacheControl: 'public, max-age=86400', // 24時間キャッシュ
+    },
+  });
+
+  console.log('[gcp-storage] Text template media upload completed successfully');
+
+  return filePath;
+}
+
+/**
+ * テキストテンプレートのメディアをGCP Storageから削除
+ * @param fileName ファイル名
+ */
+export async function deleteTextTemplateMedia(fileName: string): Promise<void> {
+  return deleteImageFromStorage(fileName);
+}
+
+/**
+ * テキストテンプレートのメディアの署名付きURLを生成
+ * @param fileName ファイル名
+ * @param expiresInMinutes 有効期限（分）デフォルト: 120分
+ * @returns 署名付きURL
+ */
+export async function getTextTemplateMediaSignedUrl(
+  fileName: string,
+  expiresInMinutes: number = 120
+): Promise<string> {
+  return getSignedUrl(fileName, expiresInMinutes);
+}

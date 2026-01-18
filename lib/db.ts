@@ -1822,6 +1822,105 @@ export async function deleteImageMaterial(id: number) {
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
+// =====================================================
+// テキストテンプレートメディア関連の関数
+// =====================================================
+
+/**
+ * テンプレートIDでメディア一覧を取得
+ */
+export async function getTextTemplateMediaByTemplateId(templateId: number) {
+  const result = await query(
+    `SELECT * FROM kazikastudio.m_text_template_media
+     WHERE template_id = $1
+     ORDER BY display_order ASC, created_at DESC`,
+    [templateId]
+  );
+  return result.rows;
+}
+
+/**
+ * メディアIDでメディアを取得
+ */
+export async function getTextTemplateMediaById(mediaId: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_text_template_media WHERE id = $1',
+    [mediaId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * テキストテンプレートメディアを作成
+ */
+export async function createTextTemplateMedia(data: {
+  template_id: number;
+  media_type: 'image' | 'video';
+  file_name: string;
+  original_name?: string;
+  mime_type: string;
+  file_size_bytes?: number;
+  width?: number;
+  height?: number;
+  duration_seconds?: number;
+  display_order?: number;
+  caption?: string;
+}) {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_text_template_media
+      (template_id, media_type, file_name, original_name, mime_type, file_size_bytes, width, height, duration_seconds, display_order, caption)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *`,
+    [
+      data.template_id,
+      data.media_type,
+      data.file_name,
+      data.original_name || null,
+      data.mime_type,
+      data.file_size_bytes || null,
+      data.width || null,
+      data.height || null,
+      data.duration_seconds || null,
+      data.display_order || 0,
+      data.caption || null,
+    ]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * テキストテンプレートメディアを削除
+ */
+export async function deleteTextTemplateMediaFromDb(mediaId: number) {
+  const result = await query(
+    'DELETE FROM kazikastudio.m_text_template_media WHERE id = $1 RETURNING *',
+    [mediaId]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * テンプレートIDでテンプレートを取得（所有者チェック用）
+ */
+export async function getTextTemplateById(templateId: number) {
+  const result = await query(
+    'SELECT * FROM kazikastudio.m_text_templates WHERE id = $1',
+    [templateId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 // ==========================================
 // Conversation Message Characters Functions
 // ==========================================
