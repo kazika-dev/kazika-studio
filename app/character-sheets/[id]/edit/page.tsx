@@ -13,9 +13,20 @@ import {
   Container,
   Paper,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Upload as UploadIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Upload as UploadIcon, Brush as BrushIcon } from '@mui/icons-material';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
+
+// ImageEditorは重いコンポーネントなのでdynamic importでSSRを無効化
+const ImageEditor = dynamic(() => import('@/components/common/ImageEditor'), {
+  ssr: false,
+  loading: () => (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <CircularProgress />
+    </Box>
+  ),
+});
 
 interface CharacterSheet {
   id: number;
@@ -43,6 +54,8 @@ export default function EditCharacterSheetPage() {
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadCharacterSheet();
@@ -275,19 +288,36 @@ export default function EditCharacterSheetPage() {
                         style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
                       />
                     </Box>
-                    <Button
-                      variant="outlined"
-                      component="label"
-                      disabled={saving}
-                    >
-                      画像を変更
-                      <input
-                        type="file"
-                        hidden
-                        accept="image/*"
-                        onChange={handleImageChange}
-                      />
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        disabled={saving}
+                      >
+                        画像を変更
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={handleImageChange}
+                        />
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<BrushIcon />}
+                        onClick={() => {
+                          // 画像エディタを開く
+                          const imgUrl = imagePreview.startsWith('data:') || imagePreview.startsWith('http') || imagePreview.startsWith('/api/')
+                            ? imagePreview
+                            : `/api/storage/${imagePreview}`;
+                          setEditingImageUrl(imgUrl);
+                          setImageEditorOpen(true);
+                        }}
+                        disabled={saving}
+                      >
+                        画像を編集
+                      </Button>
+                    </Box>
                   </Box>
                 ) : (
                   <Box>
@@ -346,6 +376,119 @@ export default function EditCharacterSheetPage() {
           </Box>
         </CardContent>
       </Card>
+
+      {/* 画像エディタ（フルスクリーンダイアログ） */}
+      {imageEditorOpen && editingImageUrl && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1300,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <ImageEditor
+            imageUrl={editingImageUrl}
+            onSave={async (blob, saveMode?: 'overwrite' | 'new') => {
+              try {
+                const formData = new FormData();
+                formData.append('file', blob, 'edited-image.png');
+
+                if (saveMode === 'new') {
+                  // 新規保存: 新しいキャラクターシートとして保存
+                  formData.append('name', `${name} (編集済み)`);
+                  formData.append('description', description);
+                  if (elevenLabsVoiceId) {
+                    formData.append('elevenlabs_voice_id', elevenLabsVoiceId);
+                  }
+
+                  // Base64に変換してAPIに送信
+                  const base64Data = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      const result = reader.result as string;
+                      const base64 = result.split(',')[1];
+                      resolve(base64);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  });
+
+                  // まず画像をアップロード
+                  const uploadResponse = await fetch('/api/upload-image', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      base64Data,
+                      mimeType: 'image/png',
+                      fileName: 'edited-image.png',
+                      folder: 'charactersheets',
+                    }),
+                  });
+
+                  const uploadData = await uploadResponse.json();
+                  if (!uploadData.success) {
+                    throw new Error(uploadData.error || 'Failed to upload image');
+                  }
+
+                  // 新しいキャラクターシートを作成
+                  const createResponse = await fetch('/api/character-sheets', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      name: `${name} (編集済み)`,
+                      image_url: uploadData.storagePath,
+                      description: description,
+                      elevenlabs_voice_id: elevenLabsVoiceId || undefined,
+                    }),
+                  });
+
+                  const createData = await createResponse.json();
+                  if (!createData.success) {
+                    throw new Error(createData.error || 'Failed to create character sheet');
+                  }
+
+                  toast.success('新しいキャラクターシートとして保存しました');
+                } else {
+                  // 上書き保存: 既存の画像を差し替え
+                  const response = await fetch(`/api/character-sheets/${id}/replace-image`, {
+                    method: 'PUT',
+                    body: formData,
+                  });
+
+                  const data = await response.json();
+
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to save image');
+                  }
+
+                  toast.success('画像を更新しました');
+                }
+
+                setImageEditorOpen(false);
+                setEditingImageUrl(null);
+                // ページをリロードして変更を反映
+                loadCharacterSheet();
+              } catch (err) {
+                console.error('Error saving image:', err);
+                toast.error('画像の保存に失敗しました: ' + (err instanceof Error ? err.message : ''));
+              }
+            }}
+            onClose={() => {
+              setImageEditorOpen(false);
+              setEditingImageUrl(null);
+            }}
+            enableSaveModeSelection={true}
+          />
+        </Box>
+      )}
     </Container>
   );
 }

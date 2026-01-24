@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
   Box,
   Button,
@@ -19,9 +20,19 @@ import {
   Container,
   IconButton,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Download as DownloadIcon, Star as StarIcon, StarBorder as StarBorderIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Download as DownloadIcon, Star as StarIcon, StarBorder as StarBorderIcon, Brush as BrushIcon } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
+
+// ImageEditorは重いコンポーネントなのでdynamic importでSSRを無効化
+const ImageEditor = dynamic(() => import('@/components/common/ImageEditor'), {
+  ssr: false,
+  loading: () => (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <CircularProgress />
+    </Box>
+  ),
+});
 
 interface CharacterSheet {
   id: number;
@@ -43,6 +54,8 @@ export default function CharacterSheetsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedSheet, setSelectedSheet] = useState<CharacterSheet | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [editingSheet, setEditingSheet] = useState<CharacterSheet | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -272,7 +285,7 @@ export default function CharacterSheetsPage() {
                   </Typography>
                 )}
               </CardContent>
-              <CardActions>
+              <CardActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
                 <Button
                   size="small"
                   startIcon={<EditIcon />}
@@ -282,10 +295,20 @@ export default function CharacterSheetsPage() {
                 </Button>
                 <Button
                   size="small"
+                  startIcon={<BrushIcon />}
+                  onClick={() => {
+                    setEditingSheet(sheet);
+                    setImageEditorOpen(true);
+                  }}
+                >
+                  画像編集
+                </Button>
+                <Button
+                  size="small"
                   startIcon={<DownloadIcon />}
                   onClick={() => handleDownload(sheet)}
                 >
-                  ダウンロード
+                  DL
                 </Button>
                 <Button
                   size="small"
@@ -323,6 +346,113 @@ export default function CharacterSheetsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 画像エディタ（フルスクリーンダイアログ） */}
+      {imageEditorOpen && editingSheet && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1300,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <ImageEditor
+            imageUrl={getImageUrl(editingSheet.image_url)}
+            onSave={async (blob, saveMode?: 'overwrite' | 'new') => {
+              try {
+                const formData = new FormData();
+                formData.append('file', blob, 'edited-image.png');
+
+                if (saveMode === 'new') {
+                  // 新規保存: 新しいキャラクターシートとして保存
+                  // Base64に変換してAPIに送信
+                  const base64Data = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      const result = reader.result as string;
+                      const base64 = result.split(',')[1];
+                      resolve(base64);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  });
+
+                  // まず画像をアップロード
+                  const uploadResponse = await fetch('/api/upload-image', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      base64Data,
+                      mimeType: 'image/png',
+                      fileName: 'edited-image.png',
+                      folder: 'charactersheets',
+                    }),
+                  });
+
+                  const uploadData = await uploadResponse.json();
+                  if (!uploadData.success) {
+                    throw new Error(uploadData.error || 'Failed to upload image');
+                  }
+
+                  // 新しいキャラクターシートを作成
+                  const createResponse = await fetch('/api/character-sheets', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      name: `${editingSheet.name} (編集済み)`,
+                      image_url: uploadData.storagePath,
+                      description: editingSheet.description || '',
+                      elevenlabs_voice_id: editingSheet.elevenlabs_voice_id || undefined,
+                    }),
+                  });
+
+                  const createData = await createResponse.json();
+                  if (!createData.success) {
+                    throw new Error(createData.error || 'Failed to create character sheet');
+                  }
+
+                  toast.success('新しいキャラクターシートとして保存しました');
+                } else {
+                  // 上書き保存: 既存の画像を差し替え
+                  const response = await fetch(`/api/character-sheets/${editingSheet.id}/replace-image`, {
+                    method: 'PUT',
+                    body: formData,
+                  });
+
+                  const data = await response.json();
+
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to save image');
+                  }
+
+                  toast.success('画像を更新しました');
+                }
+
+                setImageEditorOpen(false);
+                setEditingSheet(null);
+                // リストをリロードして変更を反映
+                loadCharacterSheets();
+              } catch (err) {
+                console.error('Error saving image:', err);
+                toast.error('画像の保存に失敗しました: ' + (err instanceof Error ? err.message : ''));
+              }
+            }}
+            onClose={() => {
+              setImageEditorOpen(false);
+              setEditingSheet(null);
+            }}
+            enableSaveModeSelection={true}
+          />
+        </Box>
+      )}
     </Container>
   );
 }
