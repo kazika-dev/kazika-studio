@@ -26,10 +26,12 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import TranslateIcon from '@mui/icons-material/Translate';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import SettingsIcon from '@mui/icons-material/Settings';
 import type { ConversationMessageWithCharacter } from '@/types/conversation';
 import EmotionTagSelector from './EmotionTagSelector';
 import MessageAddDialog from './MessageAddDialog';
 import MessageCharacterSelector from './MessageCharacterSelector';
+import BulkEmotionSettingsDialog from './BulkEmotionSettingsDialog';
 import {
   DndContext,
   closestCenter,
@@ -64,6 +66,9 @@ interface ConversationViewerProps {
   onReanalyzeEmotion?: (messageId: number) => Promise<void>;
   onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
   onContinueConversation?: () => void;
+  onBulkReanalyzeEmotions?: () => Promise<void>;
+  onBulkAddTag?: (tagName: string) => Promise<void>;
+  onBulkRemoveTags?: () => Promise<void>;
   readonly?: boolean;
 }
 
@@ -575,6 +580,9 @@ export default function ConversationViewer({
   onReanalyzeEmotion,
   onAddMessage,
   onContinueConversation,
+  onBulkReanalyzeEmotions,
+  onBulkAddTag,
+  onBulkRemoveTags,
   readonly = false
 }: ConversationViewerProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -590,6 +598,7 @@ export default function ConversationViewer({
   const [tagSelectorOpen, setTagSelectorOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [insertAfterMessageId, setInsertAfterMessageId] = useState<number | undefined>(undefined);
+  const [bulkSettingsDialogOpen, setBulkSettingsDialogOpen] = useState(false);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(
@@ -1019,6 +1028,16 @@ export default function ConversationViewer({
               メッセージを追加
             </Button>
           )}
+          {(onBulkReanalyzeEmotions || onBulkAddTag || onBulkRemoveTags) && (
+            <Button
+              variant="outlined"
+              startIcon={<SettingsIcon />}
+              onClick={() => setBulkSettingsDialogOpen(true)}
+              size="small"
+            >
+              感情タグ一括設定
+            </Button>
+          )}
         </Box>
       )}
 
@@ -1044,6 +1063,19 @@ export default function ConversationViewer({
         }}
         onAdd={handleAddMessage}
       />
+
+      {/* Bulk Emotion Settings Dialog */}
+      {conversationId && (onBulkReanalyzeEmotions || onBulkAddTag || onBulkRemoveTags) && (
+        <BulkEmotionSettingsDialog
+          open={bulkSettingsDialogOpen}
+          conversationId={conversationId}
+          messageCount={localMessages.length}
+          onClose={() => setBulkSettingsDialogOpen(false)}
+          onBulkReanalyze={onBulkReanalyzeEmotions || (async () => {})}
+          onBulkAddTag={onBulkAddTag || (async () => {})}
+          onBulkRemoveTags={onBulkRemoveTags || (async () => {})}
+        />
+      )}
     </Box>
   );
 }

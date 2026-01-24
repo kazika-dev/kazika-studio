@@ -395,6 +395,89 @@ export default function ConversationsFocusPage() {
     await loadConversation(conversationId);
   };
 
+  // 選択したメッセージに対する一括操作
+  const handleBulkReanalyzeSelectedEmotions = async (messageIds: number[]) => {
+    if (!selectedConversation || messageIds.length === 0) return;
+
+    try {
+      const response = await fetch('/api/conversations/messages/bulk-update-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageIds,
+          action: 'reanalyze'
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk reanalyze emotions');
+      }
+    } catch (error) {
+      console.error('Failed to bulk reanalyze emotions:', error);
+      throw error;
+    }
+  };
+
+  const handleBulkAddTagToSelected = async (messageIds: number[], tagName: string) => {
+    if (!selectedConversation || messageIds.length === 0) return;
+
+    try {
+      const response = await fetch('/api/conversations/messages/bulk-update-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageIds,
+          action: 'add',
+          tagName
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk add tag');
+      }
+    } catch (error) {
+      console.error('Failed to bulk add tag:', error);
+      throw error;
+    }
+  };
+
+  const handleBulkRemoveTagsFromSelected = async (messageIds: number[]) => {
+    if (!selectedConversation || messageIds.length === 0) return;
+
+    try {
+      const response = await fetch('/api/conversations/messages/bulk-update-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageIds,
+          action: 'remove'
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk remove tags');
+      }
+    } catch (error) {
+      console.error('Failed to bulk remove tags:', error);
+      throw error;
+    }
+  };
+
   const handleDeleteStory = async (storyId: number) => {
     try {
       const response = await fetch(`/api/stories/${storyId}`, {
@@ -557,6 +640,9 @@ export default function ConversationsFocusPage() {
                   onAddMessage={handleAddMessage}
                   onGenerateAudio={handleGenerateAudio}
                   onContinueConversation={() => loadConversation(selectedConversation.id)}
+                  onBulkReanalyzeSelectedEmotions={handleBulkReanalyzeSelectedEmotions}
+                  onBulkAddTagToSelected={handleBulkAddTagToSelected}
+                  onBulkRemoveTagsFromSelected={handleBulkRemoveTagsFromSelected}
                 />
               </>
             ) : (

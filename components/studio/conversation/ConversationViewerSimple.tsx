@@ -73,6 +73,10 @@ interface ConversationViewerSimpleProps {
   onAddMessage?: (characterId: number, messageText: string, emotionTag?: string, insertAfterMessageId?: number) => Promise<void>;
   onGenerateAudio?: (messageId: number) => Promise<{ audioUrl: string } | null>;
   onContinueConversation?: () => void;
+  // 選択したメッセージに対する一括操作
+  onBulkReanalyzeSelectedEmotions?: (messageIds: number[]) => Promise<void>;
+  onBulkAddTagToSelected?: (messageIds: number[], tagName: string) => Promise<void>;
+  onBulkRemoveTagsFromSelected?: (messageIds: number[]) => Promise<void>;
   readonly?: boolean;
 }
 
@@ -544,6 +548,9 @@ export default function ConversationViewerSimple({
   onAddMessage,
   onGenerateAudio,
   onContinueConversation,
+  onBulkReanalyzeSelectedEmotions,
+  onBulkAddTagToSelected,
+  onBulkRemoveTagsFromSelected,
   readonly = false
 }: ConversationViewerSimpleProps) {
   const [localMessages, setLocalMessages] = useState(messages);
@@ -571,6 +578,10 @@ export default function ConversationViewerSimple({
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [batchDownloading, setBatchDownloading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+
+  // Batch emotion tag operation state
+  const [batchEmotionOperating, setBatchEmotionOperating] = useState(false);
+  const [emotionTagSelectorOpen, setEmotionTagSelectorOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1012,6 +1023,68 @@ export default function ConversationViewerSimple({
     alert(`${successCount}/${reversedMessages.length}件の音声をダウンロードしました`);
   };
 
+  // Batch emotion tag operations
+  const handleBatchReanalyzeEmotions = async () => {
+    if (!onBulkReanalyzeSelectedEmotions || selectedMessageIds.size === 0) return;
+
+    setBatchEmotionOperating(true);
+    setBatchProgress({ current: 0, total: selectedMessageIds.size });
+
+    try {
+      await onBulkReanalyzeSelectedEmotions(Array.from(selectedMessageIds));
+      alert(`${selectedMessageIds.size}件のメッセージの感情タグを再分析しました`);
+      setSelectionMode(false);
+      setSelectedMessageIds(new Set());
+    } catch (error) {
+      console.error('Failed to batch reanalyze emotions:', error);
+      alert('感情タグの一括再分析に失敗しました');
+    } finally {
+      setBatchEmotionOperating(false);
+      setBatchProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleBatchAddTag = async (tagName: string) => {
+    if (!onBulkAddTagToSelected || selectedMessageIds.size === 0) return;
+
+    setBatchEmotionOperating(true);
+
+    try {
+      await onBulkAddTagToSelected(Array.from(selectedMessageIds), tagName);
+      alert(`${selectedMessageIds.size}件のメッセージに[${tagName}]タグを追加しました`);
+      setSelectionMode(false);
+      setSelectedMessageIds(new Set());
+    } catch (error) {
+      console.error('Failed to batch add tag:', error);
+      alert('タグの一括追加に失敗しました');
+    } finally {
+      setBatchEmotionOperating(false);
+      setEmotionTagSelectorOpen(false);
+    }
+  };
+
+  const handleBatchRemoveTags = async () => {
+    if (!onBulkRemoveTagsFromSelected || selectedMessageIds.size === 0) return;
+
+    if (!confirm(`選択した${selectedMessageIds.size}件のメッセージから感情タグを削除しますか？`)) {
+      return;
+    }
+
+    setBatchEmotionOperating(true);
+
+    try {
+      await onBulkRemoveTagsFromSelected(Array.from(selectedMessageIds));
+      alert(`${selectedMessageIds.size}件のメッセージから感情タグを削除しました`);
+      setSelectionMode(false);
+      setSelectedMessageIds(new Set());
+    } catch (error) {
+      console.error('Failed to batch remove tags:', error);
+      alert('タグの一括削除に失敗しました');
+    } finally {
+      setBatchEmotionOperating(false);
+    }
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -1139,7 +1212,7 @@ export default function ConversationViewerSimple({
             disabled={batchGenerating}
             size="small"
           >
-            {selectionMode ? '選択モードを終了' : '一括音声生成'}
+            {selectionMode ? '選択モードを終了' : '選択モード'}
           </Button>
 
           {/* Total Audio Duration Display */}
@@ -1198,6 +1271,44 @@ export default function ConversationViewerSimple({
                   ? `DL中 (${batchProgress.current}/${batchProgress.total})`
                   : '選択した音声をDL'}
               </Button>
+
+              {/* Emotion Tag Bulk Operations */}
+              {onBulkReanalyzeSelectedEmotions && (
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  onClick={handleBatchReanalyzeEmotions}
+                  disabled={batchGenerating || batchDownloading || batchEmotionOperating || selectedMessageIds.size === 0}
+                  startIcon={batchEmotionOperating ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+                  size="small"
+                >
+                  {batchEmotionOperating ? '再分析中...' : '感情タグ再分析'}
+                </Button>
+              )}
+              {onBulkAddTagToSelected && (
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={() => setEmotionTagSelectorOpen(true)}
+                  disabled={batchGenerating || batchDownloading || batchEmotionOperating || selectedMessageIds.size === 0}
+                  startIcon={<LocalOfferIcon />}
+                  size="small"
+                >
+                  タグ追加
+                </Button>
+              )}
+              {onBulkRemoveTagsFromSelected && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleBatchRemoveTags}
+                  disabled={batchGenerating || batchDownloading || batchEmotionOperating || selectedMessageIds.size === 0}
+                  startIcon={<DeleteIcon />}
+                  size="small"
+                >
+                  タグ削除
+                </Button>
+              )}
             </>
           )}
         </Paper>
@@ -1270,6 +1381,13 @@ export default function ConversationViewerSimple({
         onSelectTag={handleSelectTag}
       />
 
+      {/* Emotion Tag Selector for Bulk Add */}
+      <EmotionTagSelector
+        open={emotionTagSelectorOpen}
+        onClose={() => setEmotionTagSelectorOpen(false)}
+        onSelectTag={handleBatchAddTag}
+      />
+
       {/* Message Add Dialog */}
       {characters && characters.length > 0 && (
         <MessageAddDialog
@@ -1318,6 +1436,7 @@ export default function ConversationViewerSimple({
           />
         </>
       )}
+
     </Box>
   );
 }

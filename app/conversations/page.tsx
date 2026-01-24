@@ -296,6 +296,81 @@ export default function ConversationsPage() {
     await loadConversation(conversationId);
   };
 
+  const handleBulkReanalyzeEmotions = async () => {
+    if (!selectedConversation) return;
+
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/reanalyze-emotions`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk reanalyze emotions');
+      }
+    } catch (error) {
+      console.error('Failed to bulk reanalyze emotions:', error);
+      throw error;
+    }
+  };
+
+  const handleBulkAddTag = async (tagName: string) => {
+    if (!selectedConversation) return;
+
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/bulk-update-tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add',
+          tagName
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk add tag');
+      }
+    } catch (error) {
+      console.error('Failed to bulk add tag:', error);
+      throw error;
+    }
+  };
+
+  const handleBulkRemoveTags = async () => {
+    if (!selectedConversation) return;
+
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/bulk-update-tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'remove'
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Reload conversation to get updated messages
+        await loadConversation(selectedConversation.id);
+      } else {
+        throw new Error(result.error || 'Failed to bulk remove tags');
+      }
+    } catch (error) {
+      console.error('Failed to bulk remove tags:', error);
+      throw error;
+    }
+  };
+
   const handleCreateStudioClick = () => {
     if (!selectedConversation) return;
     setWorkflowSelectionDialogOpen(true);
@@ -503,6 +578,9 @@ export default function ConversationsPage() {
                   onReanalyzeEmotion={handleReanalyzeEmotion}
                   onAddMessage={handleAddMessage}
                   onContinueConversation={() => setContinueDialogOpen(true)}
+                  onBulkReanalyzeEmotions={handleBulkReanalyzeEmotions}
+                  onBulkAddTag={handleBulkAddTag}
+                  onBulkRemoveTags={handleBulkRemoveTags}
                 />
               </>
             ) : (
