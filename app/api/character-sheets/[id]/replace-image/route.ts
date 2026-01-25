@@ -70,6 +70,12 @@ export async function PUT(
     const formData = await request.formData();
     const imageFile = formData.get('file') as File;
 
+    console.log('Received file:', {
+      name: imageFile?.name,
+      type: imageFile?.type,
+      size: imageFile?.size
+    });
+
     if (!imageFile) {
       return NextResponse.json(
         { success: false, error: 'No image file provided' },
@@ -77,11 +83,11 @@ export async function PUT(
       );
     }
 
-    // ファイルタイプチェック
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    // ファイルタイプチェック（空のタイプも許可 - Blobの場合）
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', ''];
     if (!validTypes.includes(imageFile.type)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file type. Only PNG, JPG, JPEG, and WEBP are allowed.' },
+        { success: false, error: `Invalid file type: ${imageFile.type}. Only PNG, JPG, JPEG, and WEBP are allowed.` },
         { status: 400 }
       );
     }
@@ -95,14 +101,26 @@ export async function PUT(
     }
 
     // 画像データをBufferに変換
+    console.log('Converting file to buffer...');
     const arrayBuffer = await imageFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    console.log('Buffer size:', buffer.length);
 
     // Sharpで画像メタデータを取得
-    const metadata = await sharp(buffer).metadata();
-    const { format } = metadata;
+    console.log('Getting image metadata with sharp...');
+    let format: string | undefined;
+    try {
+      const metadata = await sharp(buffer).metadata();
+      format = metadata.format;
+      console.log('Image metadata:', { format, width: metadata.width, height: metadata.height });
+    } catch (sharpError) {
+      console.error('Sharp metadata error:', sharpError);
+      // sharpエラーでも続行（デフォルトでpngを使用）
+      format = 'png';
+    }
 
     // GCP Storageバケットを取得
+    console.log('Getting GCP Storage bucket...');
     const bucket = getStorage().bucket(process.env.GCP_STORAGE_BUCKET!);
 
     // 古い画像を削除（GCP Storage）- ストレージパスの場合のみ
@@ -132,10 +150,14 @@ export async function PUT(
     const fileName = `${baseName}-${timestamp}-${randomStr}.${extension}`;
     const storagePath = `charactersheets/${fileName}`;
 
+    // contentTypeを決定（空の場合はpngとして扱う）
+    const contentType = imageFile.type || `image/${format || 'png'}`;
+    console.log('Uploading to GCP Storage:', { storagePath, contentType });
+
     // GCP Storageにアップロード
     const file = bucket.file(storagePath);
     await file.save(buffer, {
-      contentType: imageFile.type,
+      contentType: contentType,
       metadata: {
         cacheControl: 'public, max-age=31536000',
       },
@@ -154,8 +176,11 @@ export async function PUT(
     });
   } catch (error) {
     console.error('Failed to replace character sheet image:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('Error details:', { message: errorMessage, stack: errorStack });
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Internal server error', details: errorMessage },
       { status: 500 }
     );
   }
