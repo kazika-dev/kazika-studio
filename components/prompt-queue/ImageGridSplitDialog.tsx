@@ -54,8 +54,8 @@ export default function ImageGridSplitDialog({
   onSelectSplitImages,
   maxSelections,
 }: ImageGridSplitDialogProps) {
-  const [rows, setRows] = useState(5);
-  const [cols, setCols] = useState(5);
+  const [rows, setRows] = useState(4);
+  const [cols, setCols] = useState(4);
   const [splitImages, setSplitImages] = useState<SplitImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -87,15 +87,18 @@ export default function ImageGridSplitDialog({
           { label: '1×2', rows: 1, cols: 2, description: '2枚（横2等分）' },
           { label: '1×3', rows: 1, cols: 3, description: '3枚（横3等分）' },
           { label: '1×4', rows: 1, cols: 4, description: '4枚（横4等分）' },
+          { label: '2×2', rows: 2, cols: 2, description: '4枚' },
           { label: '2×4', rows: 2, cols: 4, description: '8枚' },
-          { label: '2×5', rows: 2, cols: 5, description: '10枚' },
+          { label: '4×4', rows: 4, cols: 4, description: '16枚' },
         );
       } else {
         // 4:3 など軽い横長
         presets.push(
+          { label: '2×2', rows: 2, cols: 2, description: '4枚' },
           { label: '2×3', rows: 2, cols: 3, description: '6枚' },
           { label: '2×4', rows: 2, cols: 4, description: '8枚' },
           { label: '3×4', rows: 3, cols: 4, description: '12枚' },
+          { label: '4×4', rows: 4, cols: 4, description: '16枚' },
         );
       }
     }
@@ -107,15 +110,18 @@ export default function ImageGridSplitDialog({
           { label: '2×1', rows: 2, cols: 1, description: '2枚（縦2等分）' },
           { label: '3×1', rows: 3, cols: 1, description: '3枚（縦3等分）' },
           { label: '4×1', rows: 4, cols: 1, description: '4枚（縦4等分）' },
+          { label: '2×2', rows: 2, cols: 2, description: '4枚' },
           { label: '4×2', rows: 4, cols: 2, description: '8枚' },
-          { label: '5×2', rows: 5, cols: 2, description: '10枚' },
+          { label: '4×4', rows: 4, cols: 4, description: '16枚' },
         );
       } else {
         // 3:4 など軽い縦長
         presets.push(
+          { label: '2×2', rows: 2, cols: 2, description: '4枚' },
           { label: '3×2', rows: 3, cols: 2, description: '6枚' },
           { label: '4×2', rows: 4, cols: 2, description: '8枚' },
           { label: '4×3', rows: 4, cols: 3, description: '12枚' },
+          { label: '4×4', rows: 4, cols: 4, description: '16枚' },
         );
       }
     }
