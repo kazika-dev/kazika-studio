@@ -448,15 +448,30 @@ export default function SplitPage() {
         reference_id: typeof img.reference_id === 'number' ? img.reference_id : parseInt(String(img.reference_id), 10),
       }));
 
+    // ローカル状態を即座に更新（楽観的更新）
+    setQueues((prev) =>
+      prev.map((q) =>
+        q.id === queueId
+          ? { ...q, images: q.images.filter((img) => !(img.image_type === imageType && img.reference_id === referenceId)) }
+          : q
+      )
+    );
+
     try {
-      await fetch(`/api/prompt-queue/${queueId}`, {
+      const res = await fetch(`/api/prompt-queue/${queueId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ images: newImages }),
       });
-      await fetchQueues();
+      if (!res.ok) {
+        // 失敗したら元に戻す
+        console.error('Failed to remove image from queue');
+        await fetchQueues();
+      }
     } catch (error) {
       console.error('Failed to remove image from queue:', error);
+      // エラー時は再取得して状態を同期
+      await fetchQueues();
     }
   };
 
@@ -1158,17 +1173,17 @@ export default function SplitPage() {
                     color="secondary"
                   />
                 )}
-                {/* 分割元画像（大きめに表示） */}
+                {/* 分割元画像 */}
                 {queue.source_output_url && (
                   <Tooltip title="分割元画像（クリックで拡大）">
                     <Box
                       onClick={() => setEnlargedImageUrl(getImageUrl(queue.source_output_url!))}
                       sx={{
-                        width: 120,
-                        height: 120,
-                        mr: 2,
+                        width: 150,
+                        height: 150,
+                        mr: 1,
                         borderRadius: 1,
-                        border: '3px solid #e91e63',
+                        border: '2px solid #e91e63',
                         overflow: 'hidden',
                         flexShrink: 0,
                         opacity: 0.9,
@@ -1179,20 +1194,20 @@ export default function SplitPage() {
                       <img
                         src={getImageUrl(queue.source_output_url)}
                         alt="分割元"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />
                     </Box>
                   </Tooltip>
                 )}
-                {/* メインサムネイル（大きめに表示） */}
+                {/* メインサムネイル（分割元の横に表示） */}
                 <Box sx={{ flexShrink: 0, mr: 2 }}>
                   {queue.images.length > 0 && queue.images[0].image_url ? (
                     <Tooltip title="クリックで拡大">
                       <Box
                         onClick={() => setEnlargedImageUrl(getImageUrl(queue.images[0].image_url!))}
                         sx={{
-                          width: 120,
-                          height: 120,
+                          width: 150,
+                          height: 150,
                           borderRadius: 1,
                           overflow: 'hidden',
                           cursor: 'pointer',
@@ -1203,15 +1218,15 @@ export default function SplitPage() {
                         <img
                           src={getImageUrl(queue.images[0].image_url)}
                           alt="メイン"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                         />
                       </Box>
                     </Tooltip>
                   ) : (
                     <Box
                       sx={{
-                        width: 120,
-                        height: 120,
+                        width: 150,
+                        height: 150,
                         borderRadius: 1,
                         bgcolor: 'grey.300',
                         display: 'flex',
@@ -1219,7 +1234,7 @@ export default function SplitPage() {
                         justifyContent: 'center',
                       }}
                     >
-                      <ImageIcon sx={{ fontSize: 48, color: 'grey.500' }} />
+                      <ImageIcon sx={{ fontSize: 72, color: 'grey.500' }} />
                     </Box>
                   )}
                 </Box>
@@ -1306,8 +1321,8 @@ export default function SplitPage() {
                               onClick={() => img.image_url && setEnlargedImageUrl(getImageUrl(img.image_url))}
                               sx={{
                                 position: 'relative',
-                                width: 32,
-                                height: 32,
+                                width: 48,
+                                height: 48,
                                 borderRadius: 0.5,
                                 overflow: 'hidden',
                                 cursor: img.image_url ? 'pointer' : 'default',
@@ -1341,11 +1356,11 @@ export default function SplitPage() {
                                   }}
                                 >
                                   {img.image_type === 'character_sheet' ? (
-                                    <PersonIcon sx={{ fontSize: 16 }} />
+                                    <PersonIcon sx={{ fontSize: 24 }} />
                                   ) : img.image_type === 'scene' ? (
-                                    <LandscapeIcon sx={{ fontSize: 16 }} />
+                                    <LandscapeIcon sx={{ fontSize: 24 }} />
                                   ) : (
-                                    <ImageIcon sx={{ fontSize: 16 }} />
+                                    <ImageIcon sx={{ fontSize: 24 }} />
                                   )}
                                 </Box>
                               )}
@@ -1357,8 +1372,8 @@ export default function SplitPage() {
                                 }}
                                 sx={{
                                   position: 'absolute',
-                                  top: -8,
-                                  right: -8,
+                                  top: 2,
+                                  right: 2,
                                   width: 16,
                                   height: 16,
                                   bgcolor: 'error.main',
