@@ -18,16 +18,32 @@ import {
   CircularProgress,
   Chip,
   Paper,
+  Checkbox,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
 } from '@mui/material';
 import QueueIcon from '@mui/icons-material/Queue';
 import ImageIcon from '@mui/icons-material/Image';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
+import DeselectIcon from '@mui/icons-material/Deselect';
+
+interface MessageInfo {
+  id: number;
+  speaker_name: string;
+  message_text: string;
+  sequence_order: number;
+}
 
 interface CreatePromptQueueFromConversationDialogProps {
   open: boolean;
   onClose: () => void;
   conversationId: number;
   conversationTitle: string;
-  messageCount: number;
+  messages: MessageInfo[];
   onSuccess?: (result: CreateResult) => void;
 }
 
@@ -65,9 +81,10 @@ export default function CreatePromptQueueFromConversationDialog({
   onClose,
   conversationId,
   conversationTitle,
-  messageCount,
+  messages,
   onSuccess,
 }: CreatePromptQueueFromConversationDialogProps) {
+  const [selectedMessageIds, setSelectedMessageIds] = useState<number[]>([]);
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [enhancePrompt, setEnhancePrompt] = useState<'none' | 'enhance'>('enhance');
@@ -83,6 +100,8 @@ export default function CreatePromptQueueFromConversationDialog({
   // ダイアログが開いたときにリセット
   useEffect(() => {
     if (open) {
+      // 全メッセージを選択状態にする
+      setSelectedMessageIds(messages.map(m => m.id));
       setAspectRatio('9:16');
       setAdditionalPrompt('');
       setEnhancePrompt('enhance');
@@ -91,9 +110,30 @@ export default function CreatePromptQueueFromConversationDialog({
       setError(null);
       setResult(null);
     }
-  }, [open]);
+  }, [open, messages]);
+
+  const handleToggleMessage = (messageId: number) => {
+    setSelectedMessageIds(prev =>
+      prev.includes(messageId)
+        ? prev.filter(id => id !== messageId)
+        : [...prev, messageId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedMessageIds(messages.map(m => m.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedMessageIds([]);
+  };
 
   const handleCreate = async () => {
+    if (selectedMessageIds.length === 0) {
+      setError('少なくとも1つのメッセージを選択してください');
+      return;
+    }
+
     setCreating(true);
     setError(null);
     setResult(null);
@@ -105,6 +145,7 @@ export default function CreatePromptQueueFromConversationDialog({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          messageIds: selectedMessageIds,
           aspectRatio,
           additionalTemplateId,
           additionalPrompt: additionalPrompt.trim(),
@@ -142,11 +183,19 @@ export default function CreatePromptQueueFromConversationDialog({
     }
   };
 
+  // メッセージテキストを短く表示
+  const truncateText = (text: string, maxLength: number = 50) => {
+    // 感情タグを除去
+    const cleanText = text.replace(/^\[[\w-]+\]\s*/, '');
+    if (cleanText.length <= maxLength) return cleanText;
+    return cleanText.substring(0, maxLength) + '...';
+  };
+
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="sm"
+      maxWidth="md"
       fullWidth
       PaperProps={{ sx: { maxHeight: '90vh' } }}
     >
@@ -168,8 +217,9 @@ export default function CreatePromptQueueFromConversationDialog({
             <Chip
               size="small"
               icon={<ImageIcon />}
-              label={`${messageCount} メッセージ`}
+              label={`${selectedMessageIds.length} / ${messages.length} メッセージ選択中`}
               variant="outlined"
+              color={selectedMessageIds.length > 0 ? 'primary' : 'default'}
             />
           </Box>
         </Paper>
@@ -185,7 +235,7 @@ export default function CreatePromptQueueFromConversationDialog({
               {result.error_count > 0 && ` (${result.error_count} 件のエラー)`}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              シーンプロンプトを持つメッセージからキューを作成しました
+              選択したメッセージからキューを作成しました
             </Typography>
           </Alert>
         )}
@@ -200,8 +250,69 @@ export default function CreatePromptQueueFromConversationDialog({
         {/* 設定フォーム（結果表示前のみ） */}
         {!result && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* メッセージ選択 */}
+            <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
+              <Box sx={{ p: 1, display: 'flex', gap: 1, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                <Button
+                  size="small"
+                  startIcon={<SelectAllIcon />}
+                  onClick={handleSelectAll}
+                  disabled={creating}
+                >
+                  全選択
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<DeselectIcon />}
+                  onClick={handleDeselectAll}
+                  disabled={creating}
+                >
+                  全解除
+                </Button>
+              </Box>
+              <List dense disablePadding>
+                {messages.map((msg, index) => (
+                  <ListItem key={msg.id} disablePadding divider={index < messages.length - 1}>
+                    <ListItemButton
+                      onClick={() => handleToggleMessage(msg.id)}
+                      disabled={creating}
+                      dense
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <Checkbox
+                          edge="start"
+                          checked={selectedMessageIds.includes(msg.id)}
+                          tabIndex={-1}
+                          disableRipple
+                          size="small"
+                        />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip
+                              label={msg.sequence_order + 1}
+                              size="small"
+                              sx={{ minWidth: 32, height: 20, fontSize: '0.7rem' }}
+                            />
+                            <Typography variant="body2" fontWeight="bold" sx={{ minWidth: 80 }}>
+                              {msg.speaker_name}
+                            </Typography>
+                          </Box>
+                        }
+                        secondary={truncateText(msg.message_text)}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+
+            <Divider />
+
             {/* アスペクト比選択 */}
-            <FormControl fullWidth>
+            <FormControl fullWidth size="small">
               <InputLabel>アスペクト比</InputLabel>
               <Select
                 value={aspectRatio}
@@ -218,7 +329,7 @@ export default function CreatePromptQueueFromConversationDialog({
             </FormControl>
 
             {/* プロンプト補完 */}
-            <FormControl fullWidth>
+            <FormControl fullWidth size="small">
               <InputLabel>プロンプト補完</InputLabel>
               <Select
                 value={enhancePrompt}
@@ -233,7 +344,7 @@ export default function CreatePromptQueueFromConversationDialog({
 
             {/* プロンプト補完モデル選択（補完する場合のみ表示） */}
             {enhancePrompt === 'enhance' && (
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small">
                 <InputLabel>補完用AIモデル</InputLabel>
                 <Select
                   value={enhanceModel}
@@ -259,6 +370,7 @@ export default function CreatePromptQueueFromConversationDialog({
               disabled={creating}
               helperText="数値が大きいほど優先度が高くなります"
               fullWidth
+              size="small"
             />
 
             {/* 追加プロンプト */}
@@ -268,16 +380,16 @@ export default function CreatePromptQueueFromConversationDialog({
               onChange={(e) => setAdditionalPrompt(e.target.value)}
               disabled={creating}
               multiline
-              rows={3}
+              rows={2}
               placeholder="全てのシーンに追加するプロンプトを入力..."
               fullWidth
+              size="small"
             />
 
             {/* テンプレート使用の説明 */}
-            <Alert severity="info" sx={{ mt: 1 }}>
+            <Alert severity="info" sx={{ py: 0.5 }}>
               <Typography variant="caption">
                 テキストテンプレート ID=15 の内容がプロンプトに自動追加されます。
-                <br />
                 各メッセージに紐づくキャラクターシートが参照画像として設定されます。
               </Typography>
             </Alert>
@@ -293,10 +405,10 @@ export default function CreatePromptQueueFromConversationDialog({
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={creating}
+            disabled={creating || selectedMessageIds.length === 0}
             startIcon={creating ? <CircularProgress size={20} /> : <QueueIcon />}
           >
-            {creating ? '作成中...' : 'キューを作成'}
+            {creating ? '作成中...' : `キューを作成 (${selectedMessageIds.length}件)`}
           </Button>
         )}
       </DialogActions>

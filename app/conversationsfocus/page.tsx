@@ -784,7 +784,12 @@ export default function ConversationsFocusPage() {
           onClose={() => setPromptQueueDialogOpen(false)}
           conversationId={selectedConversation.id}
           conversationTitle={selectedConversation.title}
-          messageCount={messages.length}
+          messages={messages.map(m => ({
+            id: m.id,
+            speaker_name: m.speaker_name,
+            message_text: m.message_text,
+            sequence_order: m.sequence_order,
+          }))}
           onSuccess={(result) => {
             console.log('Prompt queues created:', result);
           }}

@@ -14,6 +14,7 @@ import {
 import { generateConversationContent } from '@/lib/vertex-ai/generate';
 
 interface CreatePromptQueuesRequest {
+  messageIds?: number[];  // 選択されたメッセージIDの配列（省略時は全メッセージ）
   aspectRatio?: string;
   additionalTemplateId?: number;
   additionalPrompt?: string;
@@ -77,6 +78,7 @@ export async function POST(
     // リクエストボディを取得
     const body: CreatePromptQueuesRequest = await request.json();
     const {
+      messageIds,
       aspectRatio = '16:9',
       additionalTemplateId,
       additionalPrompt = '',
@@ -139,26 +141,37 @@ export async function POST(
       emotionTag: msg.metadata?.emotionTag,
     }));
 
+    // 処理対象のメッセージをフィルタ（messageIdsが指定されていれば選択されたもののみ）
+    const targetMessages = messageIds && messageIds.length > 0
+      ? messages.filter((msg: any) => messageIds.includes(msg.id))
+      : messages;
+
+    if (targetMessages.length === 0) {
+      return NextResponse.json({ error: 'No messages to process' }, { status: 400 });
+    }
+
     // 各メッセージに対してプロンプトキューを作成
     const createdQueues = [];
     const errors = [];
 
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
+    for (let i = 0; i < targetMessages.length; i++) {
+      const message = targetMessages[i];
+      // 元のメッセージ配列での位置を取得（AIプロンプト生成用）
+      const originalIndex = messages.findIndex((m: any) => m.id === message.id);
 
       try {
         // メッセージに紐づくキャラクターを取得
         const messageCharacters = await getMessageCharacters(message.id);
 
         // AIでシーン画像プロンプトを生成（キャラクターシート画像はAIには送信しない）
-        console.log(`[create-prompt-queues] Generating scene prompt for message ${message.id} (${i + 1}/${messages.length})...`);
+        console.log(`[create-prompt-queues] Generating scene prompt for message ${message.id} (${i + 1}/${targetMessages.length})...`);
 
         const promptInput: SceneImagePromptInput = {
           conversationTitle: conversation.title || '無題の会話',
           situation: conversation.description || '',
           location: sceneLocation || undefined,
           allMessages: allMessagesForPrompt,
-          targetMessageIndex: i,
+          targetMessageIndex: originalIndex,  // 元のメッセージ配列での位置を使用
           characters: allCharacters,
           // additionalPrompt は AI 生成には使用せず、キュー登録後にテンプレートとして追加
         };
@@ -284,7 +297,7 @@ export async function POST(
         });
 
         // レート制限対策：少し待機
-        if (i < messages.length - 1) {
+        if (i < targetMessages.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       } catch (err: any) {
@@ -302,7 +315,7 @@ export async function POST(
       data: {
         created_count: createdQueues.length,
         error_count: errors.length,
-        total_messages: messages.length,
+        total_messages: targetMessages.length,
         queues: createdQueues,
         errors: errors.length > 0 ? errors : undefined,
       },
