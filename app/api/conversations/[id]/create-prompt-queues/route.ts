@@ -169,7 +169,7 @@ export async function POST(
           allMessages: allMessagesForPrompt,
           targetMessageIndex: i,
           characters: allCharacters,
-          additionalInstructions: additionalPrompt || undefined,
+          // additionalPrompt は AI 生成には使用せず、キュー登録後にテンプレートとして追加
         };
 
         const aiPrompt = buildSceneImagePrompt(promptInput);
@@ -220,9 +220,14 @@ export async function POST(
         // プロンプトを構築
         let finalPrompt = scenePromptData.scenePrompt;
 
-        // テンプレートを追加
+        // テンプレートを追加（AI生成後に追加するので、AIの出力には影響しない）
         if (templateContent) {
           finalPrompt += `\n\n${templateContent}`;
+        }
+
+        // 追加プロンプトを追加（AI生成後に追加するので、AIの出力には影響しない）
+        if (additionalPrompt && additionalPrompt.trim()) {
+          finalPrompt += `\n\n${additionalPrompt.trim()}`;
         }
 
         // キャラクターシートIDを決定（AIが提案したものを使用、なければメッセージに紐づくもの）
