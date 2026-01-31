@@ -98,6 +98,12 @@ export async function GET(
       return msg;
     });
 
+    // 会話の location を決定: metadata.draft_params.location を優先、なければ scene.location を使用
+    const conversationLocation =
+      (conversation.metadata as any)?.draft_params?.location ||
+      conversation.scene?.location ||
+      null;
+
     return NextResponse.json({
       success: true,
       data: {
@@ -110,7 +116,7 @@ export async function GET(
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
           metadata: conversation.metadata,
-          location: conversation.scene?.location || null,
+          location: conversationLocation,
           ...(conversation.studio && {
             studio: {
               id: conversation.studio.id,
@@ -274,30 +280,12 @@ export async function PATCH(
     if (description !== undefined) updates.description = description;
     if (metadata !== undefined) updates.metadata = metadata;
     // Handle draftParams update - merge into existing metadata
+    // location は会話ごとに metadata.draft_params.location に保存される（story_scenes.location は更新しない）
     if (draftParams !== undefined) {
       updates.metadata = {
         ...(conversation.metadata || {}),
         draft_params: draftParams
       };
-
-      // Also update story_scenes.location if conversation has story_scene_id
-      if (conversation.story_scene_id && draftParams.location !== undefined) {
-        console.log('[PATCH /api/conversations] Updating story_scenes.location:', {
-          story_scene_id: conversation.story_scene_id,
-          location: draftParams.location
-        });
-        const { error: sceneUpdateError } = await supabase
-          .from('story_scenes')
-          .update({ location: draftParams.location })
-          .eq('id', conversation.story_scene_id);
-
-        if (sceneUpdateError) {
-          console.error('Failed to update story_scenes.location:', sceneUpdateError);
-          // Continue anyway - this is not critical
-        } else {
-          console.log('[PATCH /api/conversations] Successfully updated story_scenes.location');
-        }
-      }
     }
 
     const { data: updated, error: updateError} = await supabase

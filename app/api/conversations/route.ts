@@ -207,6 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create conversation with optional draft params
+    // location は会話ごとに metadata.draft_params.location に保存される（story_scenes.location は更新しない）
     const metadata: Record<string, any> = {};
     if (draftParams) {
       metadata.draft_params = draftParams;

@@ -49,6 +49,7 @@ export default function ConversationGeneratorDialogWithScene({
   const [loadingCharacters, setLoadingCharacters] = useState(false);
   const [selectedCharacters, setSelectedCharacters] = useState<number[]>([]);
   const [title, setTitle] = useState('');
+  const [location, setLocation] = useState('');
   const [situation, setSituation] = useState('');
   const [messageCount, setMessageCount] = useState(6);
   const [tone, setTone] = useState<'casual' | 'formal' | 'dramatic' | 'humorous'>('casual');
@@ -201,6 +202,7 @@ export default function ConversationGeneratorDialogWithScene({
           storySceneId: sceneId,
           draftParams: {
             characterIds: selectedCharacters,
+            location: location.trim(),
             situation: situation.trim(),
             messageCount,
             tone,
@@ -229,6 +231,7 @@ export default function ConversationGeneratorDialogWithScene({
   const handleClose = () => {
     setSelectedCharacters([]);
     setTitle('');
+    setLocation('');
     setSituation('');
     setMessageCount(6);
     setTone('casual');
@@ -291,6 +294,16 @@ export default function ConversationGeneratorDialogWithScene({
             )}
           </Box>
 
+          {/* 場所 */}
+          <TextField
+            label="場所"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            fullWidth
+            placeholder="例: 学校の屋上、夕暮れ時"
+            helperText="シーンの舞台となる場所を入力してください"
+          />
+
           {/* シチュエーション */}
           <TextField
             label="シチュエーション"
@@ -300,7 +313,7 @@ export default function ConversationGeneratorDialogWithScene({
             rows={4}
             fullWidth
             required
-            placeholder="例: 夕暮れの学校の屋上。主人公が意を決してヒロインに告白する。ヒロインは驚きながらも嬉しそうな表情を見せる。"
+            placeholder="例: 主人公が意を決してヒロインに告白する。ヒロインは驚きながらも嬉しそうな表情を見せる。"
           />
 
           {/* トーン */}
