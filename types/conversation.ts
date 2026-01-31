@@ -117,6 +117,8 @@ export interface GenerateConversationRequest {
     speaker: string;
     message: string;
   }>;
+  /** AI model to use for generation (e.g., 'gemini-2.5-flash-preview-05-20', 'claude-sonnet-4@20250514') */
+  model?: string;
 }
 
 export interface GenerateConversationResponse {

@@ -13,6 +13,8 @@ import {
 import { getAllCameraAngles, getAllShotDistances, addCharacterToMessage } from '@/lib/db'; // Still needed for random scene generation
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 import type { GenerateConversationRequest, GenerateConversationResponse } from '@/types/conversation';
+import { generateConversationContent } from '@/lib/vertex-ai/generate';
+import { getModelProvider, DEFAULT_CONVERSATION_MODEL } from '@/lib/vertex-ai/constants';
 
 /**
  * POST /api/conversations/generate
@@ -130,7 +132,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get model and provider
+    const selectedModel = body.model || DEFAULT_CONVERSATION_MODEL;
+    const modelProvider = getModelProvider(selectedModel);
+
     // Build prompt (now async - fetches emotion tags from database and uses template)
+    // Pass modelProvider for model-specific prompt formatting (e.g., XML for Claude)
     const prompt = await buildConversationPrompt({
       characters: characters.map(c => ({
         id: c.id,
@@ -144,25 +151,20 @@ export async function POST(request: NextRequest) {
       messageCount: body.messageCount,
       tone: body.tone,
       previousMessages: body.previousMessages
-    }, body.promptTemplateId);
+    }, body.promptTemplateId, modelProvider);
 
-    // Generate conversation using Gemini
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'GEMINI_API_KEY is not configured' },
-        { status: 500 }
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-
-    console.log('Generating conversation with Gemini...');
+    console.log(`Generating conversation with ${selectedModel} (${modelProvider})...`);
     console.log('[DEBUG] Prompt sent to AI:', prompt.substring(0, 500) + '...');
-    const result = await model.generateContent(prompt);
-    const aiResponse = result.response.text();
-    console.log('[DEBUG] AI raw response:', aiResponse);
+
+    // Generate conversation using unified service (supports Vertex AI Gemini, Claude, and fallback)
+    const generateResult = await generateConversationContent({
+      model: selectedModel,
+      prompt,
+      maxTokens: 8192,
+    });
+
+    const aiResponse = generateResult.text;
+    console.log(`[DEBUG] AI response from ${generateResult.provider}:`, aiResponse.substring(0, 500) + '...');
 
     // Parse AI response
     let parsed;
@@ -396,12 +398,12 @@ export async function POST(request: NextRequest) {
       console.log(`Created ${scenes?.length || 0} scenes for conversation ${conversation.id}`);
     }
 
-    // Save generation log
+    // Save generation log with actual model used
     await supabase.from('conversation_generation_logs').insert({
       conversation_id: conversation.id,
       prompt_template: prompt,
       prompt_variables: body,
-      ai_model: 'gemini-2.0-flash-exp',
+      ai_model: selectedModel,
       ai_response: aiResponse,
       generated_messages: messages.map(m => m.id)
     });
@@ -420,8 +422,13 @@ export async function POST(request: NextRequest) {
         parsed.messages
       );
 
-      const sceneResult = await model.generateContent(scenePrompt);
-      const sceneAiResponse = sceneResult.response.text();
+      // Use same model for scene generation
+      const sceneGenerateResult = await generateConversationContent({
+        model: selectedModel,
+        prompt: scenePrompt,
+        maxTokens: 4096,
+      });
+      const sceneAiResponse = sceneGenerateResult.text;
       const scenePromptData = await parseScenePromptResponse(sceneAiResponse);
 
       // Save scene to database with camera info

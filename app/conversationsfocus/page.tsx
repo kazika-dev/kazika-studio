@@ -19,7 +19,7 @@ import ConversationViewerSimple from '@/components/studio/conversation/Conversat
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
-import ConversationCreationDialog from '@/components/studio/conversation/ConversationCreationDialog';
+import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import type {
   Conversation,
@@ -689,14 +689,14 @@ export default function ConversationsFocusPage() {
         }}
       />
 
-      <ConversationCreationDialog
+      <ConversationGeneratorDialogWithScene
         open={conversationDialogOpen}
         sceneId={selectedSceneId}
         onClose={() => {
           setConversationDialogOpen(false);
           setSelectedSceneId(null);
         }}
-        onCreated={handleConversationGenerated}
+        onGenerated={handleConversationGenerated}
       />
 
       <WorkflowSelectionDialog
