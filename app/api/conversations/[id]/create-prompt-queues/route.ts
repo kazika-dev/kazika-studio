@@ -186,6 +186,11 @@ export async function POST(
           maxTokens: 2048,
         });
 
+        // AIからの応答をログ出力
+        console.log(`[create-prompt-queues] ========== AI RESPONSE for message ${message.id} ==========`);
+        console.log(generateResult.text);
+        console.log(`[create-prompt-queues] ========== END AI RESPONSE ==========`);
+
         let scenePromptData;
         try {
           scenePromptData = await parseSceneImagePromptResponse(generateResult.text);
