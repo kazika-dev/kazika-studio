@@ -261,6 +261,12 @@ export async function PATCH(
     }
 
     // Update conversation
+    console.log('[PATCH /api/conversations] Conversation data:', {
+      id: conversation.id,
+      story_scene_id: conversation.story_scene_id,
+      user_id: conversation.user_id
+    });
+
     const updates: any = {};
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
