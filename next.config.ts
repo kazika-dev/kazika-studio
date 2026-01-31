@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     'google-auth-library',
     'pg',
     'pg-pool',
+    '@ai-sdk/anthropic',
   ],
  async headers() {
       return [
