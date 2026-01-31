@@ -191,8 +191,10 @@ export async function POST(
           // images: キャラクターシート画像はAIに送信しない（プロンプトキューへの登録時に使用）
         });
 
-        // AIからの応答をログ出力
+        // AIからの応答をログ出力（全内容）
         console.log(`[create-prompt-queues] ========== AI RESPONSE for message ${message.id} ==========`);
+        console.log(`[create-prompt-queues] Full response object:`, JSON.stringify(generateResult, null, 2));
+        console.log(`[create-prompt-queues] Response text:`);
         console.log(generateResult.text);
         console.log(`[create-prompt-queues] ========== END AI RESPONSE ==========`);
 
