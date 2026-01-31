@@ -35,6 +35,7 @@ interface CharacterSheet {
   image_url: string;
   description: string;
   elevenlabs_voice_id?: string;
+  looks?: string;
   metadata: any;
   created_at: string;
   updated_at: string;
@@ -52,6 +53,7 @@ export default function EditCharacterSheetPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
+  const [looks, setLooks] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
@@ -72,6 +74,7 @@ export default function EditCharacterSheetPage() {
         setName(data.characterSheet.name);
         setDescription(data.characterSheet.description || '');
         setElevenLabsVoiceId(data.characterSheet.elevenlabs_voice_id || '');
+        setLooks(data.characterSheet.looks || '');
         setImagePreview(data.characterSheet.image_url);
       } else {
         toast.error('キャラクターシートの取得に失敗しました');
@@ -185,6 +188,7 @@ export default function EditCharacterSheetPage() {
           image_url: imageUrl,
           description: description.trim(),
           elevenlabs_voice_id: elevenLabsVoiceId.trim() || undefined,
+          looks: looks.trim() || undefined,
         }),
       });
 
@@ -264,6 +268,18 @@ export default function EditCharacterSheetPage() {
               disabled={saving}
               placeholder="例: 21m00Tcm4TlvDq8ikWAM"
               helperText="ElevenLabsの音声IDを入力すると、音声生成時に使用されます"
+            />
+
+            <TextField
+              label="ルックス（外見特徴）"
+              fullWidth
+              multiline
+              rows={4}
+              value={looks}
+              onChange={(e) => setLooks(e.target.value)}
+              disabled={saving}
+              placeholder="例: 黒髪ロング、青い瞳、制服姿、メガネ着用"
+              helperText="キャラクターの外見特徴を自由に記述してください（髪色、目の色、服装、アクセサリーなど）"
             />
 
             <Box>

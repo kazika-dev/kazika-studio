@@ -130,7 +130,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, image_url, description, elevenlabs_voice_id, metadata, is_favorite } = body;
+    const { name, image_url, description, elevenlabs_voice_id, metadata, is_favorite, looks } = body;
 
     const updatedCharacterSheet = await updateCharacterSheet(characterSheetId, {
       name,
@@ -139,6 +139,7 @@ export async function PATCH(
       elevenlabs_voice_id,
       metadata,
       is_favorite,
+      looks,
     });
 
     return NextResponse.json({

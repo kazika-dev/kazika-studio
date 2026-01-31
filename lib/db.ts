@@ -727,6 +727,7 @@ export async function updateCharacterSheet(id: number, data: {
   elevenlabs_voice_id?: string;
   metadata?: any;
   is_favorite?: boolean;
+  looks?: string;
 }) {
   const updates: string[] = [];
   const values: any[] = [];
@@ -755,6 +756,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.is_favorite !== undefined) {
     updates.push(`is_favorite = $${paramIndex++}`);
     values.push(data.is_favorite);
+  }
+  if (data.looks !== undefined) {
+    updates.push(`looks = $${paramIndex++}`);
+    values.push(data.looks);
   }
 
   if (updates.length === 0) {
