@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
     // プロンプト補完用のシステムプロンプト
     const enhanceSystemPrompt = `あなたは画像生成AIのプロンプトを最適化する専門家です。
