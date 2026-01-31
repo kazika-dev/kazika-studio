@@ -651,7 +651,7 @@ export default function ConversationsFocusPage() {
                           {selectedConversation.description}
                         </Typography>
                       )}
-                      {/* シーンの場所（story_scenes.location）を表示 */}
+                      {/* 会話の場所（conversations.location）を表示 */}
                       {selectedConversation.location && (
                         <Typography variant="body2" color="primary" sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           📍 場所: {selectedConversation.location}

@@ -98,12 +98,6 @@ export async function GET(
       return msg;
     });
 
-    // 会話の location を決定: metadata.draft_params.location を優先、なければ scene.location を使用
-    const conversationLocation =
-      (conversation.metadata as any)?.draft_params?.location ||
-      conversation.scene?.location ||
-      null;
-
     return NextResponse.json({
       success: true,
       data: {
@@ -113,10 +107,10 @@ export async function GET(
           story_scene_id: conversation.story_scene_id,
           title: conversation.title,
           description: conversation.description,
+          location: conversation.location || null,
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
           metadata: conversation.metadata,
-          location: conversationLocation,
           ...(conversation.studio && {
             studio: {
               id: conversation.studio.id,
@@ -238,7 +232,7 @@ export async function PATCH(
     const supabase = await createClient();
 
     const body = await request.json();
-    const { title, description, metadata, draftParams } = body;
+    const { title, description, location, metadata, draftParams } = body;
 
     // Verify ownership
     const { data: conversation, error: convError } = await supabase
@@ -278,14 +272,19 @@ export async function PATCH(
     const updates: any = {};
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
+    if (location !== undefined) updates.location = location;
     if (metadata !== undefined) updates.metadata = metadata;
     // Handle draftParams update - merge into existing metadata
-    // location は会話ごとに metadata.draft_params.location に保存される（story_scenes.location は更新しない）
+    // draftParams.location がある場合は conversations.location カラムにも保存
     if (draftParams !== undefined) {
       updates.metadata = {
         ...(conversation.metadata || {}),
         draft_params: draftParams
       };
+      // draftParams.location を conversations.location カラムにも反映
+      if (draftParams.location !== undefined) {
+        updates.location = draftParams.location;
+      }
     }
 
     const { data: updated, error: updateError} = await supabase

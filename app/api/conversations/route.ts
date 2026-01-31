@@ -207,10 +207,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Create conversation with optional draft params
-    // location は会話ごとに metadata.draft_params.location に保存される（story_scenes.location は更新しない）
+    // location は conversations.location カラムに保存
     const metadata: Record<string, any> = {};
+    let locationValue: string | null = null;
     if (draftParams) {
       metadata.draft_params = draftParams;
+      // draftParams.location を conversations.location カラムに保存
+      if (draftParams.location) {
+        locationValue = draftParams.location;
+      }
     }
 
     const { data: conversation, error: insertError } = await supabase
@@ -218,6 +223,7 @@ export async function POST(request: NextRequest) {
       .insert({
         title: title.trim(),
         description: description?.trim() || null,
+        location: locationValue,
         story_scene_id: storySceneId,
         user_id: user.id,
         metadata,

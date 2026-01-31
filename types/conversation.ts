@@ -30,6 +30,7 @@ export interface Conversation {
   story_scene_id: number | null;
   title: string;
   description: string | null;
+  location: string | null; // 会話の舞台となる場所
   created_at: string;
   updated_at: string;
   metadata: Record<string, any>;
