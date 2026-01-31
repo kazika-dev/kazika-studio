@@ -569,21 +569,44 @@ export interface SceneImagePromptResponse {
 export async function parseSceneImagePromptResponse(
   aiResponse: string
 ): Promise<SceneImagePromptResponse> {
-  // Try to extract JSON block from markdown code fence
-  const jsonMatch = aiResponse.match(/```json\s*\n([\s\S]*?)\n```/);
+  // まず応答をクリーンアップ
+  let cleanedResponse = aiResponse.trim();
+
+  // Try to extract JSON block from markdown code fence (最初のマッチのみ)
+  const jsonMatch = cleanedResponse.match(/```json\s*\n?([\s\S]*?)\n?```/);
 
   let jsonText: string;
   if (jsonMatch) {
-    jsonText = jsonMatch[1];
+    jsonText = jsonMatch[1].trim();
   } else {
-    // Try to find JSON without code fence
-    const directJsonMatch = aiResponse.match(/\{[\s\S]*"scenePrompt"[\s\S]*\}/);
-    if (directJsonMatch) {
-      jsonText = directJsonMatch[0];
+    // Try to find JSON without code fence - より厳密なパターン
+    // { で始まり } で終わる最初の有効なJSONオブジェクトを探す
+    const jsonStartIndex = cleanedResponse.indexOf('{');
+    if (jsonStartIndex !== -1) {
+      // 対応する } を見つける
+      let braceCount = 0;
+      let jsonEndIndex = -1;
+      for (let i = jsonStartIndex; i < cleanedResponse.length; i++) {
+        if (cleanedResponse[i] === '{') braceCount++;
+        if (cleanedResponse[i] === '}') braceCount--;
+        if (braceCount === 0) {
+          jsonEndIndex = i;
+          break;
+        }
+      }
+      if (jsonEndIndex !== -1) {
+        jsonText = cleanedResponse.substring(jsonStartIndex, jsonEndIndex + 1);
+      } else {
+        throw new Error('AI response does not contain valid JSON for scene image prompt');
+      }
     } else {
       throw new Error('AI response does not contain valid JSON for scene image prompt');
     }
   }
+
+  // JSONテキストをさらにクリーンアップ
+  // 余分なバッククォートや「json」テキストを除去
+  jsonText = jsonText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
 
   try {
     const parsed = JSON.parse(jsonText);
@@ -612,8 +635,13 @@ export async function parseSceneImagePromptResponse(
         .filter((id: number | null): id is number => id !== null && id > 0);
     }
 
+    // scenePrompt から (ID:数字) のような余分なテキストを除去
+    let cleanedScenePrompt = parsed.scenePrompt;
+    cleanedScenePrompt = cleanedScenePrompt.replace(/\(ID:\d+\)/g, '');
+    cleanedScenePrompt = cleanedScenePrompt.replace(/\s+/g, ' ').trim();
+
     return {
-      scenePrompt: parsed.scenePrompt,
+      scenePrompt: cleanedScenePrompt,
       sceneCharacterIds: characterIds,
       emotion: parsed.emotion || '中立',
       cameraAngle: parsed.cameraAngle || '正面'
