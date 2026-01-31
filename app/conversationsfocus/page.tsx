@@ -551,6 +551,36 @@ export default function ConversationsFocusPage() {
     }
   };
 
+  const handleBulkDeleteConversations = async (conversationIds: number[]) => {
+    try {
+      // 並列で削除を実行
+      const results = await Promise.all(
+        conversationIds.map(async (id) => {
+          const response = await fetch(`/api/conversations/${id}`, {
+            method: 'DELETE'
+          });
+          return response.json();
+        })
+      );
+
+      const failedCount = results.filter(r => !r.success).length;
+      if (failedCount > 0) {
+        alert(`${conversationIds.length - failedCount}件削除、${failedCount}件失敗しました`);
+      }
+
+      await loadStoryTree();
+
+      // 選択中の会話が削除された場合はクリア
+      if (selectedConversation && conversationIds.includes(selectedConversation.id)) {
+        setSelectedConversation(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to bulk delete conversations:', error);
+      throw error;
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ maxWidth: 1280, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
@@ -616,6 +646,7 @@ export default function ConversationsFocusPage() {
               onDeleteStory={handleDeleteStory}
               onDeleteScene={handleDeleteScene}
               onDeleteConversation={handleDeleteConversation}
+              onBulkDeleteConversations={handleBulkDeleteConversations}
             />
           </Paper>
         </Box>
