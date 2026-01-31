@@ -230,7 +230,7 @@ export async function PATCH(
     const supabase = await createClient();
 
     const body = await request.json();
-    const { title, description, metadata } = body;
+    const { title, description, metadata, draftParams } = body;
 
     // Verify ownership
     const { data: conversation, error: convError } = await supabase
@@ -265,6 +265,13 @@ export async function PATCH(
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (metadata !== undefined) updates.metadata = metadata;
+    // Handle draftParams update - merge into existing metadata
+    if (draftParams !== undefined) {
+      updates.metadata = {
+        ...(conversation.metadata || {}),
+        draft_params: draftParams
+      };
+    }
 
     const { data: updated, error: updateError} = await supabase
       .from('conversations')

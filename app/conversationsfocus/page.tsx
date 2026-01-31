@@ -15,17 +15,20 @@ import ChatIcon from '@mui/icons-material/Chat';
 import MovieIcon from '@mui/icons-material/Movie';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SubtitlesIcon from '@mui/icons-material/Subtitles';
+import SettingsIcon from '@mui/icons-material/Settings';
 import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
 import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
 import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
+import ConversationSettingsDialog from '@/components/studio/conversation/ConversationSettingsDialog';
 import type {
   Conversation,
   ConversationMessageWithCharacter,
   GetConversationResponse,
   StoryTreeNode,
+  ConversationDraftParams,
 } from '@/types/conversation';
 import { generateSrt, downloadSrt } from '@/lib/utils/srt';
 
@@ -62,6 +65,7 @@ export default function ConversationsFocusPage() {
   const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
   const [generatingFromDraft, setGeneratingFromDraft] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
   const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string } | undefined => {
@@ -640,6 +644,13 @@ export default function ConversationsFocusPage() {
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button
                         variant="outlined"
+                        startIcon={<SettingsIcon />}
+                        onClick={() => setSettingsDialogOpen(true)}
+                      >
+                        設定
+                      </Button>
+                      <Button
+                        variant="outlined"
                         startIcon={<SubtitlesIcon />}
                         onClick={handleDownloadSrt}
                         disabled={messages.length === 0}
@@ -677,6 +688,7 @@ export default function ConversationsFocusPage() {
                   hasDraftParams={!!selectedConversation.metadata?.draft_params}
                   onGenerateFromDraft={handleGenerateFromDraft}
                   generatingFromDraft={generatingFromDraft}
+                  onOpenDraftEditDialog={() => setSettingsDialogOpen(true)}
                 />
               </>
             ) : (
@@ -738,6 +750,23 @@ export default function ConversationsFocusPage() {
         onClose={() => setWorkflowSelectionDialogOpen(false)}
         onSelect={handleWorkflowSelected}
       />
+
+      {selectedConversation && (
+        <ConversationSettingsDialog
+          open={settingsDialogOpen}
+          conversationId={selectedConversation.id}
+          draftParams={(selectedConversation.metadata?.draft_params as ConversationDraftParams) || null}
+          isGenerated={messages.length > 0}
+          onClose={() => setSettingsDialogOpen(false)}
+          onSaved={async () => {
+            await loadConversation(selectedConversation.id);
+          }}
+          onGenerated={async () => {
+            await loadConversation(selectedConversation.id);
+            await loadStoryTree();
+          }}
+        />
+      )}
 
     </Box>
   );

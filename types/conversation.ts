@@ -395,7 +395,8 @@ export interface GetPromptTemplateResponse {
 // 会話生成下書きパラメータ
 export interface ConversationDraftParams {
   characterIds: number[];
-  situation: string;
+  location?: string; // 場所
+  situation: string; // 会話プロンプト
   messageCount: number;
   tone: 'casual' | 'formal' | 'dramatic' | 'humorous';
   promptTemplateId?: number;

@@ -82,6 +82,8 @@ interface ConversationViewerSimpleProps {
   hasDraftParams?: boolean;
   onGenerateFromDraft?: () => Promise<void>;
   generatingFromDraft?: boolean;
+  // 下書き編集ダイアログを開く
+  onOpenDraftEditDialog?: () => void;
 }
 
 interface SortableMessageProps {
@@ -558,7 +560,8 @@ export default function ConversationViewerSimple({
   readonly = false,
   hasDraftParams = false,
   onGenerateFromDraft,
-  generatingFromDraft = false
+  generatingFromDraft = false,
+  onOpenDraftEditDialog
 }: ConversationViewerSimpleProps) {
   const [localMessages, setLocalMessages] = useState(messages);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
@@ -1138,15 +1141,14 @@ export default function ConversationViewerSimple({
             <Typography color="text.secondary" gutterBottom>
               この会話はまだ生成されていません
             </Typography>
-            {onGenerateFromDraft && (
+            {onOpenDraftEditDialog && (
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={generatingFromDraft ? <CircularProgress size={20} color="inherit" /> : <AutoAwesomeIcon />}
-                onClick={onGenerateFromDraft}
-                disabled={generatingFromDraft}
+                startIcon={<AutoAwesomeIcon />}
+                onClick={onOpenDraftEditDialog}
               >
-                {generatingFromDraft ? '生成中...' : '会話を生成'}
+                会話を生成
               </Button>
             )}
           </>
