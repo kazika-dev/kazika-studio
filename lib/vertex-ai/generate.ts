@@ -94,6 +94,29 @@ export async function generateConversationContent(options: GenerateOptions): Pro
       };
     }
 
+    case 'openai': {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.warn('[Generate] OPENAI_API_KEY not configured, falling back to google-genai');
+        return generateWithGoogleGenAI({ model: 'gemini-2.0-flash-exp', prompt, maxTokens });
+      }
+
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const openai = createOpenAI({ apiKey });
+
+      const result = await generateText({
+        model: openai(model),
+        prompt,
+        maxOutputTokens: maxTokens,
+      });
+
+      return {
+        text: result.text,
+        model,
+        provider: 'openai',
+      };
+    }
+
     case 'google-genai':
     default: {
       return generateWithGoogleGenAI({ model, prompt, maxTokens });

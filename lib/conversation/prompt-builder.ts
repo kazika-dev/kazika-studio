@@ -14,7 +14,7 @@ import type { ModelProvider } from '@/lib/vertex-ai/constants';
 
 /**
  * Build character section based on model provider
- * Claude prefers XML-style structured data, Gemini uses markdown
+ * Claude prefers XML-style structured data, OpenAI uses JSON-like format, Gemini uses markdown
  */
 function buildCharacterSection(
   characters: ConversationPromptInput['characters'],
@@ -32,6 +32,20 @@ function buildCharacterSection(
 ${char.sampleDialogues.map((d) => `    <dialogue situation="${d.situation}">${d.line}</dialogue>`).join('\n')}
   </sample_dialogues>
 </character>`
+      )
+      .join('\n\n');
+  }
+
+  if (modelProvider === 'openai') {
+    // OpenAI prefers JSON-like structured format
+    return characters
+      .map(
+        (char) => `**キャラクター: ${char.name}** (ID: ${char.id})
+- 説明: ${char.description}
+- 性格: ${char.personality}
+- 話し方: ${char.speakingStyle}
+- セリフ例:
+${char.sampleDialogues.map((d) => `  - 「${d.line}」(${d.situation})`).join('\n')}`
       )
       .join('\n\n');
   }

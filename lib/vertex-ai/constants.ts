@@ -14,6 +14,11 @@ export const CONVERSATION_MODEL_OPTIONS = [
   { label: 'Claude Sonnet 4 (バランス)', value: 'claude-sonnet-4-20250514', provider: 'anthropic' as const },
   { label: 'Claude Haiku 3.5 (高速)', value: 'claude-3-5-haiku-20241022', provider: 'anthropic' as const },
 
+  // OpenAI GPT Models (via OpenAI API)
+  { label: 'GPT-5.2 (最新)', value: 'gpt-5.2', provider: 'openai' as const },
+  { label: 'GPT-5 Mini (高速)', value: 'gpt-5-mini', provider: 'openai' as const },
+  { label: 'GPT-4o (バランス)', value: 'gpt-4o', provider: 'openai' as const },
+
   // Fallback (既存 Google Generative AI API)
   { label: 'Gemini 2.0 Flash Exp (従来API)', value: 'gemini-2.0-flash-exp', provider: 'google-genai' as const },
 ] as const;
