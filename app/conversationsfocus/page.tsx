@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -12,8 +11,6 @@ import {
   Divider
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
-import MovieIcon from '@mui/icons-material/Movie';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import SettingsIcon from '@mui/icons-material/Settings';
 import QueueIcon from '@mui/icons-material/Queue';
@@ -23,7 +20,6 @@ import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
 import ConversationGeneratorDialogWithScene from '@/components/studio/conversation/ConversationGeneratorDialogWithScene';
-import WorkflowSelectionDialog from '@/components/studio/conversation/WorkflowSelectionDialog';
 import ConversationSettingsDialog from '@/components/studio/conversation/ConversationSettingsDialog';
 import type {
   Conversation,
@@ -50,22 +46,18 @@ interface Character {
 }
 
 export default function ConversationsFocusPage() {
-  const router = useRouter();
-
   const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithCount | null>(null);
   const [messages, setMessages] = useState<ConversationMessageWithCharacter[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
-  const [creatingStudio, setCreatingStudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
   const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
-  const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
   const [generatingFromDraft, setGeneratingFromDraft] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [promptQueueDialogOpen, setPromptQueueDialogOpen] = useState(false);
@@ -341,43 +333,6 @@ export default function ConversationsFocusPage() {
     }
   };
 
-  const handleCreateStudioClick = () => {
-    if (!selectedConversation) return;
-    setWorkflowSelectionDialogOpen(true);
-  };
-
-  const handleWorkflowSelected = async (workflowIds: number[]) => {
-    if (!selectedConversation) return;
-
-    setCreatingStudio(true);
-    try {
-      const response = await fetch(`/api/conversations/${selectedConversation.id}/create-studio`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflowIds: workflowIds,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        const message = workflowIds.length > 0
-          ? `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードと${result.data.workflowStepCount || 0}個のワークフローステップ（${workflowIds.length}種類のワークフロー）が作成されました。`
-          : `スタジオ「${result.data.studioName}」を作成しました！\n${result.data.boardCount}個のボードが作成されました。`;
-        alert(message);
-        router.push(`/studios/${result.data.studioId}`);
-      } else {
-        throw new Error(result.error || 'Failed to create studio');
-      }
-    } catch (error) {
-      console.error('Failed to create studio:', error);
-      alert('スタジオの作成に失敗しました');
-    } finally {
-      setCreatingStudio(false);
-    }
-  };
-
   const handleDownloadSrt = () => {
     if (!selectedConversation || messages.length === 0) return;
 
@@ -576,20 +531,6 @@ export default function ConversationsFocusPage() {
               ストーリーごとにシーンと会話を管理
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<AutoAwesomeIcon />}
-            onClick={() => router.push('/conversations')}
-          >
-            プロンプト生成
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => router.push('/studios')}
-          >
-            スタジオ一覧
-          </Button>
         </Box>
         <Divider />
       </Box>
@@ -669,15 +610,6 @@ export default function ConversationsFocusPage() {
                       >
                         プロンプトキュー作成
                       </Button>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<MovieIcon />}
-                        onClick={handleCreateStudioClick}
-                        disabled={creatingStudio || messages.length === 0}
-                      >
-                        {creatingStudio ? 'スタジオを作成中...' : 'スタジオを作成'}
-                      </Button>
                     </Box>
                   </Box>
                   <Divider />
@@ -755,12 +687,6 @@ export default function ConversationsFocusPage() {
           setSelectedSceneId(null);
         }}
         onGenerated={handleConversationGenerated}
-      />
-
-      <WorkflowSelectionDialog
-        open={workflowSelectionDialogOpen}
-        onClose={() => setWorkflowSelectionDialogOpen(false)}
-        onSelect={handleWorkflowSelected}
       />
 
       {selectedConversation && (
