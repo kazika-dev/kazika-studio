@@ -187,7 +187,7 @@ export async function POST(
         const generateResult = await generateConversationContent({
           model: promptGenerationModel,
           prompt: aiPrompt,
-          maxTokens: 2048,
+          maxTokens: 4096,
           // images: キャラクターシート画像はAIに送信しない（プロンプトキューへの登録時に使用）
         });
 
