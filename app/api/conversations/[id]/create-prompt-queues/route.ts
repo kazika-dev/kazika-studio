@@ -103,7 +103,7 @@ export async function POST(
       .from('conversation_messages')
       .select(`
         *,
-        character:character_sheets(id, name, description)
+        character:character_sheets(id, name, description, looks)
       `)
       .eq('conversation_id', conversationId)
       .order('sequence_order', { ascending: true });
@@ -113,7 +113,7 @@ export async function POST(
     }
 
     // 会話に関連するキャラクターを収集
-    const characterMap = new Map<number, { id: number; name: string; description?: string }>();
+    const characterMap = new Map<number, { id: number; name: string; description?: string; looks?: string }>();
     for (const msg of messages) {
       if (msg.character) {
         const char = Array.isArray(msg.character) ? msg.character[0] : msg.character;
@@ -122,6 +122,7 @@ export async function POST(
             id: char.id,
             name: char.name,
             description: char.description,
+            looks: char.looks,
           });
         }
       }

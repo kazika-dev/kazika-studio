@@ -33,7 +33,6 @@ import { generateSrt, downloadSrt } from '@/lib/utils/srt';
 interface ConversationWithCount extends Conversation {
   messageCount?: number;
   sceneCount?: number;
-  location?: string | null;
   studios?: {
     id: number;
     name: string;
