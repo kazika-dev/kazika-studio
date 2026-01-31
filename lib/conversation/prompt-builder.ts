@@ -463,7 +463,7 @@ export interface SceneImagePromptInput {
     name: string;
     description?: string;
   }>;
-  additionalInstructions?: string;
+  // additionalInstructions は AI プロンプト生成には使用しない（キュー登録後にテンプレートとして追加）
 }
 
 export function buildSceneImagePrompt(input: SceneImagePromptInput): string {
@@ -474,7 +474,6 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): string {
     allMessages,
     targetMessageIndex,
     characters,
-    additionalInstructions,
   } = input;
 
   const targetMessage = allMessages[targetMessageIndex];
@@ -519,13 +518,11 @@ ${conversationContext}
 ${targetMessage.emotion ? `- 感情: ${targetMessage.emotion}` : ''}
 ${targetMessage.emotionTag ? `- 感情タグ: ${targetMessage.emotionTag}` : ''}
 
-${additionalInstructions ? `## 追加指示\n${additionalInstructions}\n` : ''}
-
 ## タスク
 上記の会話の流れと対象メッセージの内容から、このシーンを表現するアニメイラスト生成用の**日本語プロンプト**を作成してください。
 
 ## 出力形式
-以下のJSON形式で出力してください：
+以下のJSON形式で**のみ**出力してください（JSON以外は何も出力しないでください）：
 
 \`\`\`json
 {
@@ -542,7 +539,8 @@ ${additionalInstructions ? `## 追加指示\n${additionalInstructions}\n` : ''}
   - 場所、時間帯、天気、照明などの環境描写を含める
   - キャラクターの表情、ポーズ、視線、距離感を具体的に記述
   - 会話の内容から読み取れる感情や雰囲気を反映
-  - 「アニメ風」「イラスト」などのスタイル指定は不要（自動で追加される）
+  - 「アニメ風」「イラスト」などのスタイル指定は不要（後で自動追加される）
+  - **注意**: scenePromptには純粋なシーン描写のみを含め、画像生成の指示（「4シーン作成」等）は含めないでください
 - **sceneCharacterIds**:
   - このシーンに登場すべきキャラクターの**数値ID**を配列で指定（例: [1, 2, 3]）
   - **必ず上記の「登場キャラクター」セクションに記載されている「ID:数字」の数字部分を使用**
@@ -552,7 +550,10 @@ ${additionalInstructions ? `## 追加指示\n${additionalInstructions}\n` : ''}
 - **emotion**: シーン全体の雰囲気（例：「穏やか」「緊張」「楽しい」「切ない」など）
 - **cameraAngle**: 推奨カメラアングル（例：「正面」「やや上から」「横顔」「ロングショット」など）
 
-**重要**: 必ず上記のJSON形式で出力してください。JSONのみを出力し、それ以外の説明は不要です。
+**重要**:
+- 必ず上記のJSON形式で出力してください
+- JSONのみを出力し、それ以外の説明や追加テキストは一切出力しないでください
+- JSON以外のテキストが出力に含まれるとエラーになります
 `.trim();
 }
 
