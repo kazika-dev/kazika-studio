@@ -6,6 +6,12 @@ import {
   createPromptQueue,
   query,
 } from '@/lib/db';
+import {
+  buildSceneImagePrompt,
+  parseSceneImagePromptResponse,
+  SceneImagePromptInput,
+} from '@/lib/conversation/prompt-builder';
+import { generateConversationContent } from '@/lib/vertex-ai/generate';
 
 interface CreatePromptQueuesRequest {
   aspectRatio?: string;
@@ -14,13 +20,14 @@ interface CreatePromptQueuesRequest {
   priority?: number;
   enhancePrompt?: 'none' | 'enhance';
   enhanceModel?: string;  // プロンプト補完用AIモデル
+  promptGenerationModel?: string;  // シーンプロンプト生成用AIモデル
 }
 
 /**
  * POST /api/conversations/[id]/create-prompt-queues
  * 会話からプロンプトキューを一括作成
  *
- * - 各メッセージのシーンプロンプト（scene_prompt_en）を使用
+ * - 会話全体のコンテキストからAIで日本語シーンプロンプトを生成
  * - メッセージに紐づくキャラクターシートをprompt_queue_imagesに追加
  * - 指定されたテキストテンプレートをプロンプトに追加
  */
@@ -86,6 +93,7 @@ export async function POST(
       priority = 0,
       enhancePrompt = 'none',
       enhanceModel,
+      promptGenerationModel = 'gemini-2.5-flash',
     } = body;
 
     // 追加テンプレートを取得（指定されている場合）
@@ -100,10 +108,13 @@ export async function POST(
       }
     }
 
-    // メッセージを取得
+    // メッセージを取得（全メッセージ）
     const { data: messages, error: msgError } = await supabase
       .from('conversation_messages')
-      .select('*')
+      .select(`
+        *,
+        character:character_sheets(id, name, description)
+      `)
       .eq('conversation_id', conversationId)
       .order('sequence_order', { ascending: true });
 
@@ -111,70 +122,86 @@ export async function POST(
       return NextResponse.json({ error: 'No messages in conversation' }, { status: 400 });
     }
 
-    // シーンプロンプトを持つメッセージのみをフィルタリング
-    const messagesWithScenePrompt = messages.filter(
-      (msg: any) => msg.scene_prompt_en || msg.scene_prompt_ja
-    );
-
-    if (messagesWithScenePrompt.length === 0) {
-      return NextResponse.json(
-        { error: 'No messages with scene prompts found' },
-        { status: 400 }
-      );
+    // 会話に関連するキャラクターを収集
+    const characterMap = new Map<number, { id: number; name: string; description?: string }>();
+    for (const msg of messages) {
+      if (msg.character) {
+        const char = Array.isArray(msg.character) ? msg.character[0] : msg.character;
+        if (char && char.id) {
+          characterMap.set(char.id, {
+            id: char.id,
+            name: char.name,
+            description: char.description,
+          });
+        }
+      }
     }
+    const allCharacters = Array.from(characterMap.values());
+
+    // 全メッセージの情報を整形
+    const allMessagesForPrompt = messages.map((msg: any) => ({
+      id: msg.id,
+      speakerName: msg.speaker_name,
+      messageText: msg.message_text,
+      sequenceOrder: msg.sequence_order,
+      emotion: msg.metadata?.emotion,
+      emotionTag: msg.metadata?.emotionTag,
+    }));
 
     // 各メッセージに対してプロンプトキューを作成
     const createdQueues = [];
     const errors = [];
 
-    for (const message of messagesWithScenePrompt) {
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+
       try {
         // メッセージに紐づくキャラクターを取得
         const messageCharacters = await getMessageCharacters(message.id);
 
-        // キャラクターシートIDを抽出
-        const characterSheetIds = messageCharacters.map((mc: any) => mc.character_sheet_id);
+        // AIでシーン画像プロンプトを生成
+        console.log(`[create-prompt-queues] Generating scene prompt for message ${message.id} (${i + 1}/${messages.length})...`);
+
+        const promptInput: SceneImagePromptInput = {
+          conversationTitle: conversation.title || '無題の会話',
+          situation: conversation.description || '',
+          location: sceneLocation || undefined,
+          allMessages: allMessagesForPrompt,
+          targetMessageIndex: i,
+          characters: allCharacters,
+          additionalInstructions: additionalPrompt || undefined,
+        };
+
+        const aiPrompt = buildSceneImagePrompt(promptInput);
+
+        // AIでシーンプロンプトを生成
+        const generateResult = await generateConversationContent({
+          model: promptGenerationModel,
+          prompt: aiPrompt,
+          maxTokens: 2048,
+        });
+
+        const scenePromptData = await parseSceneImagePromptResponse(generateResult.text);
+        console.log(`[create-prompt-queues] Generated scene prompt: ${scenePromptData.scenePrompt.substring(0, 100)}...`);
 
         // プロンプトを構築
-        // 英語プロンプト優先、なければ日本語
-        let basePrompt = message.scene_prompt_en || message.scene_prompt_ja || '';
-
-        // 場所情報を追加（story_scenes.location）
-        if (sceneLocation) {
-          basePrompt += `\n\nLocation: ${sceneLocation}`;
-        }
-
-        // キャラクター情報をプロンプトに追加
-        const characterNames = messageCharacters.map((mc: any) => mc.character_sheets?.name).filter(Boolean);
-        if (characterNames.length > 0) {
-          basePrompt += `\n\nCharacters: ${characterNames.join(', ')}`;
-        }
-
-        // 感情・表情情報を追加
-        if (message.metadata?.emotion) {
-          basePrompt += `\nExpression: ${message.metadata.emotion}`;
-        }
-        if (message.metadata?.emotionTag) {
-          basePrompt += `\nMood: ${message.metadata.emotionTag}`;
-        }
-
-        // シーン情報を追加（メタデータから）
-        if (message.metadata?.scene) {
-          basePrompt += `\nScene description: ${message.metadata.scene}`;
-        }
+        let finalPrompt = scenePromptData.scenePrompt;
 
         // テンプレートを追加
         if (templateContent) {
-          basePrompt += `\n\n${templateContent}`;
+          finalPrompt += `\n\n${templateContent}`;
         }
 
-        // 追加プロンプトを追加
-        if (additionalPrompt.trim()) {
-          basePrompt += `\n\n${additionalPrompt}`;
+        // キャラクターシートIDを決定（AIが提案したものを使用、なければメッセージに紐づくもの）
+        let characterSheetIds: number[] = [];
+        if (scenePromptData.sceneCharacterIds && scenePromptData.sceneCharacterIds.length > 0) {
+          characterSheetIds = scenePromptData.sceneCharacterIds.slice(0, 4);
+        } else if (messageCharacters.length > 0) {
+          characterSheetIds = messageCharacters.map((mc: any) => mc.character_sheet_id).slice(0, 4);
         }
 
         // prompt_queue_images用のデータを準備
-        const images = characterSheetIds.map((id: number, index: number) => ({
+        const images = characterSheetIds.map((id: number) => ({
           image_type: 'character_sheet' as const,
           reference_id: id,
         }));
@@ -185,7 +212,7 @@ export async function POST(
         // プロンプトキューを作成
         const queue = await createPromptQueue(user.id, {
           name: queueName,
-          prompt: basePrompt.trim(),
+          prompt: finalPrompt.trim(),
           aspect_ratio: aspectRatio,
           priority,
           enhance_prompt: enhancePrompt,
@@ -195,7 +222,10 @@ export async function POST(
             sequence_order: message.sequence_order,
             speaker_name: message.speaker_name,
             character_id: message.character_id,
-            enhance_model: enhanceModel,  // プロンプト補完用AIモデル
+            enhance_model: enhanceModel,
+            ai_generated_prompt: true,
+            scene_emotion: scenePromptData.emotion,
+            scene_camera_angle: scenePromptData.cameraAngle,
           },
           images,
         });
@@ -205,7 +235,13 @@ export async function POST(
           message_id: message.id,
           sequence_order: message.sequence_order,
           character_count: characterSheetIds.length,
+          scene_prompt_preview: scenePromptData.scenePrompt.substring(0, 100),
         });
+
+        // レート制限対策：少し待機
+        if (i < messages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
       } catch (err: any) {
         console.error(`Failed to create queue for message ${message.id}:`, err);
         errors.push({
@@ -221,7 +257,7 @@ export async function POST(
       data: {
         created_count: createdQueues.length,
         error_count: errors.length,
-        total_messages: messagesWithScenePrompt.length,
+        total_messages: messages.length,
         queues: createdQueues,
         errors: errors.length > 0 ? errors : undefined,
       },

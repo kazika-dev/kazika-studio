@@ -440,3 +440,164 @@ export async function parseEmotionTagReanalysisResponse(
     throw new Error(`Failed to parse emotion tag response: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+/**
+ * シーン画像生成用の日本語プロンプトを生成するためのAIプロンプトを構築
+ * 会話全体のコンテキストから各メッセージのシーンを分析して画像生成用プロンプトを作成
+ */
+export interface SceneImagePromptInput {
+  conversationTitle: string;
+  situation: string;
+  location?: string;
+  allMessages: Array<{
+    id: number;
+    speakerName: string;
+    messageText: string;
+    sequenceOrder: number;
+    emotion?: string;
+    emotionTag?: string;
+  }>;
+  targetMessageIndex: number;
+  characters: Array<{
+    id: number;
+    name: string;
+    description?: string;
+  }>;
+  additionalInstructions?: string;
+}
+
+export function buildSceneImagePrompt(input: SceneImagePromptInput): string {
+  const {
+    conversationTitle,
+    situation,
+    location,
+    allMessages,
+    targetMessageIndex,
+    characters,
+    additionalInstructions,
+  } = input;
+
+  const targetMessage = allMessages[targetMessageIndex];
+
+  // 前後のコンテキストメッセージを取得（前3件、後1件）
+  const contextStart = Math.max(0, targetMessageIndex - 3);
+  const contextEnd = Math.min(allMessages.length, targetMessageIndex + 2);
+  const contextMessages = allMessages.slice(contextStart, contextEnd);
+
+  const charactersSection = characters
+    .map((char) => `- ${char.name}: ${char.description || '（説明なし）'}`)
+    .join('\n');
+
+  const conversationContext = contextMessages
+    .map((m, idx) => {
+      const marker = m.id === targetMessage.id ? '【対象メッセージ】' : '';
+      return `${marker}${m.speakerName}: ${m.messageText}`;
+    })
+    .join('\n');
+
+  return `
+あなたはアニメ・イラスト画像生成のプロンプト作成専門家です。
+以下の会話の流れから、指定されたメッセージのシーンを表現する**日本語の画像生成プロンプト**を作成してください。
+
+## 会話タイトル
+${conversationTitle}
+
+## シチュエーション
+${situation}
+
+${location ? `## 場所\n${location}\n` : ''}
+
+## 登場キャラクター
+${charactersSection}
+
+## 会話の流れ（対象メッセージの前後）
+${conversationContext}
+
+## 対象メッセージ情報
+- 話者: ${targetMessage.speakerName}
+- メッセージ: ${targetMessage.messageText}
+${targetMessage.emotion ? `- 感情: ${targetMessage.emotion}` : ''}
+${targetMessage.emotionTag ? `- 感情タグ: ${targetMessage.emotionTag}` : ''}
+
+${additionalInstructions ? `## 追加指示\n${additionalInstructions}\n` : ''}
+
+## タスク
+上記の会話の流れと対象メッセージの内容から、このシーンを表現するアニメイラスト生成用の**日本語プロンプト**を作成してください。
+
+## 出力形式
+以下のJSON形式で出力してください：
+
+\`\`\`json
+{
+  "scenePrompt": "日本語の画像生成プロンプト（150-250文字程度）",
+  "sceneCharacterIds": [登場キャラクターのID配列（最大4人）],
+  "emotion": "シーン全体の雰囲気を表す感情（日本語）",
+  "cameraAngle": "カメラアングルの提案（日本語）"
+}
+\`\`\`
+
+## 要件
+- **scenePrompt**:
+  - 必ず**日本語**で記述
+  - 場所、時間帯、天気、照明などの環境描写を含める
+  - キャラクターの表情、ポーズ、視線、距離感を具体的に記述
+  - 会話の内容から読み取れる感情や雰囲気を反映
+  - 「アニメ風」「イラスト」などのスタイル指定は不要（自動で追加される）
+- **sceneCharacterIds**:
+  - このシーンに登場すべきキャラクターのIDを配列で指定
+  - 話者だけでなく、シーンに居るはずのキャラクターも含める
+  - 最大4人まで
+- **emotion**: シーン全体の雰囲気（例：「穏やか」「緊張」「楽しい」「切ない」など）
+- **cameraAngle**: 推奨カメラアングル（例：「正面」「やや上から」「横顔」「ロングショット」など）
+`.trim();
+}
+
+/**
+ * シーン画像プロンプト生成のAI応答をパース
+ */
+export interface SceneImagePromptResponse {
+  scenePrompt: string;
+  sceneCharacterIds: number[];
+  emotion: string;
+  cameraAngle: string;
+}
+
+export async function parseSceneImagePromptResponse(
+  aiResponse: string
+): Promise<SceneImagePromptResponse> {
+  // Try to extract JSON block from markdown code fence
+  const jsonMatch = aiResponse.match(/```json\s*\n([\s\S]*?)\n```/);
+
+  let jsonText: string;
+  if (jsonMatch) {
+    jsonText = jsonMatch[1];
+  } else {
+    // Try to find JSON without code fence
+    const directJsonMatch = aiResponse.match(/\{[\s\S]*"scenePrompt"[\s\S]*\}/);
+    if (directJsonMatch) {
+      jsonText = directJsonMatch[0];
+    } else {
+      throw new Error('AI response does not contain valid JSON for scene image prompt');
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    // Validate response structure
+    if (!parsed.scenePrompt || typeof parsed.scenePrompt !== 'string') {
+      throw new Error('Invalid response format: missing or invalid scenePrompt');
+    }
+
+    return {
+      scenePrompt: parsed.scenePrompt,
+      sceneCharacterIds: Array.isArray(parsed.sceneCharacterIds) ? parsed.sceneCharacterIds : [],
+      emotion: parsed.emotion || '中立',
+      cameraAngle: parsed.cameraAngle || '正面'
+    };
+  } catch (error) {
+    console.error('Failed to parse scene image prompt response:', error);
+    console.error('AI Response:', aiResponse);
+    throw new Error(`Failed to parse scene image prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
