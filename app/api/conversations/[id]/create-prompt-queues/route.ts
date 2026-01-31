@@ -136,8 +136,8 @@ export async function POST(
         const characterSheetIds = messageCharacters.map((mc: any) => mc.character_sheet_id);
 
         // プロンプトを構築
-        // 英語プロンプト優先、なければ日本語
-        let basePrompt = message.scene_prompt_en || message.scene_prompt_ja || '';
+        // 日本語プロンプト優先、なければ英語（Nanobana画像生成用）
+        let basePrompt = message.scene_prompt_ja || message.scene_prompt_en || '';
 
         // 場所情報を追加（story_scenes.location）
         if (sceneLocation) {
