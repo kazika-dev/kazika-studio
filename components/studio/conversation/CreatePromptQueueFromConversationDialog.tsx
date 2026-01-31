@@ -21,7 +21,6 @@ import {
 } from '@mui/material';
 import QueueIcon from '@mui/icons-material/Queue';
 import ImageIcon from '@mui/icons-material/Image';
-import PersonIcon from '@mui/icons-material/Person';
 
 interface CreatePromptQueueFromConversationDialogProps {
   open: boolean;
@@ -44,10 +43,13 @@ interface CreateResult {
   }>;
 }
 
-// Nanobanaモデルオプション
-const MODEL_OPTIONS = [
-  { value: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image (推奨・高速)' },
-  { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image Preview (高品質・2K-4K)' },
+// プロンプト補完用AIモデルオプション
+const ENHANCE_MODEL_OPTIONS = [
+  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5 (高品質)' },
+  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (バランス)' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (高性能)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (高速)' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
 // アスペクト比オプション
@@ -67,10 +69,10 @@ export default function CreatePromptQueueFromConversationDialog({
   messageCount,
   onSuccess,
 }: CreatePromptQueueFromConversationDialogProps) {
-  const [model, setModel] = useState('gemini-2.5-flash-image');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [enhancePrompt, setEnhancePrompt] = useState<'none' | 'enhance'>('none');
+  const [enhanceModel, setEnhanceModel] = useState('gemini-2.5-flash');
   const [priority, setPriority] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +84,10 @@ export default function CreatePromptQueueFromConversationDialog({
   // ダイアログが開いたときにリセット
   useEffect(() => {
     if (open) {
-      setModel('gemini-2.5-flash-image');
       setAspectRatio('16:9');
       setAdditionalPrompt('');
       setEnhancePrompt('none');
+      setEnhanceModel('gemini-2.5-flash');
       setPriority(0);
       setError(null);
       setResult(null);
@@ -104,12 +106,12 @@ export default function CreatePromptQueueFromConversationDialog({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model,
           aspectRatio,
           additionalTemplateId,
           additionalPrompt: additionalPrompt.trim(),
           priority,
           enhancePrompt,
+          enhanceModel: enhancePrompt === 'enhance' ? enhanceModel : undefined,
         }),
       });
 
@@ -199,23 +201,6 @@ export default function CreatePromptQueueFromConversationDialog({
         {/* 設定フォーム（結果表示前のみ） */}
         {!result && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* モデル選択 */}
-            <FormControl fullWidth>
-              <InputLabel>モデル</InputLabel>
-              <Select
-                value={model}
-                label="モデル"
-                onChange={(e) => setModel(e.target.value)}
-                disabled={creating}
-              >
-                {MODEL_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
             {/* アスペクト比選択 */}
             <FormControl fullWidth>
               <InputLabel>アスペクト比</InputLabel>
@@ -246,6 +231,25 @@ export default function CreatePromptQueueFromConversationDialog({
                 <MenuItem value="enhance">AIで補完する</MenuItem>
               </Select>
             </FormControl>
+
+            {/* プロンプト補完モデル選択（補完する場合のみ表示） */}
+            {enhancePrompt === 'enhance' && (
+              <FormControl fullWidth>
+                <InputLabel>補完用AIモデル</InputLabel>
+                <Select
+                  value={enhanceModel}
+                  label="補完用AIモデル"
+                  onChange={(e) => setEnhanceModel(e.target.value)}
+                  disabled={creating}
+                >
+                  {ENHANCE_MODEL_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             {/* 優先度 */}
             <TextField
