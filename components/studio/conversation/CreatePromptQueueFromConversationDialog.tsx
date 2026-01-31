@@ -47,6 +47,7 @@ interface CreateResult {
 const ENHANCE_MODEL_OPTIONS = [
   { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5 (高品質)' },
   { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (バランス)' },
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro (最新・高性能)' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (高性能)' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (高速)' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
