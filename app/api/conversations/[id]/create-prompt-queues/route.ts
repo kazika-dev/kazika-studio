@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 import {
-  getConversationById,
-  getConversationMessages,
   getMessageCharacters,
   createPromptQueue,
   query,
@@ -41,31 +40,27 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 });
     }
 
-    // 会話を取得
-    const conversation = await getConversationById(conversationId);
-    if (!conversation) {
+    // Supabaseクライアントを取得
+    const supabase = await createClient();
+
+    // 会話を取得（所有権チェック含む）
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        studio:studios(id, name, user_id)
+      `)
+      .eq('id', conversationId)
+      .single();
+
+    if (convError || !conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // 所有権チェック（studio経由またはstory_scene経由）
-    let hasAccess = false;
-    if (conversation.studio_id) {
-      const studioResult = await query(
-        'SELECT user_id FROM kazikastudio.studios WHERE id = $1',
-        [conversation.studio_id]
-      );
-      hasAccess = studioResult.rows.length > 0 && studioResult.rows[0].user_id === user.id;
-    }
-    if (!hasAccess && conversation.story_scene_id) {
-      const storyResult = await query(
-        `SELECT s.user_id FROM kazikastudio.story_scenes ss
-         JOIN kazikastudio.stories s ON s.id = ss.story_id
-         WHERE ss.id = $1`,
-        [conversation.story_scene_id]
-      );
-      hasAccess = storyResult.rows.length > 0 && storyResult.rows[0].user_id === user.id;
-    }
-    if (!hasAccess) {
+    // 所有権チェック
+    const isOwner = conversation.user_id === user.id ||
+                    (conversation.studio && conversation.studio.user_id === user.id);
+    if (!isOwner) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -93,8 +88,13 @@ export async function POST(
     }
 
     // メッセージを取得
-    const messages = await getConversationMessages(conversationId);
-    if (messages.length === 0) {
+    const { data: messages, error: msgError } = await supabase
+      .from('conversation_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('sequence_order', { ascending: true });
+
+    if (msgError || !messages || messages.length === 0) {
       return NextResponse.json({ error: 'No messages in conversation' }, { status: 400 });
     }
 
