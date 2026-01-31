@@ -13,7 +13,7 @@ import {
   Container,
   Paper,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Upload as UploadIcon, Brush as BrushIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Upload as UploadIcon, Brush as BrushIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
@@ -58,6 +58,7 @@ export default function EditCharacterSheetPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
+  const [generatingLooks, setGeneratingLooks] = useState(false);
 
   useEffect(() => {
     loadCharacterSheet();
@@ -138,6 +139,91 @@ export default function EditCharacterSheetPage() {
 
     console.log('[edit] Image uploaded successfully:', data.storagePath);
     return data.storagePath;
+  };
+
+  // 画像からルックスを自動生成
+  const handleGenerateLooks = async () => {
+    if (!imagePreview) {
+      toast.error('画像がありません');
+      return;
+    }
+
+    try {
+      setGeneratingLooks(true);
+
+      // 画像をbase64に変換
+      let base64Data: string;
+      let mimeType: string;
+
+      if (imagePreview.startsWith('data:')) {
+        // すでにdata URLの場合
+        const matches = imagePreview.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          throw new Error('Invalid image data');
+        }
+        mimeType = matches[1];
+        base64Data = matches[2];
+      } else {
+        // URLから画像を取得してbase64に変換
+        const imgUrl = imagePreview.startsWith('/api/') ? imagePreview : `/api/storage/${imagePreview}`;
+        const response = await fetch(imgUrl);
+        const blob = await response.blob();
+        mimeType = blob.type || 'image/png';
+
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      // Gemini APIでルックスを生成
+      const geminiResponse = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: `この画像のキャラクターの外見特徴を日本語で詳しく説明してください。
+以下の項目を含めて、簡潔にまとめてください：
+- 髪の色と髪型
+- 目の色
+- 肌の色
+- 体型・身長（わかる範囲で）
+- 服装
+- アクセサリーや特徴的なアイテム
+- その他の目立つ特徴
+
+説明は箇条書きではなく、自然な文章で記述してください。200文字程度でまとめてください。`,
+          model: 'gemini-2.5-flash',
+          images: [
+            {
+              mimeType,
+              data: base64Data,
+            },
+          ],
+        }),
+      });
+
+      const geminiData = await geminiResponse.json();
+
+      if (!geminiData.success) {
+        throw new Error(geminiData.error || 'ルックスの生成に失敗しました');
+      }
+
+      setLooks(geminiData.response);
+      toast.success('ルックスを自動生成しました');
+    } catch (error: any) {
+      console.error('Failed to generate looks:', error);
+      toast.error(error.message || 'ルックスの生成に失敗しました');
+    } finally {
+      setGeneratingLooks(false);
+    }
   };
 
   // Strip /api/storage/ prefix from URL to get the actual storage path
@@ -270,17 +356,32 @@ export default function EditCharacterSheetPage() {
               helperText="ElevenLabsの音声IDを入力すると、音声生成時に使用されます"
             />
 
-            <TextField
-              label="ルックス（外見特徴）"
-              fullWidth
-              multiline
-              rows={4}
-              value={looks}
-              onChange={(e) => setLooks(e.target.value)}
-              disabled={saving}
-              placeholder="例: 黒髪ロング、青い瞳、制服姿、メガネ着用"
-              helperText="キャラクターの外見特徴を自由に記述してください（髪色、目の色、服装、アクセサリーなど）"
-            />
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="body2">
+                  ルックス（外見特徴）
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={generatingLooks ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                  onClick={handleGenerateLooks}
+                  disabled={saving || generatingLooks || !imagePreview}
+                >
+                  {generatingLooks ? '生成中...' : '画像から自動生成'}
+                </Button>
+              </Box>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                value={looks}
+                onChange={(e) => setLooks(e.target.value)}
+                disabled={saving || generatingLooks}
+                placeholder="例: 黒髪ロング、青い瞳、制服姿、メガネ着用"
+                helperText="キャラクターの外見特徴を自由に記述してください（髪色、目の色、服装、アクセサリーなど）"
+              />
+            </Box>
 
             <Box>
               <Typography variant="body2" sx={{ mb: 1 }}>
