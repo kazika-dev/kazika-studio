@@ -208,15 +208,18 @@ export async function POST(
         }
         console.log(`[create-prompt-queues] Generated scene prompt: ${scenePromptData.scenePrompt.substring(0, 100)}...`);
 
-        // プロンプトを構築
-        let finalPrompt = scenePromptData.scenePrompt;
+        // プロンプトを構築（テンプレートを最初に配置）
+        let finalPrompt = '';
 
-        // テンプレートを追加（AI生成後に追加するので、AIの出力には影響しない）
+        // テンプレートを最初に追加
         if (templateContent) {
-          finalPrompt += `\n\n${templateContent}`;
+          finalPrompt = templateContent + '\n\n';
         }
 
-        // 追加プロンプトを追加（AI生成後に追加するので、AIの出力には影響しない）
+        // AIが生成したシーンプロンプトを追加
+        finalPrompt += scenePromptData.scenePrompt;
+
+        // 追加プロンプトを最後に追加
         if (additionalPrompt && additionalPrompt.trim()) {
           finalPrompt += `\n\n${additionalPrompt.trim()}`;
         }
