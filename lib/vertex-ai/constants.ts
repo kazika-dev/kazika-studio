@@ -4,6 +4,7 @@
 
 export const CONVERSATION_MODEL_OPTIONS = [
   // Gemini Models (via Vertex AI)
+  { label: 'Gemini 3 Pro (最新・高性能)', value: 'gemini-3-pro-preview', provider: 'vertex-gemini' as const },
   { label: 'Gemini 2.5 Flash (推奨)', value: 'gemini-2.5-flash-preview-05-20', provider: 'vertex-gemini' as const },
   { label: 'Gemini 2.5 Pro (高性能)', value: 'gemini-2.5-pro-preview-05-06', provider: 'vertex-gemini' as const },
   { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash', provider: 'vertex-gemini' as const },
