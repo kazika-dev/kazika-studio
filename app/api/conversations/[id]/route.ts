@@ -274,6 +274,10 @@ export async function PATCH(
 
       // Also update story_scenes.location if conversation has story_scene_id
       if (conversation.story_scene_id && draftParams.location !== undefined) {
+        console.log('[PATCH /api/conversations] Updating story_scenes.location:', {
+          story_scene_id: conversation.story_scene_id,
+          location: draftParams.location
+        });
         const { error: sceneUpdateError } = await supabase
           .from('story_scenes')
           .update({ location: draftParams.location })
@@ -282,6 +286,8 @@ export async function PATCH(
         if (sceneUpdateError) {
           console.error('Failed to update story_scenes.location:', sceneUpdateError);
           // Continue anyway - this is not critical
+        } else {
+          console.log('[PATCH /api/conversations] Successfully updated story_scenes.location');
         }
       }
     }
