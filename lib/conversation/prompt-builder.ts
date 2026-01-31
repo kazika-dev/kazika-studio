@@ -485,7 +485,7 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): string {
   const contextMessages = allMessages.slice(contextStart, contextEnd);
 
   const charactersSection = characters
-    .map((char) => `- ${char.name}: ${char.description || '（説明なし）'}`)
+    .map((char) => `- ID:${char.id} ${char.name}: ${char.description || '（説明なし）'}`)
     .join('\n');
 
   const conversationContext = contextMessages
@@ -544,11 +544,15 @@ ${additionalInstructions ? `## 追加指示\n${additionalInstructions}\n` : ''}
   - 会話の内容から読み取れる感情や雰囲気を反映
   - 「アニメ風」「イラスト」などのスタイル指定は不要（自動で追加される）
 - **sceneCharacterIds**:
-  - このシーンに登場すべきキャラクターのIDを配列で指定
+  - このシーンに登場すべきキャラクターの**数値ID**を配列で指定（例: [1, 2, 3]）
+  - **必ず上記の「登場キャラクター」セクションに記載されている「ID:数字」の数字部分を使用**
+  - 名前ではなく数値IDのみを配列に入れてください
   - 話者だけでなく、シーンに居るはずのキャラクターも含める
   - 最大4人まで
 - **emotion**: シーン全体の雰囲気（例：「穏やか」「緊張」「楽しい」「切ない」など）
 - **cameraAngle**: 推奨カメラアングル（例：「正面」「やや上から」「横顔」「ロングショット」など）
+
+**重要**: 必ず上記のJSON形式で出力してください。JSONのみを出力し、それ以外の説明は不要です。
 `.trim();
 }
 
@@ -589,9 +593,28 @@ export async function parseSceneImagePromptResponse(
       throw new Error('Invalid response format: missing or invalid scenePrompt');
     }
 
+    // sceneCharacterIds を数値配列に変換（文字列や無効な値をフィルタリング）
+    let characterIds: number[] = [];
+    if (Array.isArray(parsed.sceneCharacterIds)) {
+      characterIds = parsed.sceneCharacterIds
+        .map((id: any) => {
+          if (typeof id === 'number' && Number.isInteger(id)) {
+            return id;
+          }
+          if (typeof id === 'string') {
+            const num = parseInt(id, 10);
+            if (!isNaN(num)) {
+              return num;
+            }
+          }
+          return null;
+        })
+        .filter((id: number | null): id is number => id !== null && id > 0);
+    }
+
     return {
       scenePrompt: parsed.scenePrompt,
-      sceneCharacterIds: Array.isArray(parsed.sceneCharacterIds) ? parsed.sceneCharacterIds : [],
+      sceneCharacterIds: characterIds,
       emotion: parsed.emotion || '中立',
       cameraAngle: parsed.cameraAngle || '正面'
     };

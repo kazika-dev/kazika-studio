@@ -181,7 +181,30 @@ export async function POST(
           maxTokens: 2048,
         });
 
-        const scenePromptData = await parseSceneImagePromptResponse(generateResult.text);
+        let scenePromptData;
+        try {
+          scenePromptData = await parseSceneImagePromptResponse(generateResult.text);
+        } catch (parseError) {
+          // JSONパースに失敗した場合、AI応答をそのままプロンプトとして使用
+          console.warn(`[create-prompt-queues] JSON parse failed for message ${message.id}, using raw response as prompt`);
+          console.warn(`[create-prompt-queues] AI response: ${generateResult.text.substring(0, 200)}...`);
+
+          // AI応答からテキスト部分を抽出してプロンプトとして使用
+          let rawPrompt = generateResult.text;
+          // コードブロックを除去
+          rawPrompt = rawPrompt.replace(/```[\s\S]*?```/g, '').trim();
+          // 最初の200文字程度を使用
+          if (rawPrompt.length > 300) {
+            rawPrompt = rawPrompt.substring(0, 300);
+          }
+
+          scenePromptData = {
+            scenePrompt: rawPrompt || `${message.speaker_name}のシーン。${conversation.description || ''}`,
+            sceneCharacterIds: [],
+            emotion: '中立',
+            cameraAngle: '正面',
+          };
+        }
         console.log(`[create-prompt-queues] Generated scene prompt: ${scenePromptData.scenePrompt.substring(0, 100)}...`);
 
         // プロンプトを構築
