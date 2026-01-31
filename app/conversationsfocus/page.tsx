@@ -61,6 +61,7 @@ export default function ConversationsFocusPage() {
   const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
   const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
+  const [generatingFromDraft, setGeneratingFromDraft] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
   const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string } | undefined => {
@@ -395,6 +396,36 @@ export default function ConversationsFocusPage() {
     await loadConversation(conversationId);
   };
 
+  // Generate conversation from draft params
+  const handleGenerateFromDraft = async () => {
+    if (!selectedConversation?.id) return;
+
+    setGeneratingFromDraft(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Reload conversation to get generated messages
+        await loadConversation(selectedConversation.id);
+        await loadStoryTree();
+      } else {
+        setError(result.error || '会話の生成に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to generate from draft:', error);
+      setError('会話の生成に失敗しました');
+    } finally {
+      setGeneratingFromDraft(false);
+    }
+  };
+
   // 選択したメッセージに対する一括操作
   const handleBulkReanalyzeSelectedEmotions = async (messageIds: number[]) => {
     if (!selectedConversation || messageIds.length === 0) return;
@@ -643,6 +674,9 @@ export default function ConversationsFocusPage() {
                   onBulkReanalyzeSelectedEmotions={handleBulkReanalyzeSelectedEmotions}
                   onBulkAddTagToSelected={handleBulkAddTagToSelected}
                   onBulkRemoveTagsFromSelected={handleBulkRemoveTagsFromSelected}
+                  hasDraftParams={!!selectedConversation.metadata?.draft_params}
+                  onGenerateFromDraft={handleGenerateFromDraft}
+                  generatingFromDraft={generatingFromDraft}
                 />
               </>
             ) : (

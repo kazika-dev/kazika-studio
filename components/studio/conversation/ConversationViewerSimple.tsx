@@ -78,6 +78,10 @@ interface ConversationViewerSimpleProps {
   onBulkAddTagToSelected?: (messageIds: number[], tagName: string) => Promise<void>;
   onBulkRemoveTagsFromSelected?: (messageIds: number[]) => Promise<void>;
   readonly?: boolean;
+  // 下書きからの生成
+  hasDraftParams?: boolean;
+  onGenerateFromDraft?: () => Promise<void>;
+  generatingFromDraft?: boolean;
 }
 
 interface SortableMessageProps {
@@ -551,7 +555,10 @@ export default function ConversationViewerSimple({
   onBulkReanalyzeSelectedEmotions,
   onBulkAddTagToSelected,
   onBulkRemoveTagsFromSelected,
-  readonly = false
+  readonly = false,
+  hasDraftParams = false,
+  onGenerateFromDraft,
+  generatingFromDraft = false
 }: ConversationViewerSimpleProps) {
   const [localMessages, setLocalMessages] = useState(messages);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
@@ -1126,8 +1133,27 @@ export default function ConversationViewerSimple({
           gap: 2
         }}
       >
-        <Typography color="text.secondary">メッセージがありません</Typography>
-        {!readonly && (
+        {hasDraftParams ? (
+          <>
+            <Typography color="text.secondary" gutterBottom>
+              この会話はまだ生成されていません
+            </Typography>
+            {onGenerateFromDraft && (
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={generatingFromDraft ? <CircularProgress size={20} color="inherit" /> : <AutoAwesomeIcon />}
+                onClick={onGenerateFromDraft}
+                disabled={generatingFromDraft}
+              >
+                {generatingFromDraft ? '生成中...' : '会話を生成'}
+              </Button>
+            )}
+          </>
+        ) : (
+          <Typography color="text.secondary">メッセージがありません</Typography>
+        )}
+        {!readonly && !hasDraftParams && (
           <Box sx={{ display: 'flex', gap: 2 }}>
             {onAddMessage && characters && characters.length > 0 && (
               <Button

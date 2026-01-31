@@ -21,6 +21,7 @@ import {
   Stack
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import SaveIcon from '@mui/icons-material/Save';
 import type { GenerateConversationRequest, ConversationPromptTemplate } from '@/types/conversation';
 import ModelSelector from './ModelSelector';
 import { DEFAULT_CONVERSATION_MODEL } from '@/lib/vertex-ai/constants';
@@ -52,6 +53,7 @@ export default function ConversationGeneratorDialogWithScene({
   const [messageCount, setMessageCount] = useState(6);
   const [tone, setTone] = useState<'casual' | 'formal' | 'dramatic' | 'humorous'>('casual');
   const [generating, setGenerating] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Prompt templates
@@ -161,6 +163,66 @@ export default function ConversationGeneratorDialogWithScene({
       setError('会話生成に失敗しました');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Save as draft without generating
+  const handleSaveDraft = async () => {
+    if (selectedCharacters.length < 2) {
+      setError('最低2人のキャラクターを選択してください');
+      return;
+    }
+
+    if (!title.trim()) {
+      setError('タイトルを入力してください');
+      return;
+    }
+
+    if (!situation.trim()) {
+      setError('シチュエーションを入力してください');
+      return;
+    }
+
+    if (!sceneId) {
+      setError('シーンが選択されていません');
+      return;
+    }
+
+    setSavingDraft(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: situation.trim(),
+          storySceneId: sceneId,
+          draftParams: {
+            characterIds: selectedCharacters,
+            situation: situation.trim(),
+            messageCount,
+            tone,
+            promptTemplateId: selectedTemplateId,
+            model: selectedModel,
+          },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        onGenerated(result.data.conversation.id);
+        handleClose();
+      } else {
+        setError(result.error || '下書きの保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      setError('下書きの保存に失敗しました');
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -297,13 +359,20 @@ export default function ConversationGeneratorDialogWithScene({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} disabled={generating}>
+        <Button onClick={handleClose} disabled={generating || savingDraft}>
           キャンセル
+        </Button>
+        <Button
+          onClick={handleSaveDraft}
+          disabled={generating || savingDraft || selectedCharacters.length < 2 || !title || !situation}
+          startIcon={savingDraft ? <CircularProgress size={20} /> : <SaveIcon />}
+        >
+          {savingDraft ? '保存中...' : '下書きを保存'}
         </Button>
         <Button
           onClick={handleGenerate}
           variant="contained"
-          disabled={generating || selectedCharacters.length < 2 || !title || !situation}
+          disabled={generating || savingDraft || selectedCharacters.length < 2 || !title || !situation}
           startIcon={generating ? <CircularProgress size={20} /> : <AutoAwesomeIcon />}
         >
           {generating ? '生成中...' : '会話を生成'}
