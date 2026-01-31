@@ -22,6 +22,8 @@ import {
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import type { GenerateConversationRequest, ConversationPromptTemplate } from '@/types/conversation';
+import ModelSelector from './ModelSelector';
+import { DEFAULT_CONVERSATION_MODEL } from '@/lib/vertex-ai/constants';
 
 interface Character {
   id: number;
@@ -55,6 +57,9 @@ export default function ConversationGeneratorDialogWithScene({
   // Prompt templates
   const [templates, setTemplates] = useState<ConversationPromptTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>(undefined);
+
+  // AI Model selection
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_CONVERSATION_MODEL);
 
   useEffect(() => {
     if (open) {
@@ -134,6 +139,7 @@ export default function ConversationGeneratorDialogWithScene({
         messageCount,
         tone,
         promptTemplateId: selectedTemplateId,
+        model: selectedModel,
       };
 
       const response = await fetch('/api/conversations/generate', {
@@ -164,6 +170,7 @@ export default function ConversationGeneratorDialogWithScene({
     setSituation('');
     setMessageCount(6);
     setTone('casual');
+    setSelectedModel(DEFAULT_CONVERSATION_MODEL);
     setError(null);
     onClose();
   };
@@ -264,6 +271,13 @@ export default function ConversationGeneratorDialogWithScene({
               ))}
             </Select>
           </FormControl>
+
+          {/* AIモデル選択 */}
+          <ModelSelector
+            value={selectedModel}
+            onChange={setSelectedModel}
+            disabled={generating}
+          />
 
           {/* メッセージ数 */}
           <Box>

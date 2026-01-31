@@ -10,14 +10,55 @@ import {
   getConversationPromptTemplateById,
   getDefaultConversationPromptTemplate
 } from '@/lib/db';
+import type { ModelProvider } from '@/lib/vertex-ai/constants';
+
+/**
+ * Build character section based on model provider
+ * Claude prefers XML-style structured data, Gemini uses markdown
+ */
+function buildCharacterSection(
+  characters: ConversationPromptInput['characters'],
+  modelProvider: ModelProvider = 'google-genai'
+): string {
+  if (modelProvider === 'vertex-anthropic') {
+    // Claude prefers XML-style structured data
+    return characters
+      .map(
+        (char) => `<character id="${char.id}" name="${char.name}">
+  <description>${char.description}</description>
+  <personality>${char.personality}</personality>
+  <speaking_style>${char.speakingStyle}</speaking_style>
+  <sample_dialogues>
+${char.sampleDialogues.map((d) => `    <dialogue situation="${d.situation}">${d.line}</dialogue>`).join('\n')}
+  </sample_dialogues>
+</character>`
+      )
+      .join('\n\n');
+  }
+
+  // Gemini and default: markdown format
+  return characters
+    .map(
+      (char, idx) => `
+### キャラクター${idx + 1}: ${char.name} (ID: ${char.id})
+- 説明: ${char.description}
+- 性格: ${char.personality}
+- 話し方: ${char.speakingStyle}
+- セリフ例: ${char.sampleDialogues.map((d) => `"${d.line}"`).join(', ')}
+`
+    )
+    .join('\n');
+}
 
 /**
  * Build a conversation generation prompt for the AI model using a template
  * Fetches the latest emotion tags from database and applies template variables
+ * @param modelProvider - The model provider (affects prompt format for Claude vs Gemini)
  */
 export async function buildConversationPrompt(
   input: ConversationPromptInput,
-  templateId?: number
+  templateId?: number,
+  modelProvider: ModelProvider = 'google-genai'
 ): Promise<string> {
   // Fetch template (use provided templateId or get default)
   let template;
@@ -38,18 +79,8 @@ export async function buildConversationPrompt(
   // Fetch latest emotion tags from database
   const emotionTags = await getAllElevenLabsTags();
 
-  // Build template variables
-  const charactersSection = input.characters
-    .map(
-      (char, idx) => `
-### キャラクター${idx + 1}: ${char.name} (ID: ${char.id})
-- 説明: ${char.description}
-- 性格: ${char.personality}
-- 話し方: ${char.speakingStyle}
-- セリフ例: ${char.sampleDialogues.map((d) => `"${d.line}"`).join(', ')}
-`
-    )
-    .join('\n');
+  // Build template variables using model-specific format
+  const charactersSection = buildCharacterSection(input.characters, modelProvider);
 
   const previousMessagesSection =
     input.previousMessages && input.previousMessages.length > 0
