@@ -9,9 +9,10 @@ export const CONVERSATION_MODEL_OPTIONS = [
   { label: 'Gemini 2.5 Pro (高性能)', value: 'gemini-2.5-pro-preview-05-06', provider: 'vertex-gemini' as const },
   { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash', provider: 'vertex-gemini' as const },
 
-  // Claude Models (via Vertex AI Model Garden)
-  { label: 'Claude Sonnet 4 (バランス)', value: 'claude-sonnet-4@20250514', provider: 'vertex-anthropic' as const },
-  { label: 'Claude Haiku 3.5 (高速)', value: 'claude-3-5-haiku@20241022', provider: 'vertex-anthropic' as const },
+  // Claude Models (via Anthropic API)
+  { label: 'Claude Opus 4.5 (最高性能)', value: 'claude-opus-4-5-20251101', provider: 'anthropic' as const },
+  { label: 'Claude Sonnet 4 (バランス)', value: 'claude-sonnet-4-20250514', provider: 'anthropic' as const },
+  { label: 'Claude Haiku 3.5 (高速)', value: 'claude-3-5-haiku-20241022', provider: 'anthropic' as const },
 
   // Fallback (既存 Google Generative AI API)
   { label: 'Gemini 2.0 Flash Exp (従来API)', value: 'gemini-2.0-flash-exp', provider: 'google-genai' as const },

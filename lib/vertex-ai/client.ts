@@ -7,7 +7,6 @@ import { createVertex, type GoogleVertexProvider } from '@ai-sdk/google-vertex';
 
 // Lazy initialization to avoid loading credentials on import
 let vertexClient: GoogleVertexProvider | null = null;
-let vertexAnthropicClient: GoogleVertexProvider | null = null;
 
 /**
  * Get GCP credentials from environment variable
@@ -64,32 +63,6 @@ export function getVertexClient(): GoogleVertexProvider {
     });
   }
   return vertexClient;
-}
-
-/**
- * Get Vertex AI client for Anthropic Claude models
- * Uses the createVertexAnthropic from the anthropic submodule
- */
-export async function getVertexAnthropicClient(): Promise<GoogleVertexProvider> {
-  if (!vertexAnthropicClient) {
-    // Dynamic import to avoid issues if not using anthropic
-    const { createVertexAnthropic } = await import('@ai-sdk/google-vertex/anthropic');
-
-    const { projectId, credentials } = getGcpCredentials();
-    const location = getLocation();
-
-    console.log(`[Vertex AI] Initializing Anthropic client for project: ${projectId}, location: ${location}`);
-
-    // Use createVertexAnthropic for Claude models
-    vertexAnthropicClient = createVertexAnthropic({
-      project: projectId,
-      location,
-      googleAuthOptions: {
-        credentials: credentials as Record<string, string>,
-      },
-    }) as unknown as GoogleVertexProvider;
-  }
-  return vertexAnthropicClient;
 }
 
 /**

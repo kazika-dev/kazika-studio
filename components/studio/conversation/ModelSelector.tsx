@@ -25,8 +25,8 @@ interface ModelSelectorProps {
  */
 function getProviderChip(provider: string) {
   switch (provider) {
-    case 'vertex-anthropic':
-      return <Chip size="small" label="Claude" color="secondary" sx={{ ml: 1 }} />;
+    case 'anthropic':
+      return <Chip size="small" label="Anthropic" color="warning" sx={{ ml: 1 }} />;
     case 'vertex-gemini':
       return <Chip size="small" label="Vertex AI" color="primary" sx={{ ml: 1 }} />;
     case 'google-genai':

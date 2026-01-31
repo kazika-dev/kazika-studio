@@ -20,7 +20,7 @@ function buildCharacterSection(
   characters: ConversationPromptInput['characters'],
   modelProvider: ModelProvider = 'google-genai'
 ): string {
-  if (modelProvider === 'vertex-anthropic') {
+  if (modelProvider === 'anthropic') {
     // Claude prefers XML-style structured data
     return characters
       .map(

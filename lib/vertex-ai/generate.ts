@@ -5,7 +5,7 @@
 
 import { generateText } from 'ai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getVertexClient, getVertexAnthropicClient, isVertexAIConfigured } from './client';
+import { getVertexClient, isVertexAIConfigured } from './client';
 import { getModelProvider, type ConversationModel, type ModelProvider } from './constants';
 
 export interface GenerateOptions {
@@ -51,15 +51,18 @@ export async function generateConversationContent(options: GenerateOptions): Pro
       };
     }
 
-    case 'vertex-anthropic': {
-      if (!isVertexAIConfigured()) {
-        console.warn('[Generate] Vertex AI not configured, falling back to google-genai');
+    case 'anthropic': {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        console.warn('[Generate] ANTHROPIC_API_KEY not configured, falling back to google-genai');
         return generateWithGoogleGenAI({ model: 'gemini-2.0-flash-exp', prompt, maxTokens });
       }
 
-      const vertexAnthropic = await getVertexAnthropicClient();
+      const { createAnthropic } = await import('@ai-sdk/anthropic');
+      const anthropic = createAnthropic({ apiKey });
+
       const result = await generateText({
-        model: vertexAnthropic(model),
+        model: anthropic(model),
         prompt,
         maxOutputTokens: maxTokens,
       });
@@ -67,7 +70,7 @@ export async function generateConversationContent(options: GenerateOptions): Pro
       return {
         text: result.text,
         model,
-        provider: 'vertex-anthropic',
+        provider: 'anthropic',
       };
     }
 
