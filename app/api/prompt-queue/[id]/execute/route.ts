@@ -8,6 +8,9 @@ import {
 } from '@/lib/db';
 import { getApiUrl } from '@/lib/utils/apiUrl';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from 'ai';
+import { getVertexClient, isVertexAIConfigured } from '@/lib/vertex-ai/client';
+import { getModelProvider } from '@/lib/vertex-ai/constants';
 
 /**
  * POST /api/prompt-queue/[id]/execute
@@ -112,13 +115,12 @@ export async function POST(
       let enhancedPrompt: string | null = null;
 
       if (queue.enhance_prompt === 'enhance') {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-          throw new Error('GEMINI_API_KEY is not configured');
-        }
+        // metadata から補完用モデルを取得（デフォルト: gemini-2.5-flash）
+        const queueMetadata = queue.metadata as Record<string, any> || {};
+        const enhanceModelName = queueMetadata.enhance_model || 'gemini-2.5-flash';
+        const provider = getModelProvider(enhanceModelName);
 
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        console.log(`[Execute] Enhancing prompt with model: ${enhanceModelName}, provider: ${provider}`);
 
         // プロンプト補完用のシステムプロンプト
         const enhanceSystemPrompt = `あなたは画像生成AIのプロンプトを最適化する専門家です。
@@ -137,28 +139,79 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
 
 最適化された英語プロンプトを出力してください:`;
 
-        // 画像がある場合はマルチモーダルリクエスト
-        let result;
-        if (referenceImages.length > 0) {
-          console.log(`Enhancing prompt with ${referenceImages.length} reference image(s)`);
-          const parts: any[] = [{ text: enhanceSystemPrompt }];
+        // Vertex AI を使用する場合
+        if (provider === 'vertex-gemini' && isVertexAIConfigured()) {
+          console.log(`[Execute] Using Vertex AI for prompt enhancement`);
 
-          // 参照画像を追加（最大4枚）
-          referenceImages.slice(0, 4).forEach((img) => {
-            parts.push({
-              inline_data: {
-                mime_type: img.mimeType,
-                data: img.data,
-              },
+          if (referenceImages.length > 0) {
+            console.log(`Enhancing prompt with ${referenceImages.length} reference image(s) via Vertex AI`);
+
+            const vertex = getVertexClient();
+            const vertexModel = vertex(enhanceModelName);
+
+            const imageMessages = referenceImages.slice(0, 4).map((img) => ({
+              type: 'image' as const,
+              image: `data:${img.mimeType};base64,${img.data}`,
+            }));
+
+            const result = await generateText({
+              model: vertexModel,
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: enhanceSystemPrompt },
+                    ...imageMessages,
+                  ],
+                },
+              ],
             });
-          });
 
-          result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+            enhancedPrompt = result.text.trim();
+          } else {
+            const vertex = getVertexClient();
+            const result = await generateText({
+              model: vertex(enhanceModelName),
+              prompt: enhanceSystemPrompt,
+            });
+            enhancedPrompt = result.text.trim();
+          }
         } else {
-          result = await model.generateContent(enhanceSystemPrompt);
+          // Google Generative AI SDK を使用（フォールバック）
+          console.log(`[Execute] Using Google Generative AI SDK for prompt enhancement`);
+
+          const apiKey = process.env.GEMINI_API_KEY;
+          if (!apiKey) {
+            throw new Error('GEMINI_API_KEY is not configured');
+          }
+
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: enhanceModelName });
+
+          // 画像がある場合はマルチモーダルリクエスト
+          let result;
+          if (referenceImages.length > 0) {
+            console.log(`Enhancing prompt with ${referenceImages.length} reference image(s)`);
+            const parts: any[] = [{ text: enhanceSystemPrompt }];
+
+            // 参照画像を追加（最大4枚）
+            referenceImages.slice(0, 4).forEach((img) => {
+              parts.push({
+                inline_data: {
+                  mime_type: img.mimeType,
+                  data: img.data,
+                },
+              });
+            });
+
+            result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+          } else {
+            result = await model.generateContent(enhanceSystemPrompt);
+          }
+
+          enhancedPrompt = result.response.text().trim();
         }
 
-        enhancedPrompt = result.response.text().trim();
         finalPrompt = enhancedPrompt;
         console.log(`Enhanced prompt: ${enhancedPrompt}`);
 

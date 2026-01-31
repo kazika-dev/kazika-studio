@@ -43,13 +43,11 @@ interface CreateResult {
   }>;
 }
 
-// プロンプト補完用AIモデルオプション
+// プロンプト補完用AIモデルオプション (Vertex AI / Google Generative AI SDK)
 const ENHANCE_MODEL_OPTIONS = [
-  { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5 (高品質)' },
-  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (バランス)' },
   { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro (最新・高性能)' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (高性能)' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (高速)' },
+  { value: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro (高性能)' },
+  { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash (高速・推奨)' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
@@ -73,7 +71,7 @@ export default function CreatePromptQueueFromConversationDialog({
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [enhancePrompt, setEnhancePrompt] = useState<'none' | 'enhance'>('none');
-  const [enhanceModel, setEnhanceModel] = useState('gemini-2.5-flash');
+  const [enhanceModel, setEnhanceModel] = useState('gemini-2.5-flash-preview-05-20');
   const [priority, setPriority] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +86,7 @@ export default function CreatePromptQueueFromConversationDialog({
       setAspectRatio('16:9');
       setAdditionalPrompt('');
       setEnhancePrompt('none');
-      setEnhanceModel('gemini-2.5-flash');
+      setEnhanceModel('gemini-2.5-flash-preview-05-20');
       setPriority(0);
       setError(null);
       setResult(null);

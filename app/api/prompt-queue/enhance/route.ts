@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from 'ai';
+import { getVertexClient, isVertexAIConfigured } from '@/lib/vertex-ai/client';
+import { getModelProvider } from '@/lib/vertex-ai/constants';
 
 /**
  * POST /api/prompt-queue/enhance
@@ -15,19 +18,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, negative_prompt, images } = body;
+    const { prompt, negative_prompt, images, model: requestedModel } = body;
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY is not configured' }, { status: 500 });
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+    // デフォルトモデル
+    const modelName = requestedModel || 'gemini-2.5-flash-preview-05-20';
+    const provider = getModelProvider(modelName);
 
     // プロンプト補完用のシステムプロンプト
     const enhanceSystemPrompt = `あなたは画像生成AIのプロンプトを最適化する専門家です。
@@ -49,28 +48,84 @@ ${negative_prompt ? `ネガティブプロンプト（参考）: ${negative_prom
 
 最適化された英語プロンプトを出力してください:`;
 
-    // 画像がある場合はマルチモーダルリクエスト
-    let result;
-    if (images && images.length > 0) {
-      console.log(`Enhancing prompt with ${images.length} reference image(s)`);
-      const parts: any[] = [{ text: enhanceSystemPrompt }];
+    let rawEnhancedPrompt: string;
 
-      // 参照画像を追加（最大4枚）
-      images.slice(0, 4).forEach((img: { mimeType: string; data: string }) => {
-        parts.push({
-          inline_data: {
-            mime_type: img.mimeType,
-            data: img.data,
-          },
+    // Vertex AI を使用する場合
+    if (provider === 'vertex-gemini' && isVertexAIConfigured()) {
+      console.log(`[Enhance] Using Vertex AI with model: ${modelName}`);
+
+      // 画像がある場合はマルチモーダルリクエスト
+      if (images && images.length > 0) {
+        console.log(`Enhancing prompt with ${images.length} reference image(s) via Vertex AI`);
+
+        // Vertex AI でマルチモーダルを使用
+        const vertex = getVertexClient();
+        const vertexModel = vertex(modelName);
+
+        // ai SDK の generateText でマルチモーダル対応
+        const imageMessages = images.slice(0, 4).map((img: { mimeType: string; data: string }) => ({
+          type: 'image' as const,
+          image: `data:${img.mimeType};base64,${img.data}`,
+        }));
+
+        const result = await generateText({
+          model: vertexModel,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: enhanceSystemPrompt },
+                ...imageMessages,
+              ],
+            },
+          ],
         });
-      });
 
-      result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+        rawEnhancedPrompt = result.text.trim();
+      } else {
+        // テキストのみの場合
+        const vertex = getVertexClient();
+        const result = await generateText({
+          model: vertex(modelName),
+          prompt: enhanceSystemPrompt,
+        });
+        rawEnhancedPrompt = result.text.trim();
+      }
     } else {
-      result = await model.generateContent(enhanceSystemPrompt);
-    }
+      // Google Generative AI SDK を使用（フォールバック）
+      console.log(`[Enhance] Using Google Generative AI SDK with model: ${modelName}`);
 
-    const rawEnhancedPrompt = result.response.text().trim();
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY is not configured' }, { status: 500 });
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      // 画像がある場合はマルチモーダルリクエスト
+      let result;
+      if (images && images.length > 0) {
+        console.log(`Enhancing prompt with ${images.length} reference image(s)`);
+        const parts: any[] = [{ text: enhanceSystemPrompt }];
+
+        // 参照画像を追加（最大4枚）
+        images.slice(0, 4).forEach((img: { mimeType: string; data: string }) => {
+          parts.push({
+            inline_data: {
+              mime_type: img.mimeType,
+              data: img.data,
+            },
+          });
+        });
+
+        result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+      } else {
+        result = await model.generateContent(enhanceSystemPrompt);
+      }
+
+      rawEnhancedPrompt = result.response.text().trim();
+    }
     // キャラクターシートに忠実に描画するよう指示を先頭に追加
     const characterSheetInstruction = 'Please make sure that the hairstyle, clothing, and accessories of the character appearing in the image you create exactly match the attached character sheet.';
     const enhancedPrompt = `${characterSheetInstruction} ${rawEnhancedPrompt}`;
