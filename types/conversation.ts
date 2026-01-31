@@ -392,3 +392,20 @@ export interface GetPromptTemplateResponse {
   error?: string;
 }
 
+// 会話生成下書きパラメータ
+export interface ConversationDraftParams {
+  characterIds: number[];
+  situation: string;
+  messageCount: number;
+  tone: 'casual' | 'formal' | 'dramatic' | 'humorous';
+  promptTemplateId?: number;
+  model: string;
+}
+
+// 会話メタデータ拡張（下書き対応）
+export interface ConversationMetadata {
+  draft_params?: ConversationDraftParams;
+  generated_at?: string;
+  [key: string]: any;
+}
+

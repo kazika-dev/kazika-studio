@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
-import type { ListConversationsResponse, CreateConversationRequest, CreateConversationResponse } from '@/types/conversation';
+import type { ListConversationsResponse, CreateConversationRequest, CreateConversationResponse, ConversationDraftParams } from '@/types/conversation';
 
 /**
  * GET /api/conversations
@@ -166,8 +166,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body: CreateConversationRequest = await request.json();
-    const { title, description, storySceneId } = body;
+    const body = await request.json();
+    const { title, description, storySceneId, draftParams } = body as CreateConversationRequest & { draftParams?: ConversationDraftParams };
 
     if (!title?.trim()) {
       return NextResponse.json(
@@ -206,7 +206,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create conversation
+    // Create conversation with optional draft params
+    const metadata: Record<string, any> = {};
+    if (draftParams) {
+      metadata.draft_params = draftParams;
+    }
+
     const { data: conversation, error: insertError } = await supabase
       .from('conversations')
       .insert({
@@ -214,6 +219,7 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || null,
         story_scene_id: storySceneId,
         user_id: user.id,
+        metadata,
       })
       .select()
       .single();
