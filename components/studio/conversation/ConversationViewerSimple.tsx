@@ -77,6 +77,7 @@ interface ConversationViewerSimpleProps {
   onBulkReanalyzeSelectedEmotions?: (messageIds: number[]) => Promise<void>;
   onBulkAddTagToSelected?: (messageIds: number[], tagName: string) => Promise<void>;
   onBulkRemoveTagsFromSelected?: (messageIds: number[]) => Promise<void>;
+  onBulkDeleteMessages?: (messageIds: number[]) => Promise<void>;
   readonly?: boolean;
   // 下書きからの生成
   hasDraftParams?: boolean;
@@ -557,6 +558,7 @@ export default function ConversationViewerSimple({
   onBulkReanalyzeSelectedEmotions,
   onBulkAddTagToSelected,
   onBulkRemoveTagsFromSelected,
+  onBulkDeleteMessages,
   readonly = false,
   hasDraftParams = false,
   onGenerateFromDraft,
@@ -1095,6 +1097,31 @@ export default function ConversationViewerSimple({
     }
   };
 
+  // Batch delete messages
+  const handleBatchDeleteMessages = async () => {
+    if (!onBulkDeleteMessages || selectedMessageIds.size === 0) return;
+
+    if (!confirm(`選択した${selectedMessageIds.size}件のメッセージを削除しますか？この操作は取り消せません。`)) {
+      return;
+    }
+
+    setBatchEmotionOperating(true);
+
+    try {
+      await onBulkDeleteMessages(Array.from(selectedMessageIds));
+      // Update local state - remove deleted messages
+      setLocalMessages(prev => prev.filter(msg => !selectedMessageIds.has(msg.id)));
+      alert(`${selectedMessageIds.size}件のメッセージを削除しました`);
+      setSelectionMode(false);
+      setSelectedMessageIds(new Set());
+    } catch (error) {
+      console.error('Failed to batch delete messages:', error);
+      alert('メッセージの一括削除に失敗しました');
+    } finally {
+      setBatchEmotionOperating(false);
+    }
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -1335,6 +1362,18 @@ export default function ConversationViewerSimple({
                   size="small"
                 >
                   タグ削除
+                </Button>
+              )}
+              {onBulkDeleteMessages && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleBatchDeleteMessages}
+                  disabled={batchGenerating || batchDownloading || batchEmotionOperating || selectedMessageIds.size === 0}
+                  startIcon={<DeleteIcon />}
+                  size="small"
+                >
+                  メッセージ削除
                 </Button>
               )}
             </>

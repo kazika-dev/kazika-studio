@@ -476,6 +476,33 @@ export default function ConversationsFocusPage() {
     }
   };
 
+  const handleBulkDeleteMessages = async (messageIds: number[]) => {
+    if (!selectedConversation || messageIds.length === 0) return;
+
+    try {
+      // 並列で削除を実行
+      const results = await Promise.all(
+        messageIds.map(async (id) => {
+          const response = await fetch(`/api/conversations/messages/${id}`, {
+            method: 'DELETE'
+          });
+          return response.json();
+        })
+      );
+
+      const failedCount = results.filter(r => !r.success).length;
+      if (failedCount > 0) {
+        throw new Error(`${messageIds.length - failedCount}件削除、${failedCount}件失敗しました`);
+      }
+
+      // Reload conversation to get updated messages
+      await loadConversation(selectedConversation.id);
+    } catch (error) {
+      console.error('Failed to bulk delete messages:', error);
+      throw error;
+    }
+  };
+
   const handleDeleteStory = async (storyId: number) => {
     try {
       const response = await fetch(`/api/stories/${storyId}`, {
@@ -670,6 +697,7 @@ export default function ConversationsFocusPage() {
                   onBulkReanalyzeSelectedEmotions={handleBulkReanalyzeSelectedEmotions}
                   onBulkAddTagToSelected={handleBulkAddTagToSelected}
                   onBulkRemoveTagsFromSelected={handleBulkRemoveTagsFromSelected}
+                  onBulkDeleteMessages={handleBulkDeleteMessages}
                   hasDraftParams={!!selectedConversation.metadata?.draft_params}
                   onGenerateFromDraft={handleGenerateFromDraft}
                   generatingFromDraft={generatingFromDraft}
