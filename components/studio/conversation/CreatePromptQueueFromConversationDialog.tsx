@@ -68,9 +68,9 @@ export default function CreatePromptQueueFromConversationDialog({
   messageCount,
   onSuccess,
 }: CreatePromptQueueFromConversationDialogProps) {
-  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [additionalPrompt, setAdditionalPrompt] = useState('');
-  const [enhancePrompt, setEnhancePrompt] = useState<'none' | 'enhance'>('none');
+  const [enhancePrompt, setEnhancePrompt] = useState<'none' | 'enhance'>('enhance');
   const [enhanceModel, setEnhanceModel] = useState('gemini-2.5-flash-preview-05-20');
   const [priority, setPriority] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -83,9 +83,9 @@ export default function CreatePromptQueueFromConversationDialog({
   // ダイアログが開いたときにリセット
   useEffect(() => {
     if (open) {
-      setAspectRatio('16:9');
+      setAspectRatio('9:16');
       setAdditionalPrompt('');
-      setEnhancePrompt('none');
+      setEnhancePrompt('enhance');
       setEnhanceModel('gemini-2.5-flash-preview-05-20');
       setPriority(0);
       setError(null);
