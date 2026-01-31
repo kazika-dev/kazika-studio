@@ -358,6 +358,8 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
           imageName={selectedOutputForSplit.prompt?.slice(0, 30) || `Output_${selectedOutputForSplit.id}`}
           onSelectSplitImages={handleSelectSplitImages}
           maxSelections={99}
+          defaultRows={2}
+          defaultCols={2}
         />
       )}
 

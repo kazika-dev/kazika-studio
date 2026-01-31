@@ -44,6 +44,8 @@ interface ImageGridSplitDialogProps {
   imageName: string;
   onSelectSplitImages: (images: { dataUrl: string; name: string }[]) => void;
   maxSelections: number;
+  defaultRows?: number;
+  defaultCols?: number;
 }
 
 export default function ImageGridSplitDialog({
@@ -53,9 +55,11 @@ export default function ImageGridSplitDialog({
   imageName,
   onSelectSplitImages,
   maxSelections,
+  defaultRows = 4,
+  defaultCols = 4,
 }: ImageGridSplitDialogProps) {
-  const [rows, setRows] = useState(4);
-  const [cols, setCols] = useState(4);
+  const [rows, setRows] = useState(defaultRows);
+  const [cols, setCols] = useState(defaultCols);
   const [splitImages, setSplitImages] = useState<SplitImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -181,6 +185,9 @@ export default function ImageGridSplitDialog({
       setImageLoaded(false);
       setSplitImages([]);
       setImageSize(null);
+      // デフォルト値にリセット
+      setRows(defaultRows);
+      setCols(defaultCols);
 
       const img = new Image();
       img.crossOrigin = 'anonymous';
