@@ -16,7 +16,9 @@ import MovieIcon from '@mui/icons-material/Movie';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import SettingsIcon from '@mui/icons-material/Settings';
+import QueueIcon from '@mui/icons-material/Queue';
 import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
+import CreatePromptQueueFromConversationDialog from '@/components/studio/conversation/CreatePromptQueueFromConversationDialog';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
 import StoryCreationDialog from '@/components/studio/conversation/StoryCreationDialog';
 import SceneCreationDialog from '@/components/studio/conversation/SceneCreationDialog';
@@ -66,6 +68,7 @@ export default function ConversationsFocusPage() {
   const [workflowSelectionDialogOpen, setWorkflowSelectionDialogOpen] = useState(false);
   const [generatingFromDraft, setGeneratingFromDraft] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [promptQueueDialogOpen, setPromptQueueDialogOpen] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
   const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string } | undefined => {
@@ -689,6 +692,15 @@ export default function ConversationsFocusPage() {
                         SRTダウンロード
                       </Button>
                       <Button
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={<QueueIcon />}
+                        onClick={() => setPromptQueueDialogOpen(true)}
+                        disabled={messages.length === 0}
+                      >
+                        プロンプトキュー作成
+                      </Button>
+                      <Button
                         variant="contained"
                         color="primary"
                         startIcon={<MovieIcon />}
@@ -795,6 +807,19 @@ export default function ConversationsFocusPage() {
           onGenerated={async () => {
             await loadConversation(selectedConversation.id);
             await loadStoryTree();
+          }}
+        />
+      )}
+
+      {selectedConversation && (
+        <CreatePromptQueueFromConversationDialog
+          open={promptQueueDialogOpen}
+          onClose={() => setPromptQueueDialogOpen(false)}
+          conversationId={selectedConversation.id}
+          conversationTitle={selectedConversation.title}
+          messageCount={messages.length}
+          onSuccess={(result) => {
+            console.log('Prompt queues created:', result);
           }}
         />
       )}
