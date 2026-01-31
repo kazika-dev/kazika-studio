@@ -5,7 +5,6 @@ import {
   getMessageCharacters,
   createPromptQueue,
   query,
-  getCharacterSheetById,
 } from '@/lib/db';
 import {
   buildSceneImagePrompt,
@@ -13,8 +12,6 @@ import {
   SceneImagePromptInput,
 } from '@/lib/conversation/prompt-builder';
 import { generateConversationContent } from '@/lib/vertex-ai/generate';
-import { getFileFromStorage } from '@/lib/gcp-storage';
-import { compressImagesForApi } from '@/lib/utils/imageCompression';
 
 interface CreatePromptQueuesRequest {
   aspectRatio?: string;
@@ -152,46 +149,8 @@ export async function POST(
         // メッセージに紐づくキャラクターを取得
         const messageCharacters = await getMessageCharacters(message.id);
 
-        // キャラクターシート画像を取得（最大4枚）
-        const characterImages: { mimeType: string; data: string }[] = [];
-        const characterSheetIdsForImages = messageCharacters.length > 0
-          ? messageCharacters.map((mc: any) => mc.character_sheet_id).slice(0, 4)
-          : message.character_id ? [message.character_id] : [];
-
-        if (characterSheetIdsForImages.length > 0) {
-          console.log(`[create-prompt-queues] Loading ${characterSheetIdsForImages.length} character sheet image(s) for message ${message.id}...`);
-
-          for (const csId of characterSheetIdsForImages) {
-            try {
-              const characterSheet = await getCharacterSheetById(parseInt(csId));
-              if (characterSheet && characterSheet.image_url) {
-                console.log(`  Loading character sheet ${csId}: ${characterSheet.name}`);
-                const { data: imageBuffer, contentType } = await getFileFromStorage(characterSheet.image_url);
-                const base64Data = Buffer.from(imageBuffer).toString('base64');
-                characterImages.push({
-                  mimeType: contentType,
-                  data: base64Data,
-                });
-                console.log(`  ✓ Loaded: ${characterSheet.name} (${(imageBuffer.length / 1024).toFixed(1)}KB)`);
-              }
-            } catch (error) {
-              console.error(`  ✗ Failed to load character sheet ${csId}:`, error);
-            }
-          }
-        }
-
-        // 画像を4MB以下に圧縮
-        let compressedImages = characterImages;
-        if (characterImages.length > 0) {
-          console.log(`[create-prompt-queues] Compressing ${characterImages.length} image(s) to 4MB total...`);
-          compressedImages = await compressImagesForApi(characterImages, 4 * 1024 * 1024); // 4MB
-        }
-
-        // AIでシーン画像プロンプトを生成
+        // AIでシーン画像プロンプトを生成（キャラクターシート画像はAIには送信しない）
         console.log(`[create-prompt-queues] Generating scene prompt for message ${message.id} (${i + 1}/${messages.length})...`);
-        if (compressedImages.length > 0) {
-          console.log(`[create-prompt-queues] Sending ${compressedImages.length} character sheet image(s) to AI`);
-        }
 
         const promptInput: SceneImagePromptInput = {
           conversationTitle: conversation.title || '無題の会話',
@@ -210,12 +169,12 @@ export async function POST(
         console.log(aiPrompt);
         console.log(`[create-prompt-queues] ========== END AI PROMPT ==========`);
 
-        // AIでシーンプロンプトを生成（キャラクターシート画像を含む）
+        // AIでシーンプロンプトを生成（テキストのみ、キャラクターシート画像は送信しない）
         const generateResult = await generateConversationContent({
           model: promptGenerationModel,
           prompt: aiPrompt,
           maxTokens: 2048,
-          images: compressedImages.length > 0 ? compressedImages : undefined,
+          // images: キャラクターシート画像はAIに送信しない（プロンプトキューへの登録時に使用）
         });
 
         // AIからの応答をログ出力
