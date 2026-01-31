@@ -174,6 +174,11 @@ export async function POST(
 
         const aiPrompt = buildSceneImagePrompt(promptInput);
 
+        // AIに送信するプロンプトをログ出力
+        console.log(`[create-prompt-queues] ========== AI PROMPT for message ${message.id} ==========`);
+        console.log(aiPrompt);
+        console.log(`[create-prompt-queues] ========== END AI PROMPT ==========`);
+
         // AIでシーンプロンプトを生成
         const generateResult = await generateConversationContent({
           model: promptGenerationModel,
