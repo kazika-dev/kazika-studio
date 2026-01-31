@@ -64,6 +64,19 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // story_scenes.location を取得（会話がシーンに紐づいている場合）
+    let sceneLocation: string | null = null;
+    if (conversation.story_scene_id) {
+      const { data: scene } = await supabase
+        .from('story_scenes')
+        .select('location')
+        .eq('id', conversation.story_scene_id)
+        .single();
+      if (scene?.location) {
+        sceneLocation = scene.location;
+      }
+    }
+
     // リクエストボディを取得
     const body: CreatePromptQueuesRequest = await request.json();
     const {
@@ -125,6 +138,11 @@ export async function POST(
         // プロンプトを構築
         // 英語プロンプト優先、なければ日本語
         let basePrompt = message.scene_prompt_en || message.scene_prompt_ja || '';
+
+        // 場所情報を追加（story_scenes.location）
+        if (sceneLocation) {
+          basePrompt += `\n\nLocation: ${sceneLocation}`;
+        }
 
         // キャラクター情報をプロンプトに追加
         const characterNames = messageCharacters.map((mc: any) => mc.character_sheets?.name).filter(Boolean);

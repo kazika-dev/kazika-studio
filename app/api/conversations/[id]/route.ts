@@ -271,6 +271,19 @@ export async function PATCH(
         ...(conversation.metadata || {}),
         draft_params: draftParams
       };
+
+      // Also update story_scenes.location if conversation has story_scene_id
+      if (conversation.story_scene_id && draftParams.location !== undefined) {
+        const { error: sceneUpdateError } = await supabase
+          .from('story_scenes')
+          .update({ location: draftParams.location })
+          .eq('id', conversation.story_scene_id);
+
+        if (sceneUpdateError) {
+          console.error('Failed to update story_scenes.location:', sceneUpdateError);
+          // Continue anyway - this is not critical
+        }
+      }
     }
 
     const { data: updated, error: updateError} = await supabase
