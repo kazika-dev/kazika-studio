@@ -1183,7 +1183,7 @@ input_config: {
   - MessageAddDialog との統合
   - 追加後にローカル状態を更新
 
-- **ページレベルの統合** (`/app/conversations/page.tsx`):
+- **ページレベルの統合** (会話ページで使用):
   - `handleAddMessage` ハンドラーを実装
   - API エンドポイントを呼び出し
   - 成功時にメッセージリストに追加
@@ -1210,7 +1210,7 @@ input_config: {
 - 保存中はボタンを無効化して多重送信を防止
 
 **影響範囲**:
-- `/conversations` ページで会話の手動編集が可能に
+- 会話ページで会話の手動編集が可能に
 - AI生成後に追加の会話を手動で継続できる
 - 既存の会話生成機能には影響なし
 
@@ -1426,7 +1426,7 @@ input_config: {
   - メッセージ編集中に再分析ボタンを表示
   - 保存中または分析中はボタンを無効化
 
-- **ページ統合** (`/app/conversations/page.tsx`):
+- **ページ統合** (会話ページで使用):
   - `handleReanalyzeEmotion` ハンドラーを実装
   - APIエンドポイントを呼び出し
   - 成功時にメッセージの状態を更新
@@ -1479,7 +1479,7 @@ POST /api/conversations/messages/123/reanalyze-emotion
 
 ### 2025-11-18: ストーリー・シーン階層構造による会話管理機能を追加
 
-**目的**: `/conversations` ページに大きなストーリー（大カテゴリ）の中にシーンごとの会話を作成できる階層構造を追加し、より体系的な会話管理を実現する
+**目的**: 会話ページに大きなストーリー（大カテゴリ）の中にシーンごとの会話を作成できる階層構造を追加し、より体系的な会話管理を実現する
 
 **変更内容**:
 - **データベースマイグレーション** (`supabase/migrations/20251118000001_create_stories_and_scenes.sql`):
@@ -1514,22 +1514,6 @@ POST /api/conversations/messages/123/reanalyze-emotion
   - `SceneCreationDialog.tsx` - シーン作成ダイアログ
   - `StoryTreeView.tsx` - ストーリー・シーン・会話のツリー表示コンポーネント
   - `ConversationGeneratorDialogWithScene.tsx` - シーン内での会話生成ダイアログ
-  - `/app/conversations/page.tsx` を完全リニューアル（階層構造表示）
-
-**UI 構造**:
-```
-/conversations ページ
-├── 左サイドバー: ストーリーツリー表示
-│   ├── 📚 ストーリーA
-│   │   ├── 🎬 シーン1
-│   │   │   ├── 💬 会話1
-│   │   │   └── 💬 会話2
-│   │   └── 🎬 シーン2
-│   │       └── 💬 会話3
-│   └── 📚 ストーリーB
-│       └── ...
-└── 右側: 会話表示エリア（選択した会話のメッセージを表示）
-```
 
 **データフロー**:
 1. ユーザーが「新しいストーリー」を作成 → `POST /api/stories`
@@ -1546,7 +1530,7 @@ POST /api/conversations/messages/123/reanalyze-emotion
 - **sequence_order 自動採番**: シーン作成時に `sequence_order` が省略された場合、自動的に最後に追加される
 
 **影響範囲**:
-- `/conversations` ページが階層構造表示に完全移行
+- 会話ページで階層構造表示が利用可能
 - 既存のスタジオベースの会話は影響を受けず、引き続き `/studios/[id]/conversation` で利用可能
 - 会話生成APIが `studioId` と `storySceneId` の両方に対応（少なくとも一方が必須）
 
