@@ -64,17 +64,14 @@ export default function ConversationsFocusPage() {
   const [promptQueueDialogOpen, setPromptQueueDialogOpen] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
-  const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string; location?: string | null; sceneTitle?: string } | undefined => {
+  const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string; sceneTitle?: string } | undefined => {
     if (!storySceneId) return undefined;
     for (const storyNode of storyTree) {
       const foundScene = storyNode.scenes.find(sceneNode => sceneNode.scene.id === storySceneId);
       if (foundScene) {
-        console.log('[getStoryInfoForConversation] Found scene:', foundScene.scene);
-        console.log('[getStoryInfoForConversation] scene.location:', foundScene.scene.location);
         return {
           id: storyNode.story.id,
           title: storyNode.story.title,
-          location: foundScene.scene.location,
           sceneTitle: foundScene.scene.title,
         };
       }
@@ -773,7 +770,7 @@ export default function ConversationsFocusPage() {
           onClose={() => setSettingsDialogOpen(false)}
           onSaved={async () => {
             await loadConversation(selectedConversation.id);
-            await loadStoryTree(); // story_scenes.location の更新を反映
+            await loadStoryTree();
           }}
           onGenerated={async () => {
             await loadConversation(selectedConversation.id);

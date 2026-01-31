@@ -17,7 +17,6 @@ export interface StoryScene {
   story_id: number;
   title: string;
   description: string | null;
-  location: string | null; // シーンの舞台となる場所
   sequence_order: number;
   created_at: string;
   updated_at: string;

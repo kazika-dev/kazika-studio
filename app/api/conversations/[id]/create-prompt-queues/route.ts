@@ -71,18 +71,8 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // story_scenes.location を取得（会話がシーンに紐づいている場合）
-    let sceneLocation: string | null = null;
-    if (conversation.story_scene_id) {
-      const { data: scene } = await supabase
-        .from('story_scenes')
-        .select('location')
-        .eq('id', conversation.story_scene_id)
-        .single();
-      if (scene?.location) {
-        sceneLocation = scene.location;
-      }
-    }
+    // 会話の場所を取得（conversations.location カラムから）
+    const sceneLocation: string | null = conversation.location || null;
 
     // リクエストボディを取得
     const body: CreatePromptQueuesRequest = await request.json();
