@@ -15,9 +15,11 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
 import ChatIcon from '@mui/icons-material/Chat';
+import QueueIcon from '@mui/icons-material/Queue';
 import ConversationGeneratorDialog from '@/components/studio/conversation/ConversationGeneratorDialog';
 import ConversationViewer from '@/components/studio/conversation/ConversationViewer';
 import ConversationList from '@/components/studio/conversation/ConversationList';
+import CreatePromptQueueFromConversationDialog from '@/components/studio/conversation/CreatePromptQueueFromConversationDialog';
 import type {
   Conversation,
   ConversationMessageWithCharacter,
@@ -58,6 +60,7 @@ export default function StudioConversationPage() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatorDialogOpen, setGeneratorDialogOpen] = useState(false);
+  const [promptQueueDialogOpen, setPromptQueueDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isNaN(studioId) && studioId > 0) {
@@ -299,6 +302,15 @@ export default function StudioConversationPage() {
           >
             新しい会話を生成
           </Button>
+          {selectedConversation && (
+            <Button
+              variant="outlined"
+              startIcon={<QueueIcon />}
+              onClick={() => setPromptQueueDialogOpen(true)}
+            >
+              プロンプトキューを作成
+            </Button>
+          )}
         </Box>
         <Divider />
       </Box>
@@ -385,6 +397,21 @@ export default function StudioConversationPage() {
         studioId={studioId}
         onGenerated={handleConversationGenerated}
       />
+
+      {/* Prompt Queue Dialog */}
+      {selectedConversation && (
+        <CreatePromptQueueFromConversationDialog
+          open={promptQueueDialogOpen}
+          onClose={() => setPromptQueueDialogOpen(false)}
+          conversationId={selectedConversation.id}
+          conversationTitle={selectedConversation.title}
+          messageCount={messages.length}
+          onSuccess={(result) => {
+            console.log('Prompt queues created:', result);
+            // 必要に応じてトースト通知などを追加
+          }}
+        />
+      )}
     </Box>
   );
 }
