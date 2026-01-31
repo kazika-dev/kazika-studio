@@ -5,13 +5,14 @@
 
 import { generateText } from 'ai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getVertexClient, isVertexAIConfigured } from './client';
+import { getVertexClient, isVertexAIConfigured, getVertexAuthMethod, callVertexAIWithApiKey } from './client';
 import { getModelProvider, type ConversationModel, type ModelProvider } from './constants';
 
 export interface GenerateOptions {
   model: ConversationModel | string;
   prompt: string;
   maxTokens?: number;
+  images?: { mimeType: string; data: string }[];
 }
 
 export interface GenerateResult {
@@ -25,7 +26,7 @@ export interface GenerateResult {
  * Automatically routes to the correct provider based on model selection
  */
 export async function generateConversationContent(options: GenerateOptions): Promise<GenerateResult> {
-  const { model, prompt, maxTokens = 8192 } = options;
+  const { model, prompt, maxTokens = 8192, images } = options;
   const provider = getModelProvider(model);
 
   console.log(`[Generate] Using model: ${model}, provider: ${provider}`);
@@ -37,7 +38,26 @@ export async function generateConversationContent(options: GenerateOptions): Pro
         return generateWithGoogleGenAI({ model: 'gemini-2.0-flash-exp', prompt, maxTokens });
       }
 
+      const authMethod = getVertexAuthMethod();
+      console.log(`[Generate] Vertex AI auth method: ${authMethod}`);
+
+      // API Key 方式の場合は REST API を直接呼び出す
+      if (authMethod === 'api-key') {
+        const text = await callVertexAIWithApiKey(model, prompt, images);
+        return {
+          text,
+          model,
+          provider: 'vertex-gemini',
+        };
+      }
+
+      // Service Account 方式の場合は ai SDK を使用
       const vertex = getVertexClient();
+      if (!vertex) {
+        console.warn('[Generate] Vertex AI client not available, falling back to google-genai');
+        return generateWithGoogleGenAI({ model: 'gemini-2.0-flash-exp', prompt, maxTokens });
+      }
+
       const result = await generateText({
         model: vertex(model),
         prompt,

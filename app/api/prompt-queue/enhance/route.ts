@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { generateText } from 'ai';
-import { getVertexClient, isVertexAIConfigured } from '@/lib/vertex-ai/client';
+import { getVertexClient, isVertexAIConfigured, getVertexAuthMethod, callVertexAIWithApiKey } from '@/lib/vertex-ai/client';
 import { getModelProvider } from '@/lib/vertex-ai/constants';
 
 /**
@@ -52,44 +52,57 @@ ${negative_prompt ? `ネガティブプロンプト（参考）: ${negative_prom
 
     // Vertex AI を使用する場合
     if (provider === 'vertex-gemini' && isVertexAIConfigured()) {
-      console.log(`[Enhance] Using Vertex AI with model: ${modelName}`);
+      const authMethod = getVertexAuthMethod();
+      console.log(`[Enhance] Using Vertex AI with model: ${modelName}, auth: ${authMethod}`);
 
-      // 画像がある場合はマルチモーダルリクエスト
-      if (images && images.length > 0) {
-        console.log(`Enhancing prompt with ${images.length} reference image(s) via Vertex AI`);
-
-        // Vertex AI でマルチモーダルを使用
-        const vertex = getVertexClient();
-        const vertexModel = vertex(modelName);
-
-        // ai SDK の generateText でマルチモーダル対応
-        const imageMessages = images.slice(0, 4).map((img: { mimeType: string; data: string }) => ({
-          type: 'image' as const,
-          image: `data:${img.mimeType};base64,${img.data}`,
-        }));
-
-        const result = await generateText({
-          model: vertexModel,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: enhanceSystemPrompt },
-                ...imageMessages,
-              ],
-            },
-          ],
-        });
-
-        rawEnhancedPrompt = result.text.trim();
+      // API Key 方式の場合は REST API を直接呼び出す
+      if (authMethod === 'api-key') {
+        rawEnhancedPrompt = await callVertexAIWithApiKey(
+          modelName,
+          enhanceSystemPrompt,
+          images && images.length > 0 ? images.slice(0, 4) : undefined
+        );
       } else {
-        // テキストのみの場合
+        // Service Account 方式の場合は ai SDK を使用
         const vertex = getVertexClient();
-        const result = await generateText({
-          model: vertex(modelName),
-          prompt: enhanceSystemPrompt,
-        });
-        rawEnhancedPrompt = result.text.trim();
+        if (!vertex) {
+          throw new Error('Vertex AI client not available');
+        }
+
+        // 画像がある場合はマルチモーダルリクエスト
+        if (images && images.length > 0) {
+          console.log(`Enhancing prompt with ${images.length} reference image(s) via Vertex AI`);
+
+          const vertexModel = vertex(modelName);
+
+          // ai SDK の generateText でマルチモーダル対応
+          const imageMessages = images.slice(0, 4).map((img: { mimeType: string; data: string }) => ({
+            type: 'image' as const,
+            image: `data:${img.mimeType};base64,${img.data}`,
+          }));
+
+          const result = await generateText({
+            model: vertexModel,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: enhanceSystemPrompt },
+                  ...imageMessages,
+                ],
+              },
+            ],
+          });
+
+          rawEnhancedPrompt = result.text.trim();
+        } else {
+          // テキストのみの場合
+          const result = await generateText({
+            model: vertex(modelName),
+            prompt: enhanceSystemPrompt,
+          });
+          rawEnhancedPrompt = result.text.trim();
+        }
       }
     } else {
       // Google Generative AI SDK を使用（フォールバック）
