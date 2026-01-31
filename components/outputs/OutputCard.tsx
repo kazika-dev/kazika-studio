@@ -9,9 +9,10 @@ interface OutputCardProps {
   output: WorkflowOutput;
   onDelete: (id: number) => Promise<void>;
   onFavoriteToggle?: (id: number, isFavorite: boolean) => void;
+  onSplit?: (output: WorkflowOutput) => void;
 }
 
-export default function OutputCard({ output, onDelete, onFavoriteToggle }: OutputCardProps) {
+export default function OutputCard({ output, onDelete, onFavoriteToggle, onSplit }: OutputCardProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
@@ -67,6 +68,13 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
 
   const handleEdit = () => {
     router.push(`/outputs/edit/${output.id}`);
+  };
+
+  const handleSplit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSplit) {
+      onSplit(output);
+    }
   };
 
   const handleDownload = async (e: React.MouseEvent) => {
@@ -273,6 +281,24 @@ export default function OutputCard({ output, onDelete, onFavoriteToggle }: Outpu
             {output.output_type}
           </span>
           <div className="flex items-center gap-2">
+            {/* Split Button (only for images) */}
+            {output.output_type === 'image' && onSplit && (
+              <button
+                onClick={handleSplit}
+                className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 p-2 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                title="分割"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                  />
+                </svg>
+              </button>
+            )}
+
             {/* Edit Button (only for images) */}
             {output.output_type === 'image' && (
               <button

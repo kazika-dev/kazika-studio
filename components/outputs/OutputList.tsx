@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { WorkflowOutput, OutputType } from '@/types/workflow-output';
 import OutputCard from './OutputCard';
+import ImageGridSplitDialog from '@/components/prompt-queue/ImageGridSplitDialog';
 
 interface OutputListProps {
   filterType: OutputType | 'all';
@@ -19,6 +20,15 @@ interface PaginationInfo {
   hasPrev: boolean;
 }
 
+// URLまたはパスに応じて適切なsrcを返す
+function getImageUrl(contentUrl: string | undefined): string {
+  if (!contentUrl) return '';
+  if (contentUrl.startsWith('http://') || contentUrl.startsWith('https://')) {
+    return contentUrl;
+  }
+  return `/api/storage/${contentUrl}`;
+}
+
 export default function OutputList({ filterType, searchQuery, showFavoritesOnly }: OutputListProps) {
   const [outputs, setOutputs] = useState<WorkflowOutput[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +36,11 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const itemsPerPage = 12;
+
+  // 画像分割ダイアログの状態
+  const [splitDialogOpen, setSplitDialogOpen] = useState(false);
+  const [selectedOutputForSplit, setSelectedOutputForSplit] = useState<WorkflowOutput | null>(null);
+  const [savingSplitImages, setSavingSplitImages] = useState(false);
 
   // フィルター変更時は1ページ目に戻してデータ取得
   useEffect(() => {
@@ -99,6 +114,48 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
           : output
       )
     );
+  };
+
+  // 画像分割ダイアログを開く
+  const handleOpenSplitDialog = (output: WorkflowOutput) => {
+    setSelectedOutputForSplit(output);
+    setSplitDialogOpen(true);
+  };
+
+  // 分割画像を保存
+  const handleSelectSplitImages = async (images: { dataUrl: string; name: string }[]) => {
+    if (images.length === 0) return;
+
+    setSavingSplitImages(true);
+    try {
+      for (const img of images) {
+        // 分割画像をOutputとして保存
+        const response = await fetch(img.dataUrl);
+        const blob = await response.blob();
+
+        const formData = new FormData();
+        formData.append('file', blob, `${img.name}.png`);
+        formData.append('prompt', `Split: ${img.name}`);
+        formData.append('is_split_image', 'true');
+        if (selectedOutputForSplit?.id) {
+          formData.append('originalOutputId', selectedOutputForSplit.id.toString());
+        }
+
+        await fetch('/api/outputs/save-edited', {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
+      // Output一覧を再取得
+      await fetchOutputs(currentPage);
+    } catch (error) {
+      console.error('Failed to save split images:', error);
+    } finally {
+      setSavingSplitImages(false);
+      setSplitDialogOpen(false);
+      setSelectedOutputForSplit(null);
+    }
   };
 
   // クライアントサイドフィルタリング（検索クエリのみ、お気に入りはサーバーサイドで処理）
@@ -213,6 +270,7 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
             output={output}
             onDelete={handleDelete}
             onFavoriteToggle={handleFavoriteToggle}
+            onSplit={output.output_type === 'image' ? handleOpenSplitDialog : undefined}
           />
         ))}
       </div>
@@ -285,6 +343,31 @@ export default function OutputList({ filterType, searchQuery, showFavoritesOnly 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* 画像分割ダイアログ */}
+      {selectedOutputForSplit && selectedOutputForSplit.content_url && (
+        <ImageGridSplitDialog
+          open={splitDialogOpen}
+          onClose={() => {
+            setSplitDialogOpen(false);
+            setSelectedOutputForSplit(null);
+          }}
+          imageUrl={getImageUrl(selectedOutputForSplit.content_url)}
+          imageName={selectedOutputForSplit.prompt?.slice(0, 30) || `Output_${selectedOutputForSplit.id}`}
+          onSelectSplitImages={handleSelectSplitImages}
+          maxSelections={99}
+        />
+      )}
+
+      {/* 保存中オーバーレイ */}
+      {savingSplitImages && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4 shadow-xl">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="text-gray-700 dark:text-gray-300">分割画像を保存中...</p>
+          </div>
         </div>
       )}
     </div>
