@@ -68,6 +68,8 @@ export default function ConversationsFocusPage() {
     for (const storyNode of storyTree) {
       const foundScene = storyNode.scenes.find(sceneNode => sceneNode.scene.id === storySceneId);
       if (foundScene) {
+        console.log('[getStoryInfoForConversation] Found scene:', foundScene.scene);
+        console.log('[getStoryInfoForConversation] scene.location:', foundScene.scene.location);
         return {
           id: storyNode.story.id,
           title: storyNode.story.title,
@@ -97,6 +99,7 @@ export default function ConversationsFocusPage() {
       const result = await response.json();
 
       if (result.success && result.data) {
+        console.log('[loadStoryTree] Tree data:', JSON.stringify(result.data.tree, null, 2));
         setStoryTree(result.data.tree);
       } else {
         setError(result.error || 'ストーリーツリーの読み込みに失敗しました');
