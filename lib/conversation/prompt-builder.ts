@@ -462,7 +462,6 @@ export interface SceneImagePromptInput {
     id: number;
     name: string;
     description?: string;
-    looks?: string;
   }>;
   // additionalInstructions は AI プロンプト生成には使用しない（キュー登録後にテンプレートとして追加）
 }
@@ -485,19 +484,7 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): string {
   const contextMessages = allMessages.slice(contextStart, contextEnd);
 
   const charactersSection = characters
-    .map((char) => {
-      let charInfo = `- ID:${char.id} ${char.name}`;
-      if (char.looks) {
-        charInfo += `\n  外見: ${char.looks}`;
-      }
-      if (char.description) {
-        charInfo += `\n  説明: ${char.description}`;
-      }
-      if (!char.looks && !char.description) {
-        charInfo += ': （説明なし）';
-      }
-      return charInfo;
-    })
+    .map((char) => `- ID:${char.id} ${char.name}: ${char.description || '（説明なし）'}`)
     .join('\n');
 
   const conversationContext = contextMessages

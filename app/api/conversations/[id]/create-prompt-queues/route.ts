@@ -209,28 +209,40 @@ export async function POST(
         }
         console.log(`[create-prompt-queues] Generated scene prompt: ${scenePromptData.scenePrompt.substring(0, 100)}...`);
 
-        // プロンプトを構築（テンプレートを最初に配置）
-        let finalPrompt = '';
-
-        // テンプレートを最初に追加
-        if (templateContent) {
-          finalPrompt = templateContent + '\n\n';
-        }
-
-        // AIが生成したシーンプロンプトを追加
-        finalPrompt += scenePromptData.scenePrompt;
-
-        // 追加プロンプトを最後に追加
-        if (additionalPrompt && additionalPrompt.trim()) {
-          finalPrompt += `\n\n${additionalPrompt.trim()}`;
-        }
-
         // キャラクターシートIDを決定（AIが提案したものを使用、なければメッセージに紐づくもの）
         let characterSheetIds: number[] = [];
         if (scenePromptData.sceneCharacterIds && scenePromptData.sceneCharacterIds.length > 0) {
           characterSheetIds = scenePromptData.sceneCharacterIds.slice(0, 4);
         } else if (messageCharacters.length > 0) {
           characterSheetIds = messageCharacters.map((mc: any) => mc.character_sheet_id).slice(0, 4);
+        }
+
+        // プロンプトを構築（テンプレート → looks → Gemini生成プロンプトの順）
+        let finalPrompt = '';
+
+        // 1. テンプレートを最初に追加
+        if (templateContent) {
+          finalPrompt = templateContent + '\n\n';
+        }
+
+        // 2. 登場キャラクターのlooksを追加
+        const sceneCharacterLooks: string[] = [];
+        for (const charId of characterSheetIds) {
+          const char = characterMap.get(charId);
+          if (char && char.looks) {
+            sceneCharacterLooks.push(`${char.name}: ${char.looks}`);
+          }
+        }
+        if (sceneCharacterLooks.length > 0) {
+          finalPrompt += sceneCharacterLooks.join('\n') + '\n\n';
+        }
+
+        // 3. AIが生成したシーンプロンプトを追加
+        finalPrompt += scenePromptData.scenePrompt;
+
+        // 4. 追加プロンプトを最後に追加（オプション）
+        if (additionalPrompt && additionalPrompt.trim()) {
+          finalPrompt += `\n\n${additionalPrompt.trim()}`;
         }
 
         // prompt_queue_images用のデータを準備
