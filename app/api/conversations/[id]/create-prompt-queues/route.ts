@@ -8,12 +8,12 @@ import {
 } from '@/lib/db';
 
 interface CreatePromptQueuesRequest {
-  model?: string;
   aspectRatio?: string;
   additionalTemplateId?: number;
   additionalPrompt?: string;
   priority?: number;
   enhancePrompt?: 'none' | 'enhance';
+  enhanceModel?: string;  // プロンプト補完用AIモデル
 }
 
 /**
@@ -67,12 +67,12 @@ export async function POST(
     // リクエストボディを取得
     const body: CreatePromptQueuesRequest = await request.json();
     const {
-      model = 'gemini-2.5-flash-image',
       aspectRatio = '16:9',
       additionalTemplateId,
       additionalPrompt = '',
       priority = 0,
       enhancePrompt = 'none',
+      enhanceModel,
     } = body;
 
     // 追加テンプレートを取得（指定されている場合）
@@ -168,7 +168,6 @@ export async function POST(
         const queue = await createPromptQueue(user.id, {
           name: queueName,
           prompt: basePrompt.trim(),
-          model,
           aspect_ratio: aspectRatio,
           priority,
           enhance_prompt: enhancePrompt,
@@ -178,6 +177,7 @@ export async function POST(
             sequence_order: message.sequence_order,
             speaker_name: message.speaker_name,
             character_id: message.character_id,
+            enhance_model: enhanceModel,  // プロンプト補完用AIモデル
           },
           images,
         });
