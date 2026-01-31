@@ -24,6 +24,7 @@ import {
   CheckBox as CheckBoxIcon,
   Settings as SettingsIcon,
   AutoAwesome as AutoAwesomeIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import type {
   PromptQueueWithImages,
@@ -229,6 +230,39 @@ export default function PromptQueuePage() {
     }
   };
 
+  // 一括削除
+  const handleBulkDelete = async () => {
+    const queueIds = Array.from(selectedIds);
+    if (queueIds.length === 0) return;
+
+    if (!confirm(`${queueIds.length}件のキューを削除しますか？この操作は取り消せません。`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/prompt-queue/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queue_ids: queueIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error('一括削除に失敗しました');
+      }
+
+      const result = await response.json();
+      setSelectedIds(new Set());
+      await fetchQueues();
+      setSnackbar({
+        open: true,
+        message: `${result.deleted_count}件のキューを削除しました`,
+        severity: 'success',
+      });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  };
+
   // 一括設定の適用
   const handleBulkApply = async (updates: BulkUpdateData) => {
     const queueIds = Array.from(selectedIds);
@@ -284,13 +318,23 @@ export default function PromptQueuePage() {
             {selectionMode ? `選択中 (${selectedIds.size})` : '選択'}
           </Button>
           {selectionMode && selectedIds.size > 0 && (
-            <Button
-              variant="contained"
-              startIcon={<SettingsIcon />}
-              onClick={() => setBulkSettingsOpen(true)}
-            >
-              一括設定
-            </Button>
+            <>
+              <Button
+                variant="contained"
+                startIcon={<SettingsIcon />}
+                onClick={() => setBulkSettingsOpen(true)}
+              >
+                一括設定
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={handleBulkDelete}
+              >
+                選択削除 ({selectedIds.size})
+              </Button>
+            </>
           )}
           <Button
             variant="outlined"
