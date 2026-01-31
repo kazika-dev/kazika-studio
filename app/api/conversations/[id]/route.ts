@@ -29,12 +29,13 @@ export async function GET(
     // Supabaseクライアントを取得（RLSを適用するため）
     const supabase = await createClient();
 
-    // Fetch conversation with studio information
+    // Fetch conversation with studio and scene information
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
       .select(`
         *,
-        studio:studios(id, name, user_id)
+        studio:studios(id, name, user_id),
+        scene:story_scenes(id, location)
       `)
       .eq('id', id)
       .single();
@@ -109,6 +110,7 @@ export async function GET(
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
           metadata: conversation.metadata,
+          location: conversation.scene?.location || null,
           ...(conversation.studio && {
             studio: {
               id: conversation.studio.id,

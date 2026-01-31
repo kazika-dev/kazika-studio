@@ -33,6 +33,7 @@ import { generateSrt, downloadSrt } from '@/lib/utils/srt';
 interface ConversationWithCount extends Conversation {
   messageCount?: number;
   sceneCount?: number;
+  location?: string | null;
   studios?: {
     id: number;
     name: string;
@@ -651,9 +652,9 @@ export default function ConversationsFocusPage() {
                         </Typography>
                       )}
                       {/* シーンの場所（story_scenes.location）を表示 */}
-                      {storyInfo?.location && (
+                      {selectedConversation.location && (
                         <Typography variant="body2" color="primary" sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          📍 場所: {storyInfo.location}
+                          📍 場所: {selectedConversation.location}
                         </Typography>
                       )}
                     </Box>
