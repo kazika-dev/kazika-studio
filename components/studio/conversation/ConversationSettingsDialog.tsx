@@ -37,6 +37,7 @@ interface Character {
 interface ConversationSettingsDialogProps {
   open: boolean;
   conversationId: number;
+  conversationTitle?: string; // 現在の会話タイトル
   draftParams: ConversationDraftParams | null;
   isGenerated: boolean; // 会話が生成済みかどうか
   onClose: () => void;
@@ -47,6 +48,7 @@ interface ConversationSettingsDialogProps {
 export default function ConversationSettingsDialog({
   open,
   conversationId,
+  conversationTitle,
   draftParams,
   isGenerated,
   onClose,
@@ -56,6 +58,7 @@ export default function ConversationSettingsDialog({
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loadingCharacters, setLoadingCharacters] = useState(false);
   const [selectedCharacters, setSelectedCharacters] = useState<number[]>(draftParams?.characterIds || []);
+  const [title, setTitle] = useState('');
   const [location, setLocation] = useState(draftParams?.location || '');
   const [situation, setSituation] = useState(draftParams?.situation || '');
   const [messageCount, setMessageCount] = useState(draftParams?.messageCount || 6);
@@ -77,6 +80,7 @@ export default function ConversationSettingsDialog({
       loadTemplates();
       // Reset form with draft params
       setSelectedCharacters(draftParams?.characterIds || []);
+      setTitle(conversationTitle || '');
       setLocation(draftParams?.location || '');
       setSituation(draftParams?.situation || '');
       setMessageCount(draftParams?.messageCount || 6);
@@ -84,7 +88,7 @@ export default function ConversationSettingsDialog({
       setSelectedTemplateId(draftParams?.promptTemplateId);
       setSelectedModel(draftParams?.model || DEFAULT_CONVERSATION_MODEL);
     }
-  }, [open, draftParams]);
+  }, [open, draftParams, conversationTitle]);
 
   const loadTemplates = async () => {
     try {
@@ -146,6 +150,7 @@ export default function ConversationSettingsDialog({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          title: title.trim() || undefined,
           draftParams: buildDraftParams(),
         }),
       });
@@ -182,11 +187,12 @@ export default function ConversationSettingsDialog({
     setError(null);
 
     try {
-      // First, update the draft params
+      // First, update the draft params and title
       const updateResponse = await fetch(`/api/conversations/${conversationId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          title: title.trim() || undefined,
           draftParams: buildDraftParams(),
         }),
       });
@@ -253,6 +259,18 @@ export default function ConversationSettingsDialog({
               {error}
             </Alert>
           )}
+
+          {/* タイトル */}
+          <TextField
+            label="タイトル"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            fullWidth
+            placeholder="会話のタイトル"
+            helperText="会話を識別するためのタイトル"
+          />
+
+          <Divider />
 
           {/* 登場人物 */}
           <Box>

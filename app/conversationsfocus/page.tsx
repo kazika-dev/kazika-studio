@@ -767,6 +767,7 @@ export default function ConversationsFocusPage() {
         <ConversationSettingsDialog
           open={settingsDialogOpen}
           conversationId={selectedConversation.id}
+          conversationTitle={selectedConversation.title}
           draftParams={(selectedConversation.metadata?.draft_params as ConversationDraftParams) || null}
           isGenerated={messages.length > 0}
           onClose={() => setSettingsDialogOpen(false)}
