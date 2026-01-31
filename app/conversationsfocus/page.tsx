@@ -63,12 +63,17 @@ export default function ConversationsFocusPage() {
   const [promptQueueDialogOpen, setPromptQueueDialogOpen] = useState(false);
 
   // Get story info for the selected conversation using story_scene_id
-  const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string } | undefined => {
+  const getStoryInfoForConversation = (storySceneId: number | null | undefined): { id: number; title: string; location?: string | null; sceneTitle?: string } | undefined => {
     if (!storySceneId) return undefined;
     for (const storyNode of storyTree) {
       const foundScene = storyNode.scenes.find(sceneNode => sceneNode.scene.id === storySceneId);
       if (foundScene) {
-        return { id: storyNode.story.id, title: storyNode.story.title };
+        return {
+          id: storyNode.story.id,
+          title: storyNode.story.title,
+          location: foundScene.scene.location,
+          sceneTitle: foundScene.scene.title,
+        };
       }
     }
     return undefined;
@@ -613,6 +618,11 @@ export default function ConversationsFocusPage() {
                       {selectedConversation.description && (
                         <Typography variant="body2" color="text.secondary">
                           {selectedConversation.description}
+                        </Typography>
+                      )}
+                      {storyInfo?.location && (
+                        <Typography variant="body2" color="primary" sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          📍 場所: {storyInfo.location}
                         </Typography>
                       )}
                     </Box>
