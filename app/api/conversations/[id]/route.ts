@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { getAuthenticatedSupabase } from '@/lib/auth/apiAuth';
 import type { GetConversationResponse } from '@/types/conversation';
 
 /**
@@ -15,8 +14,8 @@ export async function GET(
     const { id } = await params;
     console.log('[GET /api/conversations/:id] Fetching conversation ID:', id);
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
+    const { user, supabase, authMethod } = await getAuthenticatedSupabase(request);
     if (!user) {
       console.log('[GET /api/conversations/:id] Auth error: No user');
       return NextResponse.json(
@@ -24,10 +23,7 @@ export async function GET(
         { status: 401 }
       );
     }
-    console.log('[GET /api/conversations/:id] User authenticated:', user.id);
-
-    // Supabaseクライアントを取得（RLSを適用するため）
-    const supabase = await createClient();
+    console.log('[GET /api/conversations/:id] User authenticated:', user.id, 'method:', authMethod);
 
     // Fetch conversation with studio information
     const { data: conversation, error: convError } = await supabase
@@ -141,16 +137,14 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
+    const { user, supabase } = await getAuthenticatedSupabase(request);
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     // Verify ownership
     const { data: conversation, error: convError } = await supabase
@@ -219,16 +213,14 @@ export async function PATCH(
   try {
     const { id } = await params;
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
+    const { user, supabase } = await getAuthenticatedSupabase(request);
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     const body = await request.json();
     const { title, description, location, metadata, draftParams } = body;

@@ -1,9 +1,18 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import type { User } from '@supabase/supabase-js';
+
+/**
+ * 認証方法の種類
+ */
+export type AuthMethod = 'cookie' | 'apiKey' | 'jwt' | null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabaseClient = SupabaseClient<any, any, any>;
 
 /**
  * API リクエストを認証する
@@ -17,6 +26,20 @@ import type { User } from '@supabase/supabase-js';
  * @returns 認証されたユーザー情報、または null
  */
 export async function authenticateRequest(request: NextRequest): Promise<User | null> {
+  const result = await authenticateRequestWithMethod(request);
+  return result.user;
+}
+
+/**
+ * API リクエストを認証し、認証方法も返す
+ *
+ * @param request Next.js Request オブジェクト
+ * @returns { user: 認証されたユーザー情報または null, authMethod: 認証方法 }
+ */
+export async function authenticateRequestWithMethod(request: NextRequest): Promise<{
+  user: User | null;
+  authMethod: AuthMethod;
+}> {
   // 1. Authorization ヘッダーをチェック
   const authHeader = request.headers.get('authorization');
 
@@ -30,7 +53,7 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
 
       if (user) {
         console.log('[API Auth] API key authentication successful:', user.id);
-        return user;
+        return { user, authMethod: 'apiKey' };
       }
       console.log('[API Auth] API key authentication failed');
     } else {
@@ -40,7 +63,7 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
 
       if (user) {
         console.log('[API Auth] JWT authentication successful:', user.id);
-        return user;
+        return { user, authMethod: 'jwt' };
       }
       console.log('[API Auth] JWT authentication failed');
     }
@@ -54,20 +77,71 @@ export async function authenticateRequest(request: NextRequest): Promise<User | 
 
     if (error) {
       console.error('[API Auth] Cookie session authentication error:', error);
-      return null;
+      return { user: null, authMethod: null };
     }
 
     if (user) {
       console.log('[API Auth] Cookie session authentication successful:', user.id);
+      return { user, authMethod: 'cookie' };
     } else {
       console.log('[API Auth] Cookie session authentication failed - no user');
+      return { user: null, authMethod: null };
     }
-
-    return user;
   } catch (error) {
     console.error('[API Auth] Cookie session authentication exception:', error);
-    return null;
+    return { user: null, authMethod: null };
   }
+}
+
+/**
+ * 認証方法に応じたSupabaseクライアントを取得する
+ *
+ * - Cookie認証: 通常のサーバークライアント（RLS適用）
+ * - JWT/APIキー認証: サービスロールクライアント（RLSバイパス）
+ *
+ * 注意: JWT/APIキー認証の場合はRLSをバイパスするため、
+ * アプリケーションロジックで所有権チェックを必ず行うこと。
+ *
+ * @param request Next.js Request オブジェクト
+ * @returns { user, supabase, authMethod } または認証失敗時は user が null
+ */
+export async function getAuthenticatedSupabase(request: NextRequest): Promise<{
+  user: User | null;
+  supabase: AnySupabaseClient;
+  authMethod: AuthMethod;
+}> {
+  const { user, authMethod } = await authenticateRequestWithMethod(request);
+
+  if (!user) {
+    // 認証失敗時も一応Supabaseクライアントを返す（エラーハンドリング用）
+    const supabase = await createServerClient();
+    return { user: null, supabase, authMethod: null };
+  }
+
+  if (authMethod === 'cookie') {
+    // Cookie認証の場合は通常のクライアント（RLSが適用される）
+    const supabase = await createServerClient();
+    return { user, supabase, authMethod };
+  }
+
+  // JWT/APIキー認証の場合はサービスロールクライアント（RLSをバイパス）
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('[API Auth] Missing Supabase configuration for service role client');
+    const supabase = await createServerClient();
+    return { user, supabase, authMethod };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    db: {
+      schema: 'kazikastudio',
+    },
+  });
+
+  console.log('[API Auth] Using service role client for', authMethod, 'authentication');
+  return { user, supabase, authMethod };
 }
 
 /**
