@@ -728,6 +728,7 @@ export async function updateCharacterSheet(id: number, data: {
   metadata?: any;
   is_favorite?: boolean;
   looks?: string;
+  video_character_tag?: string;
 }) {
   const updates: string[] = [];
   const values: any[] = [];
@@ -760,6 +761,10 @@ export async function updateCharacterSheet(id: number, data: {
   if (data.looks !== undefined) {
     updates.push(`looks = $${paramIndex++}`);
     values.push(data.looks);
+  }
+  if (data.video_character_tag !== undefined) {
+    updates.push(`video_character_tag = $${paramIndex++}`);
+    values.push(data.video_character_tag);
   }
 
   if (updates.length === 0) {

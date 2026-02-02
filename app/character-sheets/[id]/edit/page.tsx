@@ -36,6 +36,7 @@ interface CharacterSheet {
   description: string;
   elevenlabs_voice_id?: string;
   looks?: string;
+  video_character_tag?: string;
   metadata: any;
   created_at: string;
   updated_at: string;
@@ -54,6 +55,7 @@ export default function EditCharacterSheetPage() {
   const [description, setDescription] = useState('');
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [looks, setLooks] = useState('');
+  const [videoCharacterTag, setVideoCharacterTag] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
@@ -76,6 +78,7 @@ export default function EditCharacterSheetPage() {
         setDescription(data.characterSheet.description || '');
         setElevenLabsVoiceId(data.characterSheet.elevenlabs_voice_id || '');
         setLooks(data.characterSheet.looks || '');
+        setVideoCharacterTag(data.characterSheet.video_character_tag || '');
         setImagePreview(data.characterSheet.image_url);
       } else {
         toast.error('キャラクターシートの取得に失敗しました');
@@ -275,6 +278,7 @@ export default function EditCharacterSheetPage() {
           description: description.trim(),
           elevenlabs_voice_id: elevenLabsVoiceId.trim() || undefined,
           looks: looks.trim() || undefined,
+          video_character_tag: videoCharacterTag.trim() || undefined,
         }),
       });
 
@@ -382,6 +386,16 @@ export default function EditCharacterSheetPage() {
                 helperText="キャラクターの外見特徴を自由に記述してください（髪色、目の色、服装、アクセサリーなど）"
               />
             </Box>
+
+            <TextField
+              label="動画キャラクタータグ"
+              fullWidth
+              value={videoCharacterTag}
+              onChange={(e) => setVideoCharacterTag(e.target.value)}
+              disabled={saving}
+              placeholder="例: 黒の長髪の子、メガネっ子"
+              helperText="動画生成時にこのキャラクターを識別するための短いタグを入力してください"
+            />
 
             <Box>
               <Typography variant="body2" sx={{ mb: 1 }}>
