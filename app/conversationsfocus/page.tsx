@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -46,6 +47,8 @@ interface Character {
 }
 
 export default function ConversationsFocusPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithCount | null>(null);
   const [messages, setMessages] = useState<ConversationMessageWithCharacter[]>([]);
@@ -89,6 +92,17 @@ export default function ConversationsFocusPage() {
     loadStoryTree();
     loadAllCharacters();
   }, []);
+
+  useEffect(() => {
+    const conversationIdParam = searchParams.get('conversationId');
+    if (!conversationIdParam) return;
+
+    const conversationId = Number(conversationIdParam);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return;
+
+    if (selectedConversation?.id === conversationId) return;
+    loadConversation(conversationId);
+  }, [searchParams, selectedConversation?.id]);
 
   const loadStoryTree = async () => {
     try {
@@ -148,6 +162,7 @@ export default function ConversationsFocusPage() {
   };
 
   const handleSelectConversation = (conversationId: number) => {
+    router.replace(`/conversationsfocus?conversationId=${conversationId}`);
     loadConversation(conversationId);
   };
 
@@ -164,6 +179,7 @@ export default function ConversationsFocusPage() {
         if (selectedConversation?.id === conversationId) {
           setSelectedConversation(null);
           setMessages([]);
+          router.replace('/conversationsfocus');
         }
       } else {
         alert(`削除に失敗しました: ${result.error}`);
@@ -359,6 +375,7 @@ export default function ConversationsFocusPage() {
   };
 
   const handleConversationGenerated = async (conversationId: number) => {
+    router.replace(`/conversationsfocus?conversationId=${conversationId}`);
     await loadStoryTree();
     await loadConversation(conversationId);
   };
@@ -564,6 +581,7 @@ export default function ConversationsFocusPage() {
       if (selectedConversation && conversationIds.includes(selectedConversation.id)) {
         setSelectedConversation(null);
         setMessages([]);
+        router.replace('/conversationsfocus');
       }
     } catch (error) {
       console.error('Failed to bulk delete conversations:', error);
