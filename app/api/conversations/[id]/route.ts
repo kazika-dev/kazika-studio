@@ -102,6 +102,7 @@ export async function GET(
           story_scene_id: conversation.story_scene_id,
           title: conversation.title,
           description: conversation.description,
+          draft: conversation.draft || null,
           location: conversation.location || null,
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
@@ -223,7 +224,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, description, location, metadata, draftParams } = body;
+    const { title, description, location, draft, metadata, draftParams } = body;
 
     // Verify ownership
     const { data: conversation, error: convError } = await supabase
@@ -264,6 +265,7 @@ export async function PATCH(
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (location !== undefined) updates.location = location;
+    if (draft !== undefined) updates.draft = draft;
     if (metadata !== undefined) updates.metadata = metadata;
     // Handle draftParams update - merge into existing metadata
     // draftParams.location がある場合は conversations.location カラムにも保存

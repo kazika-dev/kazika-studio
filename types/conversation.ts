@@ -29,6 +29,7 @@ export interface Conversation {
   story_scene_id: number | null;
   title: string;
   description: string | null;
+  draft?: string | null;
   location: string | null; // 会話の舞台となる場所
   created_at: string;
   updated_at: string;
@@ -410,4 +411,3 @@ export interface ConversationMetadata {
   generated_at?: string;
   [key: string]: any;
 }
-
