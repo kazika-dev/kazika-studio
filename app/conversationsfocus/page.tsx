@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -15,6 +15,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import SettingsIcon from '@mui/icons-material/Settings';
 import QueueIcon from '@mui/icons-material/Queue';
+import EditNoteIcon from '@mui/icons-material/EditNote';
 import ConversationViewerSimple from '@/components/studio/conversation/ConversationViewerSimple';
 import CreatePromptQueueFromConversationDialog from '@/components/studio/conversation/CreatePromptQueueFromConversationDialog';
 import StoryTreeView from '@/components/studio/conversation/StoryTreeView';
@@ -46,7 +47,7 @@ interface Character {
   image_url?: string;
 }
 
-export default function ConversationsFocusPage() {
+function ConversationsFocusContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
@@ -611,6 +612,13 @@ export default function ConversationsFocusPage() {
               ストーリーごとにシーンと会話を管理
             </Typography>
           </Box>
+          <Button
+            variant="outlined"
+            startIcon={<EditNoteIcon />}
+            onClick={() => router.push('/conversationdrafts')}
+          >
+            下書き管理
+          </Button>
         </Box>
         <Divider />
       </Box>
@@ -679,6 +687,13 @@ export default function ConversationsFocusPage() {
                         onClick={() => setSettingsDialogOpen(true)}
                       >
                         設定
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<EditNoteIcon />}
+                        onClick={() => router.push(`/conversationdrafts/${selectedConversation.id}`)}
+                      >
+                        下書き編集
                       </Button>
                       <Button
                         variant="outlined"
@@ -815,5 +830,23 @@ export default function ConversationsFocusPage() {
       )}
 
     </Box>
+  );
+}
+
+function ConversationsFocusFallback() {
+  return (
+    <Box sx={{ maxWidth: 1280, margin: '0 auto', paddingY: 4, paddingX: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
+    </Box>
+  );
+}
+
+export default function ConversationsFocusPage() {
+  return (
+    <Suspense fallback={<ConversationsFocusFallback />}>
+      <ConversationsFocusContent />
+    </Suspense>
   );
 }
