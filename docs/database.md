@@ -2,20 +2,28 @@
 
 ## データベース接続方法
 
+アプリケーションの直Postgres接続はNeon/Postgresに対応しています。認証まわりは引き続きSupabase Authの環境変数を使用します。
+
 ### 環境変数の設定
 
 `.env.local`ファイルに以下の環境変数を設定してください：
 
 ```bash
-# Supabase Database Configuration
-SUPABASE_DB_HOST=your-project.supabase.co
-SUPABASE_DB_PORT=5432
-SUPABASE_DB_NAME=postgres
-SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=your-password
+# Neon/Postgres Database Configuration
+# Neonでは pooled connection string を推奨
+DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
 
-# または直接接続文字列を指定
-DATABASE_URL=postgresql://postgres:password@host:5432/postgres
+# DATABASE_URL未設定時の任意エイリアス
+NEON_DB=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
+NEON_DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
+
+# または分割指定
+DB_HOST=ep-xxx-pooler.region.aws.neon.tech
+DB_PORT=5432
+DB_NAME=neondb
+DB_USER=your_neon_user
+DB_PASSWORD=your_neon_password
+DB_SSL=true
 ```
 
 ### コードからの接続
@@ -31,7 +39,7 @@ const result = await query('SELECT * FROM kazikastudio.workflows WHERE id = $1',
 
 ### 接続設定の詳細
 
-- **SSL**: 開発環境では`rejectUnauthorized: false`を使用
+- **SSL**: デフォルトで有効。ローカルDBなどSSL不要時は`DB_SSL=false`を指定
 - **接続プール**: 最大20接続
 - **アイドルタイムアウト**: 30秒
 - **接続タイムアウト**: 10秒

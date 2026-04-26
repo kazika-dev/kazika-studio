@@ -48,9 +48,15 @@ npm install
 
 ```env
 # Supabase Configuration
+# 認証は引き続きSupabase Authを使用
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Database (Neon/Postgres)
+DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
+# DATABASE_URL未設定時はNEON_DBも使用できます
+NEON_DB=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
 
 # Google Gemini API Key (オプション)
 GEMINI_API_KEY=your_api_key

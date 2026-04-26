@@ -1,14 +1,10 @@
 const { Client } = require('pg');
+const { getDatabaseConnectionConfig } = require('./db-config');
 require('dotenv').config({ path: '.env.local' });
 
 async function fixPolicies() {
   const client = new Client({
-    host: process.env.SUPABASE_DB_HOST,
-    port: parseInt(process.env.SUPABASE_DB_PORT || '5432'),
-    database: process.env.SUPABASE_DB_NAME,
-    user: process.env.SUPABASE_DB_USER,
-    password: process.env.SUPABASE_DB_PASSWORD,
-    ssl: { rejectUnauthorized: false }
+    ...getDatabaseConnectionConfig(),
   });
 
   try {

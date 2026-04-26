@@ -5,17 +5,12 @@
 
 const { Pool } = require('pg');
 const path = require('path');
+const { getDatabaseConnectionConfig } = require('./db-config');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
 
 async function verifyMigration() {
-  const connectionString = process.env.DATABASE_URL ||
-    `postgresql://${process.env.SUPABASE_DB_USER}:${process.env.SUPABASE_DB_PASSWORD}@${process.env.SUPABASE_DB_HOST}:${process.env.SUPABASE_DB_PORT}/${process.env.SUPABASE_DB_NAME}`;
-
   const pool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    ...getDatabaseConnectionConfig(),
   });
 
   try {

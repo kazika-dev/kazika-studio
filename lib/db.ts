@@ -1,18 +1,12 @@
 import { Pool } from 'pg';
+import { getDatabasePoolConfig } from './db-config';
 
 let pool: Pool | null = null;
 
 export function getPool() {
   if (!pool) {
-    // Transaction mode pooler用の接続文字列
-    const connectionString = process.env.DATABASE_URL ||
-      `postgresql://${process.env.SUPABASE_DB_USER}:${process.env.SUPABASE_DB_PASSWORD}@${process.env.SUPABASE_DB_HOST}:${process.env.SUPABASE_DB_PORT}/${process.env.SUPABASE_DB_NAME}`;
-
     pool = new Pool({
-      connectionString,
-      ssl: {
-        rejectUnauthorized: false, // 開発環境用：SSL証明書の検証を無効化
-      },
+      ...getDatabasePoolConfig(),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,

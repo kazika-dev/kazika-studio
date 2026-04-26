@@ -7,20 +7,14 @@ import { Pool } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import { getDatabasePoolConfig } from '../lib/db-config';
 
 // .env.localを読み込む
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') });
 
 async function runMigration(sqlFilePath: string) {
-  // データベース接続設定
-  const connectionString = process.env.DATABASE_URL ||
-    `postgresql://${process.env.SUPABASE_DB_USER}:${process.env.SUPABASE_DB_PASSWORD}@${process.env.SUPABASE_DB_HOST}:${process.env.SUPABASE_DB_PORT}/${process.env.SUPABASE_DB_NAME}`;
-
   const pool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    ...getDatabasePoolConfig(),
   });
 
   try {
