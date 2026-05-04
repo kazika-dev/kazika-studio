@@ -95,6 +95,7 @@ export default function SceneMasterManager() {
   const [submitting, setSubmitting] = useState(false);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
+  const [imagePreviewScene, setImagePreviewScene] = useState<SceneWithUrl | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -415,22 +416,39 @@ export default function SceneMasterManager() {
   const renderSceneImage = (scene: SceneWithUrl, height: number | string = 220) => (
     scene.signed_url ? (
       <Box
-        component="img"
+        component="button"
+        type="button"
+        onClick={() => setImagePreviewScene(scene)}
+        aria-label={`${scene.name}の画像を拡大表示`}
+        sx={{
+          width: '100%',
+          height,
+          border: 0,
+          p: 0,
+          m: 0,
+          bgcolor: 'grey.100',
+          borderRadius: 2,
+          cursor: 'zoom-in',
+          overflow: 'hidden',
+          display: 'block',
+        }}
+      >
+        <Box
+          component="img"
         src={scene.signed_url}
         alt={scene.name}
         sx={{
           width: '100%',
-          height,
+          height: '100%',
           objectFit: 'contain',
-          borderRadius: 2,
-          bgcolor: 'grey.100',
           p: 0.5,
           display: 'block',
         }}
         onError={(e) => {
           (e.target as HTMLImageElement).style.display = 'none';
         }}
-      />
+        />
+      </Box>
     ) : (
       <Box
         sx={{
@@ -685,6 +703,58 @@ export default function SceneMasterManager() {
           </TableContainer>
         </>
       )}
+
+      {/* 画像拡大プレビュー */}
+      <Dialog
+        open={Boolean(imagePreviewScene)}
+        onClose={() => setImagePreviewScene(null)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            m: { xs: 1, sm: 3 },
+            width: { xs: 'calc(100% - 16px)', sm: '100%' },
+            maxHeight: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 64px)' },
+          },
+        }}
+      >
+        <DialogTitle sx={{ pr: 7 }}>
+          <Typography variant="subtitle1" component="div" noWrap>
+            {imagePreviewScene?.name}
+          </Typography>
+          {imagePreviewScene && (
+            <Typography variant="caption" color="text.secondary" component="div" noWrap>
+              画像ID: {imagePreviewScene.image_url || '-'}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'grey.950' }}>
+          {imagePreviewScene?.signed_url && (
+            <Box
+              component="img"
+              src={imagePreviewScene.signed_url}
+              alt={imagePreviewScene.name}
+              sx={{
+                width: '100%',
+                maxHeight: { xs: '72vh', sm: '78vh' },
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          {imagePreviewScene && (
+            <Button
+              startIcon={<ContentCopyIcon />}
+              onClick={() => copyToClipboard('画像ID', imagePreviewScene.image_url)}
+            >
+              画像IDコピー
+            </Button>
+          )}
+          <Button onClick={() => setImagePreviewScene(null)}>閉じる</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 作成ダイアログ */}
       <Dialog
