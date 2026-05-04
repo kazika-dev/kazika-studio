@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getStepById, updateStep, getWorkflowById } from '@/lib/db';
 import { executeNode } from '@/lib/workflow/nodeExecutor';
 
@@ -16,22 +15,10 @@ interface Context {
  */
 export async function POST(request: NextRequest, context: Context) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
+    const db = await createKazikaClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

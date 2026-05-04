@@ -3,6 +3,7 @@ import { createKazikaClient } from '@/lib/kazika-db-client';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
+import { createClient } from '@/lib/supabase/server';
 export async function POST(request: NextRequest) {
   try {
     const db = await createKazikaClient();

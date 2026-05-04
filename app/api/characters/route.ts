@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 
+import { createClient } from '@/lib/supabase/server';
 /**
  * GET /api/characters
  * Get all character sheets for the authenticated user

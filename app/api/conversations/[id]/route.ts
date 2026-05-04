@@ -24,7 +24,7 @@ export async function GET(
         { status: 401 }
       );
     }
-    console.log('[GET /api/conversations/:id] User authenticated:', user.id, 'method:', authMethod);
+    console.log('[GET /api/conversations/:id] User authenticated:', user.id);
 
     // Fetch conversation with studio information
     const { data: conversation, error: convError } = await db
@@ -75,36 +75,14 @@ export async function GET(
       );
     }
 
-    // Convert storage paths to API proxy URLs for character images
-    const messagesWithApiUrls = (messages || []).map((msg: { character?: { id: number; name: string; image_url?: string } }) => {
-      if (msg.character?.image_url) {
-        let imageUrl = msg.character.image_url;
-        // Strip any existing api/storage prefix (with or without leading /)
-        if (imageUrl.startsWith('/api/storage/')) {
-          imageUrl = imageUrl.replace('/api/storage/', '');
-        } else if (imageUrl.startsWith('api/storage/')) {
-          imageUrl = imageUrl.replace('api/storage/', '');
-        }
-        // Only add prefix if it's not already an HTTP URL
-        if (!imageUrl.startsWith('http')) {
-          return { ...msg, character: { ...msg.character, image_url: `/api/storage/${imageUrl}` } };
-        }
-        return { ...msg, character: { ...msg.character, image_url: imageUrl } };
-      }
-      return msg;
-    });
-
     return NextResponse.json({
       success: true,
       data: {
         conversation: {
           id: conversation.id,
           studio_id: conversation.studio_id,
-          story_scene_id: conversation.story_scene_id,
           title: conversation.title,
           description: conversation.description,
-          draft: conversation.draft || null,
-          location: conversation.location || null,
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
           metadata: conversation.metadata,
@@ -115,7 +93,7 @@ export async function GET(
             }
           })
         },
-        messages: messagesWithApiUrls
+        messages: messages || []
       }
     } as GetConversationResponse);
 
@@ -227,7 +205,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, description, location, draft, metadata, draftParams } = body;
+    const { title, description, metadata } = body;
 
     // Verify ownership
     const { data: conversation, error: convError } = await db
@@ -258,30 +236,10 @@ export async function PATCH(
     }
 
     // Update conversation
-    console.log('[PATCH /api/conversations] Conversation data:', {
-      id: conversation.id,
-      story_scene_id: conversation.story_scene_id,
-      user_id: conversation.user_id
-    });
-
     const updates: any = {};
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
-    if (location !== undefined) updates.location = location;
-    if (draft !== undefined) updates.draft = draft;
     if (metadata !== undefined) updates.metadata = metadata;
-    // Handle draftParams update - merge into existing metadata
-    // draftParams.location がある場合は conversations.location カラムにも保存
-    if (draftParams !== undefined) {
-      updates.metadata = {
-        ...(conversation.metadata || {}),
-        draft_params: draftParams
-      };
-      // draftParams.location を conversations.location カラムにも反映
-      if (draftParams.location !== undefined) {
-        updates.location = draftParams.location;
-      }
-    }
 
     const { data: updated, error: updateError} = await db
       .from('conversations')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createClient } from '@/lib/supabase/server';
 import {
   buildConversationPrompt,
   parseAIResponse,

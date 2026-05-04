@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 
+import { createClient } from '@/lib/supabase/server';
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

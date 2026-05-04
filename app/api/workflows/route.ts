@@ -4,6 +4,7 @@ import { Node } from 'reactflow';
 import { generateFormConfig as generateFormConfigFromNodes } from '@/lib/workflow/formConfigGenerator';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
+import { createClient } from '@/lib/supabase/server';
 // ワークフロー一覧取得
 export async function GET(request: NextRequest) {
   try {

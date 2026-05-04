@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
-import { query } from '@/lib/db';
 
 // アウトプット一覧取得
 export async function GET(request: NextRequest) {
@@ -21,20 +19,9 @@ export async function GET(request: NextRequest) {
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    // output_type または type パラメータをサポート
-    const outputType = searchParams.get('output_type') || searchParams.get('type');
+    const outputType = searchParams.get('output_type');
     const workflowId = searchParams.get('workflow_id');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const page = parseInt(searchParams.get('page') || '1');
-    // offset パラメータが指定されている場合はそれを使用、そうでなければ page から計算
-    const offsetParam = searchParams.get('offset');
-    const offset = offsetParam !== null ? parseInt(offsetParam) : (page - 1) * limit;
-
-    // source_url フィルタリング
-    const sourceUrl = searchParams.get('source_url');
-    const sourceUrlLike = searchParams.get('source_url_like');
-
-    console.log('[GET /api/outputs] Query params:', { id, outputType, workflowId, sourceUrl, sourceUrlLike, limit, page, offset, userId: user.id });
+    const limit = searchParams.get('limit') || '50';
 
     // 特定のIDで取得する場合
     if (id) {
@@ -44,22 +31,19 @@ export async function GET(request: NextRequest) {
         .eq('id', parseInt(id))
         .single();
 
-      if (result.rows.length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'Output not found' },
-          { status: 404 }
-        );
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return NextResponse.json(
+            { success: false, error: 'Output not found' },
+            { status: 404 }
+          );
+        }
+        throw error;
       }
 
       return NextResponse.json({
         success: true,
-        outputs: result.rows, // 配列形式で返す（フロントエンドの互換性のため）
-        pagination: {
-          page: 1,
-          limit: 1,
-          total: 1,
-          totalPages: 1,
-        },
+        outputs: [data], // 配列形式で返す（フロントエンドの互換性のため）
       });
     }
 
@@ -71,79 +55,22 @@ export async function GET(request: NextRequest) {
       .limit(parseInt(limit));
 
     if (outputType) {
-      conditions.push(`output_type = $${paramIndex}`);
-      params.push(outputType);
-      paramIndex++;
+      query = query.eq('output_type', outputType);
     }
 
     if (workflowId) {
-      conditions.push(`workflow_id = $${paramIndex}`);
-      params.push(parseInt(workflowId));
-      paramIndex++;
+      query = query.eq('workflow_id', parseInt(workflowId));
     }
 
-    // source_url フィルタリング（完全一致）
-    if (sourceUrl) {
-      conditions.push(`source_url = $${paramIndex}`);
-      params.push(sourceUrl);
-      paramIndex++;
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
     }
-
-    // source_url フィルタリング（部分一致）
-    if (sourceUrlLike) {
-      conditions.push(`source_url ILIKE $${paramIndex}`);
-      params.push(`%${sourceUrlLike}%`);
-      paramIndex++;
-    }
-
-    // お気に入りフィルタリング
-    const favoriteOnly = searchParams.get('favorite_only');
-    if (favoriteOnly === 'true') {
-      conditions.push(`favorite = true`);
-    }
-
-    // 分割画像を除外するフィルタ
-    const excludeSplit = searchParams.get('exclude_split');
-    if (excludeSplit === 'true') {
-      conditions.push(`(is_split_image IS NULL OR is_split_image = false)`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    // 総件数を取得
-    const countResult = await query(
-      `SELECT COUNT(*) as count FROM kazikastudio.workflow_outputs WHERE ${whereClause}`,
-      params
-    );
-
-    const countRow = countResult.rows[0];
-    console.log('[GET /api/outputs] Count result:', countRow);
-    const total = Number(countRow?.count) || 0;
-    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
-    console.log('[GET /api/outputs] Calculated:', { total, totalPages, limit });
-
-    // データを取得（ページネーション適用）
-    const dataResult = await query(
-      `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, favorite, created_at, updated_at
-       FROM kazikastudio.workflow_outputs
-       WHERE ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      [...params, limit, offset]
-    );
 
     return NextResponse.json({
       success: true,
-      outputs: dataResult.rows,
-      total,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
+      outputs: data,
     });
   } catch (error: any) {
     console.error('Output fetch error:', error);
@@ -173,9 +100,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { workflowId, outputType, content, prompt, metadata } = body;
-
-    // metadata から source_url を抽出（専用カラムに保存）
-    const sourceUrl = (metadata?.source_url as string) || null;
 
     if (!outputType || !content) {
       return NextResponse.json(
@@ -235,24 +159,14 @@ export async function POST(request: NextRequest) {
       contentText = content;
     }
 
-    // DBに保存（直接クエリを使用）
-    const result = await query(
-      `INSERT INTO kazikastudio.workflow_outputs
-       (user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, source_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, source_url, created_at, updated_at`,
-      [
-        user.id,
-        workflowId || null,
-        outputType,
-        contentUrl,
-        contentText,
-        prompt || null,
-        JSON.stringify(metadata || {}),
-        false,
-        sourceUrl
-      ]
-    );
+    // DBに保存
+    const insertData: any = {
+      user_id: user.id,
+      output_type: outputType,
+      prompt: prompt || null,
+      metadata: metadata || {},
+      favorite: false,
+    };
 
     if (workflowId) {
       insertData.workflow_id = workflowId;
@@ -281,12 +195,12 @@ export async function POST(request: NextRequest) {
           console.error('Failed to cleanup uploaded file:', deleteError);
         }
       }
-      throw new Error('Failed to insert output');
+      throw error;
     }
 
     return NextResponse.json({
       success: true,
-      output: result.rows[0],
+      output: data,
     });
   } catch (error: any) {
     console.error('Output save error:', error);
@@ -328,14 +242,15 @@ export async function DELETE(request: NextRequest) {
       .eq('id', parseInt(id))
       .single();
 
-    if (fetchResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Output not found' },
-        { status: 404 }
-      );
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json(
+          { error: 'Output not found' },
+          { status: 404 }
+        );
+      }
+      throw fetchError;
     }
-
-    const output = fetchResult.rows[0];
 
     // DBから削除
     const { error: deleteError } = await db

@@ -32,8 +32,6 @@ export async function POST(
     }
     console.log('[POST /api/conversations/:id/create-studio] User authenticated:', user.id);
 
-    const supabase = await createClient();
-
     // Fetch conversation
     const { data: conversation, error: convError } = await db
       .from('conversations')
@@ -90,30 +88,6 @@ export async function POST(
         { success: false, error: 'No messages found in conversation' },
         { status: 400 }
       );
-    }
-
-    // Fetch scene characters for all messages
-    const { data: sceneCharacters, error: scError } = await supabase
-      .from('conversation_message_characters')
-      .select('conversation_message_id, character_sheet_id, display_order')
-      .in('conversation_message_id', messages.map(m => m.id))
-      .order('conversation_message_id')
-      .order('display_order');
-
-    if (scError) {
-      console.error('Failed to fetch scene characters:', scError);
-      // Continue without scene characters (fallback to speaker character only)
-    }
-
-    // Build a map of messageId -> characterSheetIds
-    const messageCharactersMap = new Map<number, number[]>();
-    if (sceneCharacters) {
-      sceneCharacters.forEach(sc => {
-        if (!messageCharactersMap.has(sc.conversation_message_id)) {
-          messageCharactersMap.set(sc.conversation_message_id, []);
-        }
-        messageCharactersMap.get(sc.conversation_message_id)!.push(sc.character_sheet_id);
-      });
     }
 
     console.log('[POST /api/conversations/:id/create-studio] Found', messages.length, 'messages');
@@ -209,20 +183,15 @@ export async function POST(
           ? JSON.parse(workflow.nodes)
           : workflow.nodes;
 
-        // Categorize nodes by type
-        const nodesByType = new Map<string, any[]>();
-        workflowNodes.forEach((node: any) => {
-          const nodeType = node.data?.type || node.type;
-          if (!nodeType) return;
+        // Find ElevenLabs and Nanobana nodes in the workflow
+        const elevenLabsNodes = workflowNodes.filter(
+          (node: any) => node.data?.type === 'elevenlabs' || node.type === 'elevenlabs'
+        );
+        const nanobanaNodes = workflowNodes.filter(
+          (node: any) => node.data?.type === 'nanobana' || node.type === 'nanobana'
+        );
 
-          if (!nodesByType.has(nodeType)) {
-            nodesByType.set(nodeType, []);
-          }
-          nodesByType.get(nodeType)!.push(node);
-        });
-
-        console.log('[POST /api/conversations/:id/create-studio] Found nodes by type:',
-          Array.from(nodesByType.entries()).map(([type, nodes]) => `${type}:${nodes.length}`).join(', '));
+        console.log('[POST /api/conversations/:id/create-studio] Found', elevenLabsNodes.length, 'ElevenLabs nodes,', nanobanaNodes.length, 'Nanobana nodes');
 
         // Create workflow steps for each board
         const workflowStepsToInsert = boards.map((board, idx) => {
@@ -242,84 +211,45 @@ export async function POST(
           // デフォルトの音声ID（キャラクターに設定されていない場合）
           const voiceId = characterVoiceId || 'JBFqnCBsd6RMkjVDRZzb';
 
-          // Build workflowInputs in the same format as normal workflow execution
-          const workflowInputs: Record<string, any> = {};
+          // Build input_config with node-specific overrides
+          const nodeOverrides: any = {};
 
-          // Get scene characters from the map (characters registered in conversation_message_characters)
-          const sceneCharacterIds = messageCharactersMap.get(message.id) || [];
+          // For each ElevenLabs node, set text, voiceId, and modelId
+          elevenLabsNodes.forEach((node: any) => {
+            nodeOverrides[node.id] = {
+              text: message.message_text,
+              voiceId: voiceId,
+              modelId: node.data?.config?.modelId || 'eleven_turbo_v2_5', // デフォルトはTurbo v2.5
+            };
+          });
 
-          // Process each node type dynamically
-          nodesByType.forEach((nodes, nodeType) => {
-            try {
-              const nodeConfig = getNodeTypeConfig(nodeType);
+          // For each Nanobana node, set prompt and character sheet
+          nanobanaNodes.forEach((node: any) => {
+            // 英語プロンプトを優先、なければ日本語、それもなければシーン説明
+            const prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
 
-              nodes.forEach((node: any) => {
-                const nodeId = node.id;
-
-                // Apply node-specific field values based on node type configuration
-                nodeConfig.fields.forEach((field) => {
-                  const fieldKey = `${nodeType}_${field.name}_${nodeId}`;
-
-                  // Handle special cases for specific field types
-                  if (field.name === 'text' && nodeType === 'elevenlabs') {
-                    // ElevenLabs text field: use message text
-                    workflowInputs[fieldKey] = message.message_text;
-                  } else if (field.name === 'voiceId' && nodeType === 'elevenlabs') {
-                    // ElevenLabs voiceId field: use character voice ID
-                    workflowInputs[fieldKey] = voiceId;
-                  } else if (field.name === 'modelId' && nodeType === 'elevenlabs') {
-                    // ElevenLabs modelId field: use node config or default
-                    workflowInputs[fieldKey] = node.data?.config?.modelId || 'eleven_turbo_v2_5';
-                  } else if (field.name === 'prompt') {
-                    // Prompt field: use scene prompt (priority varies by node type)
-                    let prompt = '';
-                    if (nodeType === 'nanobana') {
-                      // Nanobana: prefer English prompt for image generation
-                      prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
-                    } else if (nodeType === 'gemini') {
-                      // Gemini: prefer Japanese prompt for image recognition
-                      prompt = message.scene_prompt_ja || message.scene_prompt_en || message.metadata?.scene || '';
-                    } else {
-                      // Other nodes: use English then Japanese
-                      prompt = message.scene_prompt_en || message.scene_prompt_ja || message.metadata?.scene || '';
-                    }
-
-                    if (!prompt) {
-                      console.warn(`[Board ${idx}] Warning: No prompt available for ${nodeType} node`);
-                    }
-
-                    workflowInputs[fieldKey] = prompt;
-                  } else if (field.name === 'model' && field.type === 'select') {
-                    // Model field: use node config or default from field options
-                    const defaultModel = node.data?.config?.model || field.options?.[0]?.value || '';
-                    workflowInputs[fieldKey] = defaultModel;
-                  } else if (field.type === 'characterSheets' && field.name === 'selectedCharacterSheetIds') {
-                    // Character sheets field: auto-populate from conversation
-                    if (sceneCharacterIds.length > 0) {
-                      // Use scene characters if available (up to maxSelections)
-                      const maxSelections = field.maxSelections || 4;
-                      workflowInputs[fieldKey] = sceneCharacterIds.slice(0, maxSelections).map(String);
-                      console.log(`[Board ${idx}] Using scene characters for ${nodeType}:`, sceneCharacterIds);
-                    } else if (message.character_id) {
-                      // Fallback to speaker character if no scene characters registered
-                      workflowInputs[fieldKey] = [String(message.character_id)];
-                      console.log(`[Board ${idx}] Falling back to speaker character for ${nodeType}:`, message.character_id);
-                    }
-                  }
-                  // Other field types can be added here as needed
-                });
-              });
-            } catch (error) {
-              console.warn(`[Board ${idx}] Warning: Could not get config for node type "${nodeType}":`, error);
-              // Continue processing other node types
+            if (!prompt) {
+              console.warn(`[Board ${idx}] Warning: No prompt available for Nanobana node. scene_prompt_en: ${!!message.scene_prompt_en}, scene_prompt_ja: ${!!message.scene_prompt_ja}, metadata.scene: ${!!message.metadata?.scene}`);
             }
+
+            const nodeConfig: any = {
+              prompt: prompt,
+              aspectRatio: node.data?.config?.aspectRatio || '16:9', // デフォルトは16:9
+            };
+
+            // キャラクターIDがある場合、キャラクターシートIDを設定
+            if (message.character_id) {
+              nodeConfig.selectedCharacterSheetIds = [message.character_id];
+            }
+
+            nodeOverrides[node.id] = nodeConfig;
           });
 
           console.log(`[Board ${idx}] Message: "${message.message_text.substring(0, 50)}..."`);
           console.log(`[Board ${idx}] Character: ${message.speaker_name}, VoiceID: ${voiceId}`);
           console.log(`[Board ${idx}] Scene Prompt (EN): "${(message.scene_prompt_en || '').substring(0, 50)}..."`);
           console.log(`[Board ${idx}] Scene Prompt (JA): "${(message.scene_prompt_ja || '').substring(0, 50)}..."`);
-          console.log(`[Board ${idx}] Workflow inputs:`, JSON.stringify(workflowInputs, null, 2));
+          console.log(`[Board ${idx}] Node overrides:`, JSON.stringify(nodeOverrides, null, 2));
 
           return {
             board_id: board.id,
@@ -327,12 +257,14 @@ export async function POST(
             step_order: workflowIdsArray.indexOf(workflowId), // 複数ワークフローの実行順序
             execution_status: 'pending',
             input_config: {
-              usePrompt: false,
-              workflowInputs: workflowInputs,
-              usePreviousText: false,
-              usePreviousAudio: false,
-              usePreviousImage: false,
-              usePreviousVideo: false
+              // General metadata
+              character_id: message.character_id,
+              character_name: message.speaker_name,
+              has_custom_voice: !!characterVoiceId,
+              scene_prompt_en: message.scene_prompt_en,
+              scene_prompt_ja: message.scene_prompt_ja,
+              // Node-specific overrides
+              nodeOverrides: nodeOverrides,
             }
           };
         });

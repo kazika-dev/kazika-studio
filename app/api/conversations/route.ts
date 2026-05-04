@@ -19,9 +19,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Supabaseクライアントを取得（RLSを適用するため）
-    const supabase = await createClient();
-
     // Get query parameters
     const { searchParams } = new URL(request.url);
     const studioId = searchParams.get('studioId');
@@ -31,7 +28,7 @@ export async function GET(request: NextRequest) {
     // Build query based on whether studioId is provided
     let query = db
       .from('conversations')
-      .select('*, studios(id, name, user_id), story_scenes:story_scene_id(id, title, stories:story_id(id, title))')
+      .select('*, studios(id, name, user_id)')
       .order('created_at', { ascending: false });
 
     if (studioId) {
@@ -124,16 +121,8 @@ export async function GET(request: NextRequest) {
     // Add message counts and scene counts to conversations
     const conversationsWithCounts = (conversations || []).map(conv => ({
       ...conv,
-      message_count: messageCounts[conv.id] || 0,
-      scene_count: sceneCounts[conv.id] || 0,
-      story_scene: conv.story_scenes ? {
-        id: conv.story_scenes.id,
-        title: conv.story_scenes.title,
-        story: conv.story_scenes.stories ? {
-          id: conv.story_scenes.stories.id,
-          title: conv.story_scenes.stories.title
-        } : null
-      } : null
+      messageCount: messageCounts[conv.id] || 0,
+      sceneCount: sceneCounts[conv.id] || 0
     }));
 
     return NextResponse.json({
@@ -146,109 +135,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('List conversations error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * POST /api/conversations
- * Create a new empty conversation
- */
-export async function POST(request: NextRequest) {
-  try {
-    const user = await authenticateRequest(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
-    const { title, description, storySceneId, draftParams } = body as CreateConversationRequest & { draftParams?: ConversationDraftParams };
-
-    if (!title?.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'タイトルは必須です' },
-        { status: 400 }
-      );
-    }
-
-    if (!storySceneId) {
-      return NextResponse.json(
-        { success: false, error: 'シーンIDは必須です' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = await createClient();
-
-    // Verify scene ownership
-    const { data: scene, error: sceneError } = await supabase
-      .from('story_scenes')
-      .select('id, story_id, stories!inner(user_id)')
-      .eq('id', storySceneId)
-      .single();
-
-    if (sceneError || !scene) {
-      return NextResponse.json(
-        { success: false, error: 'シーンが見つかりません' },
-        { status: 404 }
-      );
-    }
-
-    if ((scene.stories as any).user_id !== user.id) {
-      return NextResponse.json(
-        { success: false, error: 'このシーンにアクセスする権限がありません' },
-        { status: 403 }
-      );
-    }
-
-    // Create conversation with optional draft params
-    // location は conversations.location カラムに保存
-    const metadata: Record<string, any> = {};
-    let locationValue: string | null = null;
-    if (draftParams) {
-      metadata.draft_params = draftParams;
-      // draftParams.location を conversations.location カラムに保存
-      if (draftParams.location) {
-        locationValue = draftParams.location;
-      }
-    }
-
-    const { data: conversation, error: insertError } = await supabase
-      .from('conversations')
-      .insert({
-        title: title.trim(),
-        description: description?.trim() || null,
-        location: locationValue,
-        story_scene_id: storySceneId,
-        user_id: user.id,
-        metadata,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('Failed to create conversation:', insertError);
-      return NextResponse.json(
-        { success: false, error: '会話の作成に失敗しました' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        conversation
-      }
-    } as CreateConversationResponse);
-
-  } catch (error: any) {
-    console.error('Create conversation error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

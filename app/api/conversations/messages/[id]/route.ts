@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import type { UpdateMessageRequest, UpdateMessageResponse } from '@/types/conversation';
 
+import { createClient } from '@/lib/supabase/server';
 /**
  * PATCH /api/conversations/messages/:id
  * Update a specific message
