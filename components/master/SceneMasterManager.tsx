@@ -38,6 +38,7 @@ import {
   Landscape as LandscapeIcon,
   Brush as BrushIcon,
   ContentCopy as ContentCopyIcon,
+  MovieCreation as MovieCreationIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
@@ -605,6 +606,14 @@ export default function SceneMasterManager() {
           <BrushIcon />
         </IconButton>
       )}
+      <IconButton
+        size="small"
+        onClick={() => router.push(`/scenes/${scene.id}/timeline`)}
+        color="primary"
+        title="タイムライン編集"
+      >
+        <MovieCreationIcon />
+      </IconButton>
       <IconButton
         size="small"
         onClick={() => openEditDialog(scene)}
