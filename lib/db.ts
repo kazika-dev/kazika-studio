@@ -2625,19 +2625,32 @@ export async function getPendingPromptQueues(userId: string): Promise<PromptQueu
 // Scene Master (m_scenes)
 // ============================================================================
 
-export interface SceneImage {
+export type SceneAssetType = 'image' | 'video' | 'dialogue' | 'bgm' | 'sfx' | 'audio' | 'file' | 'other';
+export type SceneAssetStatus = 'candidate' | 'selected' | 'rejected' | 'archived';
+
+export interface SceneAsset {
   id: number;
   scene_id: number;
   user_id: string;
-  image_url: string;
   output_id: number | null;
+  asset_type: SceneAssetType;
+  status: SceneAssetStatus;
+  content_url: string;
   title: string | null;
   prompt: string | null;
-  sort_order: number;
+  rank: number;
   is_primary: boolean;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+// Deprecated UI/API compatibility: existing scene image components still consume this shape.
+export interface SceneImage extends Omit<SceneAsset, 'asset_type' | 'content_url' | 'rank' | 'status'> {
+  image_url: string;
+  sort_order: number;
+  asset_type?: 'image';
+  status?: SceneAssetStatus;
 }
 
 export interface Scene {
@@ -2654,42 +2667,62 @@ export interface Scene {
   prompt_hint_en: string | null;
   tags: string[];
   metadata: Record<string, any>;
+  scene_assets?: SceneAsset[];
   scene_images?: SceneImage[];
   created_at: string;
   updated_at: string;
 }
 
+const sceneAssetToImage = (asset: SceneAsset): SceneImage => ({
+  id: asset.id,
+  scene_id: asset.scene_id,
+  user_id: asset.user_id,
+  image_url: asset.content_url,
+  output_id: asset.output_id,
+  title: asset.title,
+  prompt: asset.prompt,
+  sort_order: asset.rank,
+  is_primary: asset.is_primary,
+  metadata: asset.metadata,
+  created_at: asset.created_at,
+  updated_at: asset.updated_at,
+  asset_type: 'image',
+  status: asset.status,
+});
+
 /**
  * ユーザーのシーンマスタ一覧を取得（共有シーン含む）
  */
-async function attachSceneImages(scenes: Scene[]): Promise<Scene[]> {
+async function attachSceneAssets(scenes: Scene[]): Promise<Scene[]> {
   if (scenes.length === 0) {
     return scenes;
   }
 
-  const images = await getSceneImagesBySceneIds(scenes.map((scene) => scene.id));
-  const imagesBySceneId = new Map<number, SceneImage[]>();
+  const assets = await getSceneAssetsBySceneIds(scenes.map((scene) => scene.id));
+  const assetsBySceneId = new Map<number, SceneAsset[]>();
 
-  for (const image of images) {
-    const current = imagesBySceneId.get(image.scene_id) || [];
-    current.push(image);
-    imagesBySceneId.set(image.scene_id, current);
+  for (const asset of assets) {
+    const current = assetsBySceneId.get(asset.scene_id) || [];
+    current.push(asset);
+    assetsBySceneId.set(asset.scene_id, current);
   }
 
   return scenes.map((scene) => {
-    const sceneImages = imagesBySceneId.get(scene.id) || [];
+    const sceneAssets = assetsBySceneId.get(scene.id) || [];
 
     // 新テーブルが未投入/未バックフィルでも、既存の代表画像は必ず表示する。
-    if (sceneImages.length === 0 && scene.image_url && scene.user_id) {
-      sceneImages.push({
+    if (!sceneAssets.some((asset) => asset.asset_type === 'image') && scene.image_url && scene.user_id) {
+      sceneAssets.push({
         id: 0,
         scene_id: scene.id,
         user_id: scene.user_id,
-        image_url: scene.image_url,
         output_id: null,
+        asset_type: 'image',
+        status: 'selected',
+        content_url: scene.image_url,
         title: scene.name,
         prompt: null,
-        sort_order: 0,
+        rank: 0,
         is_primary: true,
         metadata: { source: 'm_scenes.image_url_fallback' },
         created_at: scene.created_at,
@@ -2697,26 +2730,90 @@ async function attachSceneImages(scenes: Scene[]): Promise<Scene[]> {
       });
     }
 
+    const sceneImages = sceneAssets
+      .filter((asset) => asset.asset_type === 'image')
+      .map(sceneAssetToImage);
+
     return {
       ...scene,
+      scene_assets: sceneAssets,
       scene_images: sceneImages,
     };
   });
 }
 
-export async function getSceneImagesBySceneIds(sceneIds: number[]): Promise<SceneImage[]> {
+export async function getSceneAssetsBySceneIds(sceneIds: number[], assetType?: SceneAssetType): Promise<SceneAsset[]> {
   if (sceneIds.length === 0) {
     return [];
   }
 
+  const params: any[] = [sceneIds];
+  let typeFilter = '';
+
+  if (assetType) {
+    params.push(assetType);
+    typeFilter = ` AND asset_type = $${params.length}`;
+  }
+
   const result = await query(
-    `SELECT * FROM kazikastudio.m_scene_images
-     WHERE scene_id = ANY($1::bigint[])
-     ORDER BY scene_id ASC, sort_order ASC, id ASC`,
-    [sceneIds]
+    `SELECT * FROM kazikastudio.scene_assets
+     WHERE scene_id = ANY($1::bigint[])${typeFilter}
+     ORDER BY scene_id ASC, asset_type ASC, rank ASC, id ASC`,
+    params
   );
 
   return result.rows;
+}
+
+export async function createSceneAsset(data: {
+  scene_id: number;
+  user_id: string;
+  asset_type: SceneAssetType;
+  content_url: string;
+  output_id?: number | null;
+  title?: string | null;
+  prompt?: string | null;
+  rank?: number;
+  status?: SceneAssetStatus;
+  is_primary?: boolean;
+  metadata?: Record<string, any>;
+}): Promise<SceneAsset> {
+  const result = await query(
+    `INSERT INTO kazikastudio.scene_assets
+      (scene_id, user_id, asset_type, content_url, output_id, title, prompt, rank, status, is_primary, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7,
+       COALESCE($8, (SELECT COALESCE(MAX(rank) + 1, 0) FROM kazikastudio.scene_assets WHERE scene_id = $1 AND asset_type = $3)),
+       $9, $10, $11)
+     ON CONFLICT (scene_id, asset_type, content_url) DO UPDATE SET
+       output_id = COALESCE(EXCLUDED.output_id, kazikastudio.scene_assets.output_id),
+       title = COALESCE(EXCLUDED.title, kazikastudio.scene_assets.title),
+       prompt = COALESCE(EXCLUDED.prompt, kazikastudio.scene_assets.prompt),
+       status = EXCLUDED.status,
+       is_primary = kazikastudio.scene_assets.is_primary OR EXCLUDED.is_primary,
+       metadata = kazikastudio.scene_assets.metadata || EXCLUDED.metadata,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      data.scene_id,
+      data.user_id,
+      data.asset_type,
+      data.content_url,
+      data.output_id || null,
+      data.title || null,
+      data.prompt || null,
+      data.rank ?? null,
+      data.status || 'candidate',
+      data.is_primary || false,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+// Deprecated compatibility wrappers. Prefer scene_assets for new features.
+export async function getSceneImagesBySceneIds(sceneIds: number[]): Promise<SceneImage[]> {
+  const assets = await getSceneAssetsBySceneIds(sceneIds, 'image');
+  return assets.map(sceneAssetToImage);
 }
 
 export async function createSceneImage(data: {
@@ -2730,32 +2827,21 @@ export async function createSceneImage(data: {
   is_primary?: boolean;
   metadata?: Record<string, any>;
 }): Promise<SceneImage> {
-  const result = await query(
-    `INSERT INTO kazikastudio.m_scene_images
-      (scene_id, user_id, image_url, output_id, title, prompt, sort_order, is_primary, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6,
-       COALESCE($7, (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM kazikastudio.m_scene_images WHERE scene_id = $1)),
-       $8, $9)
-     ON CONFLICT (scene_id, image_url) DO UPDATE SET
-       output_id = COALESCE(EXCLUDED.output_id, kazikastudio.m_scene_images.output_id),
-       title = COALESCE(EXCLUDED.title, kazikastudio.m_scene_images.title),
-       prompt = COALESCE(EXCLUDED.prompt, kazikastudio.m_scene_images.prompt),
-       metadata = kazikastudio.m_scene_images.metadata || EXCLUDED.metadata,
-       updated_at = NOW()
-     RETURNING *`,
-    [
-      data.scene_id,
-      data.user_id,
-      data.image_url,
-      data.output_id || null,
-      data.title || null,
-      data.prompt || null,
-      data.sort_order ?? null,
-      data.is_primary || false,
-      data.metadata || {},
-    ]
-  );
-  return result.rows[0];
+  const asset = await createSceneAsset({
+    scene_id: data.scene_id,
+    user_id: data.user_id,
+    asset_type: 'image',
+    content_url: data.image_url,
+    output_id: data.output_id,
+    title: data.title,
+    prompt: data.prompt,
+    rank: data.sort_order,
+    status: data.is_primary ? 'selected' : 'candidate',
+    is_primary: data.is_primary,
+    metadata: data.metadata,
+  });
+
+  return sceneAssetToImage(asset);
 }
 
 /**
@@ -2768,7 +2854,7 @@ export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> 
      ORDER BY id ASC`,
     [userId]
   );
-  return attachSceneImages(result.rows);
+  return attachSceneAssets(result.rows);
 }
 
 /**
@@ -2779,7 +2865,7 @@ export async function getAllSceneMasters(): Promise<Scene[]> {
     'SELECT * FROM kazikastudio.m_scenes ORDER BY id ASC',
     []
   );
-  return attachSceneImages(result.rows);
+  return attachSceneAssets(result.rows);
 }
 
 /**

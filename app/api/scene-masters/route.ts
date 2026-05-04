@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSceneMastersByUserId, createSceneMaster, createSceneImage } from '@/lib/db';
+import { getSceneMastersByUserId, createSceneMaster, createSceneAsset } from '@/lib/db';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -32,6 +32,10 @@ export async function GET(request: NextRequest) {
     const scenesWithUrls = scenes.map((scene) => ({
       ...scene,
       signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+      scene_assets: (scene.scene_assets || []).map((asset) => ({
+        ...asset,
+        signed_url: `/api/storage/${asset.content_url}`,
+      })),
       scene_images: (scene.scene_images || []).map((image) => ({
         ...image,
         signed_url: `/api/storage/${image.image_url}`,
@@ -146,11 +150,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (scene.image_url) {
-      await createSceneImage({
+      await createSceneAsset({
         scene_id: scene.id,
         user_id: user.id,
-        image_url: scene.image_url,
+        asset_type: 'image',
+        content_url: scene.image_url,
         title: scene.name,
+        status: 'selected',
         is_primary: true,
         metadata: { source: 'scene_master_create' },
       });
@@ -161,6 +167,17 @@ export async function POST(request: NextRequest) {
       scene: {
         ...scene,
         signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+        scene_assets: scene.image_url ? [{
+          id: 0,
+          scene_id: scene.id,
+          user_id: user.id,
+          asset_type: 'image',
+          status: 'selected',
+          content_url: scene.image_url,
+          title: scene.name,
+          is_primary: true,
+          signed_url: `/api/storage/${scene.image_url}`,
+        }] : [],
         scene_images: scene.image_url ? [{
           id: 0,
           scene_id: scene.id,

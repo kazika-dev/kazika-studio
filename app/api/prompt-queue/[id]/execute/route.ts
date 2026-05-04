@@ -6,7 +6,7 @@ import {
   getCharacterSheetById,
   getSceneMasterById,
   getPropById,
-  createSceneImage,
+  createSceneAsset,
   query,
 } from '@/lib/db';
 import { getApiUrl } from '@/lib/utils/apiUrl';
@@ -305,10 +305,11 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
       ));
 
       for (const sceneId of referencedSceneIds) {
-        await createSceneImage({
+        await createSceneAsset({
           scene_id: sceneId,
           user_id: user.id,
-          image_url: output.content_url,
+          asset_type: 'image',
+          content_url: output.content_url,
           output_id: output.id,
           title: queue.name || `Prompt Queue #${queueId}`,
           prompt: finalPrompt,

@@ -5,7 +5,7 @@ import {
   deleteImageFromStorage,
 } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
-import { createSceneImage, getSceneImagesBySceneIds, query } from '@/lib/db';
+import { createSceneAsset, getSceneAssetsBySceneIds, query } from '@/lib/db';
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -51,17 +51,25 @@ export async function GET(
       );
     }
 
-    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+    const sceneAssets = await getSceneAssetsBySceneIds([sceneId]);
 
     return NextResponse.json({
       success: true,
       scene: {
         ...scene,
         signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
-        scene_images: sceneImages.map((image) => ({
-          ...image,
-          signed_url: `/api/storage/${image.image_url}`,
+        scene_assets: sceneAssets.map((asset) => ({
+          ...asset,
+          signed_url: `/api/storage/${asset.content_url}`,
         })),
+        scene_images: sceneAssets
+          .filter((asset) => asset.asset_type === 'image')
+          .map((asset) => ({
+            ...asset,
+            image_url: asset.content_url,
+            sort_order: asset.rank,
+            signed_url: `/api/storage/${asset.content_url}`,
+          })),
       },
     });
   } catch (error: unknown) {
@@ -182,7 +190,7 @@ export async function PUT(
         try {
           await deleteImageFromStorage(existingScene.image_url);
           await query(
-            `DELETE FROM kazikastudio.m_scene_images WHERE scene_id = $1 AND image_url = $2`,
+            `DELETE FROM kazikastudio.scene_assets WHERE scene_id = $1 AND asset_type = 'image' AND content_url = $2`,
             [sceneId, existingScene.image_url]
           );
         } catch (error) {
@@ -229,27 +237,37 @@ export async function PUT(
     }
 
     if (updatedScene.image_url) {
-      await createSceneImage({
+      await createSceneAsset({
         scene_id: sceneId,
         user_id: user.id,
-        image_url: updatedScene.image_url,
+        asset_type: 'image',
+        content_url: updatedScene.image_url,
         title: updatedScene.name,
+        status: 'selected',
         is_primary: true,
         metadata: { source: 'scene_master_update' },
       });
     }
 
-    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+    const sceneAssets = await getSceneAssetsBySceneIds([sceneId]);
 
     return NextResponse.json({
       success: true,
       scene: {
         ...updatedScene,
         signed_url: updatedScene.image_url ? `/api/storage/${updatedScene.image_url}` : undefined,
-        scene_images: sceneImages.map((image) => ({
-          ...image,
-          signed_url: `/api/storage/${image.image_url}`,
+        scene_assets: sceneAssets.map((asset) => ({
+          ...asset,
+          signed_url: `/api/storage/${asset.content_url}`,
         })),
+        scene_images: sceneAssets
+          .filter((asset) => asset.asset_type === 'image')
+          .map((asset) => ({
+            ...asset,
+            image_url: asset.content_url,
+            sort_order: asset.rank,
+            signed_url: `/api/storage/${asset.content_url}`,
+          })),
       },
     });
   } catch (error: unknown) {
@@ -312,7 +330,7 @@ export async function DELETE(
       );
     }
 
-    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+    const sceneAssets = await getSceneAssetsBySceneIds([sceneId]);
 
     // データベースから削除
     const { error: deleteError } = await supabase
@@ -330,7 +348,7 @@ export async function DELETE(
     // GCP Storageから画像を削除
     const imageUrls = Array.from(new Set([
       scene.image_url,
-      ...sceneImages.map((image) => image.image_url),
+      ...sceneAssets.map((asset) => asset.content_url),
     ].filter(Boolean) as string[]));
 
     for (const imageUrl of imageUrls) {
