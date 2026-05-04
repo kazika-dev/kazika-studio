@@ -82,12 +82,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    authorized({ auth, request }) {
-      const { pathname } = request.nextUrl;
-      if (pathname.startsWith('/login') || pathname.startsWith('/api/auth')) {
-        return true;
-      }
-      return Boolean(auth?.user);
+    authorized() {
+      // Route protection is handled explicitly in proxy.ts so unauthenticated
+      // page requests redirect to /login instead of surfacing a platform 403.
+      return true;
     },
     jwt({ token, user }) {
       if (user?.id) {
