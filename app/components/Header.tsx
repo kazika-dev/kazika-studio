@@ -1,14 +1,40 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, User, Workflow, Home, ImageIcon, Video, Users, MessageCircle, Database } from 'lucide-react';
+import { LogOut, User, Workflow, Home, ImageIcon, Video, Users, MessageCircle, Database, KeyRound, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Header() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [userMenuOpen]);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -97,20 +123,54 @@ export default function Header() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <User size={20} className="text-gray-600 dark:text-gray-400" />
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                {session.user.email}
-              </span>
-            </div>
+          <div className="relative" ref={userMenuRef}>
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              type="button"
+              onClick={() => setUserMenuOpen((open) => !open)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
             >
-              <LogOut size={16} />
-              ログアウト
+              <User size={20} className="text-gray-600 dark:text-gray-400" />
+              <span className="max-w-[220px] truncate">{session.user.name || session.user.email}</span>
+              <ChevronDown size={16} className={`transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            {userMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+              >
+                <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                    {session.user.name || 'ユーザー'}
+                  </p>
+                  <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                    {session.user.email}
+                  </p>
+                </div>
+
+                <Link
+                  href="/settings/password"
+                  role="menuitem"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  <KeyRound size={16} />
+                  パスワード変更
+                </Link>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  <LogOut size={16} />
+                  ログアウト
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
