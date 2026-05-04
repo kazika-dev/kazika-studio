@@ -5,27 +5,70 @@ import { Storage } from '@google-cloud/storage';
  */
 let storageClient: Storage | null = null;
 
+type GcpServiceAccountCredentials = {
+  project_id: string;
+  client_email: string;
+  private_key: string;
+  [key: string]: unknown;
+};
+
+/**
+ * Vercelなどの環境変数で扱いやすいように、サービスアカウントキーを複数形式で受け付ける。
+ * - GCP_SERVICE_ACCOUNT_KEY: JSON文字列
+ * - GCP_SERVICE_ACCOUNT_KEY: base64エンコードされたJSON文字列
+ * - GCP_SERVICE_ACCOUNT_KEY_BASE64: base64エンコードされたJSON文字列
+ */
+function parseServiceAccountCredentials(): GcpServiceAccountCredentials {
+  const rawCredentials = process.env.GCP_SERVICE_ACCOUNT_KEY;
+  const base64Credentials = process.env.GCP_SERVICE_ACCOUNT_KEY_BASE64;
+  const credentials = rawCredentials || base64Credentials;
+
+  if (!credentials) {
+    throw new Error('GCP_SERVICE_ACCOUNT_KEY environment variable is not set');
+  }
+
+  const candidates = [credentials.trim()];
+
+  // JSONをbase64で入れている環境にも対応する。
+  try {
+    candidates.push(Buffer.from(credentials.trim(), 'base64').toString('utf8').trim());
+  } catch {
+    // base64でなければ無視
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate.startsWith('{')) continue;
+
+    try {
+      const parsed = JSON.parse(candidate) as GcpServiceAccountCredentials;
+      if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
+        throw new Error('missing project_id, client_email, or private_key');
+      }
+
+      return {
+        ...parsed,
+        private_key: parsed.private_key.replace(/\\n/g, '\n'),
+      };
+    } catch (error) {
+      throw new Error('Failed to parse GCP service account JSON: ' + (error as Error).message);
+    }
+  }
+
+  throw new Error(
+    'GCP_SERVICE_ACCOUNT_KEY must be a service account JSON string or base64-encoded JSON string'
+  );
+}
+
 /**
  * GCP Storageクライアントを取得
  */
 export function getStorageClient(): Storage {
   if (!storageClient) {
-    // 環境変数から認証情報を取得
-    const credentials = process.env.GCP_SERVICE_ACCOUNT_KEY;
-
-    if (!credentials) {
-      throw new Error('GCP_SERVICE_ACCOUNT_KEY environment variable is not set');
-    }
-
-    try {
-      const credentialsJson = JSON.parse(credentials);
-      storageClient = new Storage({
-        credentials: credentialsJson,
-        projectId: credentialsJson.project_id,
-      });
-    } catch (error) {
-      throw new Error('Failed to parse GCP_SERVICE_ACCOUNT_KEY: ' + (error as Error).message);
-    }
+    const credentialsJson = parseServiceAccountCredentials();
+    storageClient = new Storage({
+      credentials: credentialsJson,
+      projectId: credentialsJson.project_id,
+    });
   }
 
   return storageClient;
