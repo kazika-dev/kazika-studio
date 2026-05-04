@@ -37,6 +37,7 @@ import {
   CloudUpload as CloudUploadIcon,
   Landscape as LandscapeIcon,
   Brush as BrushIcon,
+  ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
@@ -396,6 +397,130 @@ export default function SceneMasterManager() {
     return option ? option.label : value;
   };
 
+  const copyToClipboard = async (label: string, value: string | number | null | undefined) => {
+    if (value === null || value === undefined || value === '') {
+      toast.error(`${label}がありません`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(value));
+      toast.success(`${label}をコピーしました`);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      toast.error('コピーに失敗しました');
+    }
+  };
+
+  const renderSceneImage = (scene: SceneWithUrl, height: number | string = 220) => (
+    scene.signed_url ? (
+      <Box
+        component="img"
+        src={scene.signed_url}
+        alt={scene.name}
+        sx={{
+          width: '100%',
+          height,
+          objectFit: 'cover',
+          borderRadius: 2,
+          bgcolor: 'grey.100',
+          display: 'block',
+        }}
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    ) : (
+      <Box
+        sx={{
+          width: '100%',
+          height,
+          bgcolor: 'grey.200',
+          borderRadius: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <LandscapeIcon color="disabled" />
+      </Box>
+    )
+  );
+
+  const renderCopyRow = (label: string, value: string | number | null | undefined, compact = false) => (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        minWidth: 0,
+        bgcolor: 'grey.50',
+        border: '1px solid',
+        borderColor: 'grey.200',
+        borderRadius: 1.5,
+        px: compact ? 1 : 1.5,
+        py: compact ? 0.5 : 0.75,
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, fontWeight: 700 }}>
+        {label}
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontFamily: 'monospace',
+          color: 'text.primary',
+        }}
+      >
+        {value || '-'}
+      </Typography>
+      <IconButton
+        size="small"
+        onClick={() => copyToClipboard(label, value)}
+        aria-label={`${label}をコピー`}
+        sx={{ p: 0.5 }}
+      >
+        <ContentCopyIcon fontSize="inherit" />
+      </IconButton>
+    </Box>
+  );
+
+  const renderActionButtons = (scene: SceneWithUrl) => (
+    <>
+      {scene.image_url && (
+        <IconButton
+          size="small"
+          onClick={() => openImageEditor(scene)}
+          color="secondary"
+          title="画像を編集"
+        >
+          <BrushIcon />
+        </IconButton>
+      )}
+      <IconButton
+        size="small"
+        onClick={() => openEditDialog(scene)}
+        color="primary"
+        title="編集"
+      >
+        <EditIcon />
+      </IconButton>
+      <IconButton
+        size="small"
+        onClick={() => openDeleteDialog(scene)}
+        color="error"
+        title="削除"
+      >
+        <DeleteIcon />
+      </IconButton>
+    </>
+  );
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Toaster position="top-center" richColors />
@@ -430,75 +555,101 @@ export default function SceneMasterManager() {
         <Box display="flex" justifyContent="center" py={8}>
           <CircularProgress />
         </Box>
+      ) : scenes.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary">
+            シーンがありません
+          </Typography>
+        </Paper>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>サムネイル</TableCell>
-                <TableCell>名前</TableCell>
-                <TableCell>場所</TableCell>
-                <TableCell>時間帯</TableCell>
-                <TableCell>天気</TableCell>
-                <TableCell>雰囲気</TableCell>
-                <TableCell>タグ</TableCell>
-                <TableCell align="right">操作</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {scenes.length === 0 ? (
+        <>
+          <Box sx={{ display: { xs: 'grid', md: 'none' }, gap: 2 }}>
+            {scenes.map((scene) => (
+              <Paper
+                key={scene.id}
+                elevation={1}
+                sx={{ overflow: 'hidden', borderRadius: 3 }}
+              >
+                <Box sx={{ p: 1 }}>
+                  {renderSceneImage(scene, 'min(68vw, 360px)')}
+                </Box>
+
+                <Box sx={{ px: 2, pb: 2 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1} mb={1}>
+                    <Box minWidth={0}>
+                      <Typography variant="subtitle1" fontWeight="bold" sx={{ wordBreak: 'break-word' }}>
+                        {scene.name}
+                      </Typography>
+                      {scene.description && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {scene.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box display="flex" flexShrink={0}>
+                      {renderActionButtons(scene)}
+                    </Box>
+                  </Box>
+
+                  <Stack spacing={1} mb={1.5}>
+                    {renderCopyRow('ID', scene.id)}
+                    {renderCopyRow('画像ID', scene.image_url)}
+                  </Stack>
+
+                  <Box display="flex" gap={0.75} flexWrap="wrap" mb={1}>
+                    <Chip label={`場所: ${getLabelForOption(LOCATION_OPTIONS, scene.location)}`} size="small" />
+                    <Chip label={`時間: ${getLabelForOption(TIME_OF_DAY_OPTIONS, scene.time_of_day)}`} size="small" />
+                    <Chip label={`天気: ${getLabelForOption(WEATHER_OPTIONS, scene.weather)}`} size="small" />
+                    <Chip label={`雰囲気: ${getLabelForOption(MOOD_OPTIONS, scene.mood)}`} size="small" />
+                  </Box>
+
+                  {scene.tags && scene.tags.length > 0 && (
+                    <Box display="flex" gap={0.5} flexWrap="wrap">
+                      {scene.tags.map((tag, index) => (
+                        <Chip key={index} label={tag} size="small" variant="outlined" />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+
+          <TableContainer component={Paper} sx={{ display: { xs: 'none', md: 'block' } }}>
+            <Table>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">
-                      シーンがありません
-                    </Typography>
-                  </TableCell>
+                  <TableCell sx={{ width: 180 }}>画像</TableCell>
+                  <TableCell>名前 / ID</TableCell>
+                  <TableCell>場所</TableCell>
+                  <TableCell>時間帯</TableCell>
+                  <TableCell>天気</TableCell>
+                  <TableCell>雰囲気</TableCell>
+                  <TableCell>タグ</TableCell>
+                  <TableCell align="right">操作</TableCell>
                 </TableRow>
-              ) : (
-                scenes.map((scene) => (
+              </TableHead>
+              <TableBody>
+                {scenes.map((scene) => (
                   <TableRow key={scene.id} hover>
                     <TableCell>
-                      {scene.signed_url ? (
-                        <Box
-                          component="img"
-                          src={scene.signed_url}
-                          alt={scene.name}
-                          sx={{
-                            width: 100,
-                            height: 60,
-                            objectFit: 'cover',
-                            borderRadius: 1,
-                            bgcolor: 'grey.100',
-                          }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <Box
-                          sx={{
-                            width: 100,
-                            height: 60,
-                            bgcolor: 'grey.200',
-                            borderRadius: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <LandscapeIcon color="disabled" />
-                        </Box>
-                      )}
+                      <Box sx={{ width: 160 }}>
+                        {renderSceneImage(scene, 96)}
+                      </Box>
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ minWidth: 240 }}>
                       <Typography variant="body2" fontWeight="medium">
                         {scene.name}
                       </Typography>
                       {scene.description && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                           {scene.description.substring(0, 50)}{scene.description.length > 50 ? '...' : ''}
                         </Typography>
                       )}
+                      <Stack spacing={0.75} sx={{ maxWidth: 360 }}>
+                        {renderCopyRow('ID', scene.id, true)}
+                        {renderCopyRow('画像ID', scene.image_url, true)}
+                      </Stack>
                     </TableCell>
                     <TableCell>{getLabelForOption(LOCATION_OPTIONS, scene.location)}</TableCell>
                     <TableCell>{getLabelForOption(TIME_OF_DAY_OPTIONS, scene.time_of_day)}</TableCell>
@@ -519,39 +670,14 @@ export default function SceneMasterManager() {
                       </Box>
                     </TableCell>
                     <TableCell align="right">
-                      {scene.image_url && (
-                        <IconButton
-                          size="small"
-                          onClick={() => openImageEditor(scene)}
-                          color="secondary"
-                          title="画像を編集"
-                        >
-                          <BrushIcon />
-                        </IconButton>
-                      )}
-                      <IconButton
-                        size="small"
-                        onClick={() => openEditDialog(scene)}
-                        color="primary"
-                        title="編集"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => openDeleteDialog(scene)}
-                        color="error"
-                        title="削除"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      {renderActionButtons(scene)}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
 
       {/* 作成ダイアログ */}
