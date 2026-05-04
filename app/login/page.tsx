@@ -1,17 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, LogIn } from 'lucide-react';
+import { Mail, Lock, LogIn, KeyRound } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [signupEnabled, setSignupEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let mounted = true;
+
+    fetch('/api/auth/signup')
+      .then((response) => response.json())
+      .then((data) => {
+        if (mounted) {
+          setSignupEnabled(Boolean(data.enabled));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSignupEnabled(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +62,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignup = async () => {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -49,7 +71,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, inviteCode }),
       });
       const data = await response.json();
 
@@ -143,6 +165,26 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {signupEnabled && (
+              <div>
+                <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  招待コード
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    id="inviteCode"
+                    type="password"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="招待コード"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3 pt-4">
               <button
                 type="submit"
@@ -153,19 +195,21 @@ export default function LoginPage() {
                 {loading ? 'ログイン中...' : 'ログイン'}
               </button>
 
-              <button
-                type="button"
-                onClick={handleSignup}
-                disabled={loading}
-                className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {loading ? 'アカウント作成中...' : '新規アカウント作成'}
-              </button>
+              {signupEnabled && (
+                <button
+                  type="button"
+                  onClick={handleSignup}
+                  disabled={loading}
+                  className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {loading ? 'アカウント作成中...' : '招待コードで新規アカウント作成'}
+                </button>
+              )}
             </div>
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-            <p>Auth.js + Neonでログインします。メール確認リンクは使いません。</p>
+            <p>Auth.js + Neonでログインします。新規登録は招待制です。</p>
           </div>
         </div>
       </div>

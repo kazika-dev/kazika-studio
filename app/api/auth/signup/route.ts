@@ -4,17 +4,27 @@ import { hashPassword } from '@/lib/auth/password';
 import {
   checkRateLimit,
   getClientIp,
+  isSignupEnabled,
   isStrongPassword,
   publicErrorDetails,
   rateLimitResponse,
+  verifySignupInviteCode,
 } from '@/lib/auth/security';
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+export async function GET() {
+  return NextResponse.json({ enabled: isSignupEnabled() });
+}
+
 export async function POST(request: NextRequest) {
   try {
+    if (!isSignupEnabled()) {
+      return NextResponse.json({ error: '新規登録は現在停止しています' }, { status: 403 });
+    }
+
     const clientIp = getClientIp(request);
     const ipLimit = await checkRateLimit(`signup:ip:${clientIp}`, 5, 60 * 60 * 1000);
     if (!ipLimit.allowed) {
@@ -24,7 +34,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
+    const inviteCode = String(body.inviteCode || '');
     const name = body.name ? String(body.name).trim() : null;
+
+    if (!verifySignupInviteCode(inviteCode)) {
+      return NextResponse.json({ error: '招待コードが違います' }, { status: 403 });
+    }
 
     if (email) {
       const emailLimit = await checkRateLimit(`signup:email:${email}`, 3, 60 * 60 * 1000);

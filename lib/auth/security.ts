@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
@@ -86,6 +87,21 @@ export function isStrongPassword(password: string) {
   if (!/[A-Za-z]/.test(password)) return false;
   if (!/[0-9]/.test(password)) return false;
   return true;
+}
+
+export function isSignupEnabled() {
+  return process.env.AUTH_SIGNUP_ENABLED === 'true';
+}
+
+export function verifySignupInviteCode(inviteCode: string) {
+  const expected = process.env.SIGNUP_INVITE_CODE;
+  if (!expected) return false;
+
+  const actualBuffer = Buffer.from(inviteCode);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 export function publicErrorDetails(message: string) {
