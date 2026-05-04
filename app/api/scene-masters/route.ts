@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSceneMastersByUserId, createSceneMaster } from '@/lib/db';
-import { uploadImageToStorage, getSignedUrl } from '@/lib/gcp-storage';
+import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * GET /api/scene-masters
- * シーンマスタ一覧を取得（署名付きURL付き）
+ * シーンマスタ一覧を取得（Next APIストレージプロキシURL付き）
  * lib/db.tsの関数を使用（RLSをバイパス）
  */
 export async function GET(request: NextRequest) {
@@ -26,24 +26,11 @@ export async function GET(request: NextRequest) {
       count: scenes.length,
     });
 
-    // 各シーンに署名付きURLを追加
-    const scenesWithUrls = await Promise.all(
-      scenes.map(async (scene) => {
-        if (!scene.image_url) {
-          return scene;
-        }
-        try {
-          const signedUrl = await getSignedUrl(scene.image_url, 120); // 2時間有効
-          return {
-            ...scene,
-            signed_url: signedUrl,
-          };
-        } catch (error) {
-          console.error('Failed to generate signed URL for scene:', scene.id, error);
-          return scene;
-        }
-      })
-    );
+    // GCS署名付きURLではなく、認証済みNext APIプロキシ経由のURLを返す
+    const scenesWithUrls = scenes.map((scene) => ({
+      ...scene,
+      signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+    }));
 
     return NextResponse.json({
       success: true,
@@ -152,17 +139,11 @@ export async function POST(request: NextRequest) {
       tags,
     });
 
-    // 署名付きURLを生成
-    let signedUrl: string | undefined;
-    if (scene.image_url) {
-      signedUrl = await getSignedUrl(scene.image_url, 120);
-    }
-
     return NextResponse.json({
       success: true,
       scene: {
         ...scene,
-        signed_url: signedUrl,
+        signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
       },
     });
   } catch (error: any) {

@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   uploadImageToStorage,
-  getSignedUrl,
   deleteImageFromStorage,
 } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 /**
  * GET /api/scene-masters/[id]
- * シーンマスタを個別取得（署名付きURL付き）
+ * シーンマスタを個別取得（Next APIストレージプロキシURL付き）
  */
 export async function GET(
   request: NextRequest,
@@ -49,17 +48,11 @@ export async function GET(
       );
     }
 
-    // 署名付きURLを生成
-    let signedUrl: string | undefined;
-    if (scene.image_url) {
-      signedUrl = await getSignedUrl(scene.image_url, 120);
-    }
-
     return NextResponse.json({
       success: true,
       scene: {
         ...scene,
-        signed_url: signedUrl,
+        signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
       },
     });
   } catch (error: any) {
@@ -222,17 +215,11 @@ export async function PUT(
       );
     }
 
-    // 署名付きURLを生成
-    let signedUrl: string | undefined;
-    if (updatedScene.image_url) {
-      signedUrl = await getSignedUrl(updatedScene.image_url, 120);
-    }
-
     return NextResponse.json({
       success: true,
       scene: {
         ...updatedScene,
-        signed_url: signedUrl,
+        signed_url: updatedScene.image_url ? `/api/storage/${updatedScene.image_url}` : undefined,
       },
     });
   } catch (error: any) {
