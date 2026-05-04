@@ -5,6 +5,11 @@ import { query } from '@/lib/db';
 export function assertAuthSecretConfigured() {
   if (process.env.NODE_ENV !== 'production') return;
 
+  // Next.js imports route modules while collecting page data during `next build`.
+  // Validate the secret at runtime, not during Vercel's build step, so a missing
+  // environment variable does not prevent unrelated static pages from building.
+  if (process.env.NEXT_PHASE === 'phase-production-build') return;
+
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.includes('replace_with') || secret.length < 32) {
     throw new Error('AUTH_SECRET must be set to a strong random value in production.');
