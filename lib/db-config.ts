@@ -16,14 +16,12 @@ function buildConnectionString(prefix: 'DB') {
 
 export function getDatabaseUrl() {
   const connectionString =
-    process.env.DATABASE_URL ||
     process.env.NEON_DB ||
-    process.env.NEON_DATABASE_URL ||
     buildConnectionString('DB');
 
   if (!connectionString) {
     throw new Error(
-      'Database connection is not configured. Set DATABASE_URL, NEON_DB, NEON_DATABASE_URL, or DB_HOST/DB_NAME/DB_USER/DB_PASSWORD.'
+      'Database connection is not configured. Set NEON_DB or DB_HOST/DB_NAME/DB_USER/DB_PASSWORD.'
     );
   }
 

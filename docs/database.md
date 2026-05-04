@@ -11,11 +11,7 @@
 ```bash
 # Neon/Postgres Database Configuration
 # Neonでは pooled connection string を推奨
-DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
-
-# DATABASE_URL未設定時の任意エイリアス
 NEON_DB=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
-NEON_DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
 
 # または分割指定
 DB_HOST=ep-xxx-pooler.region.aws.neon.tech

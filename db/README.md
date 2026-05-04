@@ -8,9 +8,7 @@ The application now uses Neon/Postgres directly plus Auth.js for authentication.
 
 Use the local migration scripts with a database connection configured by one of:
 
-- `DATABASE_URL`
 - `NEON_DB`
-- `NEON_DATABASE_URL`
 - `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` / optional `DB_PORT`
 
 Examples:
