@@ -589,19 +589,35 @@ export default function SceneMasterManager() {
       ) : (
         <>
           <Box sx={{ display: { xs: 'grid', md: 'none' }, gap: 2 }}>
-            {scenes.map((scene) => (
+            {scenes.map((scene, index) => (
               <Paper
                 key={scene.id}
                 elevation={1}
                 sx={{ overflow: 'hidden', borderRadius: 3 }}
               >
-                <Box sx={{ p: 1 }}>
+                <Box sx={{ p: 1, position: 'relative' }}>
                   {renderSceneImage(scene, 'min(68vw, 360px)')}
+                  <Chip
+                    label={`Scene ${index + 1}`}
+                    size="small"
+                    color="primary"
+                    sx={{
+                      position: 'absolute',
+                      top: 14,
+                      left: 14,
+                      fontWeight: 700,
+                      bgcolor: 'rgba(25, 118, 210, 0.92)',
+                      color: 'white',
+                    }}
+                  />
                 </Box>
 
                 <Box sx={{ px: 2, pb: 2 }}>
                   <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1} mb={1}>
                     <Box minWidth={0}>
+                      <Typography variant="caption" color="primary" fontWeight="bold">
+                        Scene {index + 1}
+                      </Typography>
                       <Typography variant="subtitle1" fontWeight="bold" sx={{ wordBreak: 'break-word' }}>
                         {scene.name}
                       </Typography>
@@ -655,14 +671,32 @@ export default function SceneMasterManager() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {scenes.map((scene) => (
+                {scenes.map((scene, index) => (
                   <TableRow key={scene.id} hover>
                     <TableCell>
-                      <Box sx={{ width: 160 }}>
+                      <Box sx={{ width: 160, position: 'relative' }}>
                         {renderSceneImage(scene, 96)}
+                        <Chip
+                          label={`Scene ${index + 1}`}
+                          size="small"
+                          color="primary"
+                          sx={{
+                            position: 'absolute',
+                            top: 6,
+                            left: 6,
+                            height: 22,
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            bgcolor: 'rgba(25, 118, 210, 0.92)',
+                            color: 'white',
+                          }}
+                        />
                       </Box>
                     </TableCell>
                     <TableCell sx={{ minWidth: 240 }}>
+                      <Typography variant="caption" color="primary" fontWeight="bold">
+                        Scene {index + 1}
+                      </Typography>
                       <Typography variant="body2" fontWeight="medium">
                         {scene.name}
                       </Typography>
