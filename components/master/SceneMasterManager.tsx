@@ -130,7 +130,8 @@ export default function SceneMasterManager() {
       const data = await response.json();
 
       if (data.success) {
-        setScenes(data.scenes);
+        const sortedScenes = [...data.scenes].sort((a, b) => a.id - b.id);
+        setScenes(sortedScenes);
       } else {
         toast.error('データの取得に失敗しました');
       }

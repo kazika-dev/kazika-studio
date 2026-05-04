@@ -2650,7 +2650,7 @@ export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> 
   const result = await query(
     `SELECT * FROM kazikastudio.m_scenes
      WHERE user_id = $1 OR user_id IS NULL
-     ORDER BY created_at DESC`,
+     ORDER BY id ASC`,
     [userId]
   );
   return result.rows;
@@ -2661,7 +2661,7 @@ export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> 
  */
 export async function getAllSceneMasters(): Promise<Scene[]> {
   const result = await query(
-    'SELECT * FROM kazikastudio.m_scenes ORDER BY created_at DESC',
+    'SELECT * FROM kazikastudio.m_scenes ORDER BY id ASC',
     []
   );
   return result.rows;
