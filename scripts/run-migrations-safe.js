@@ -37,7 +37,7 @@ async function runMigrations() {
     const executedSet = new Set(executedMigrations.map(r => r.migration_name));
 
     // Get migration files
-    const migrationsDir = path.join(__dirname, '../supabase/migrations');
+    const migrationsDir = path.join(__dirname, '../db/migrations');
     const files = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort(); // Sort to ensure order

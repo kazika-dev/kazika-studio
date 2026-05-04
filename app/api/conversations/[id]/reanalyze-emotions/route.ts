@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildEmotionTagReanalysisPrompt,
@@ -16,9 +15,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -31,7 +34,7 @@ export async function POST(
     const conversationId = parseInt(id);
 
     // 会話を取得
-    const { data: conversation, error: conversationError } = await supabase
+    const { data: conversation, error: conversationError } = await db
       .from('conversations')
       .select('id, description, studio_id, story_scene_id')
       .eq('id', conversationId)
@@ -46,7 +49,7 @@ export async function POST(
 
     // 所有権チェック
     if (conversation.studio_id) {
-      const { data: studio } = await supabase
+      const { data: studio } = await db
         .from('studios')
         .select('user_id')
         .eq('id', conversation.studio_id)
@@ -59,7 +62,7 @@ export async function POST(
         );
       }
     } else if (conversation.story_scene_id) {
-      const { data: scene } = await supabase
+      const { data: scene } = await db
         .from('story_scenes')
         .select('story:stories(user_id)')
         .eq('id', conversation.story_scene_id)
@@ -80,7 +83,7 @@ export async function POST(
     }
 
     // 全メッセージを取得
-    const { data: messages, error: messagesError } = await supabase
+    const { data: messages, error: messagesError } = await db
       .from('conversation_messages')
       .select('*')
       .eq('conversation_id', conversationId)
@@ -107,8 +110,8 @@ export async function POST(
 
     console.log(`[Reanalyze Emotions] Analyzing ${messages.length} messages for conversation ${conversationId}`);
 
-    const updatedMessages = [];
-    const errors = [];
+    const updatedMessages: any[] = [];
+    const errors: Array<{ messageId: number | string; error: string }> = [];
 
     // 各メッセージを順次分析
     for (let i = 0; i < messages.length; i++) {
@@ -146,7 +149,7 @@ export async function POST(
         // メッセージを更新
         const newMessageText = `[${emotionTag}] ${cleanMessageText}`;
 
-        const { data: updatedMessage, error: updateError } = await supabase
+        const { data: updatedMessage, error: updateError } = await db
           .from('conversation_messages')
           .update({
             message_text: newMessageText,

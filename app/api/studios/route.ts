@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getStudiosByUserId, createStudio } from '@/lib/db';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -8,8 +9,8 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -39,8 +40,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(

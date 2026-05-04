@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildConversationPrompt,
@@ -22,9 +22,11 @@ import { getModelProvider, DEFAULT_CONVERSATION_MODEL } from '@/lib/vertex-ai/co
  */
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // If studioId is provided, verify studio ownership
     if (studioId) {
-      const { data: studio, error: studioError } = await supabase
+      const { data: studio, error: studioError } = await db
         .from('studios')
         .select('id, user_id')
         .eq('id', studioId)
@@ -94,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     // If storySceneId is provided, verify scene ownership via story
     if (storySceneId) {
-      const { data: scene, error: sceneError } = await supabase
+      const { data: scene, error: sceneError } = await db
         .from('story_scenes')
         .select(`
           id,
@@ -120,12 +122,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch character information
-    const { data: characters, error: charError } = await supabase
+    const { data: characterData, error: charError } = await db
       .from('character_sheets')
       .select('id, name, description, personality, speaking_style, sample_dialogues')
       .in('id', body.characterIds);
 
-    if (charError || !characters || characters.length !== body.characterIds.length) {
+    type ConversationCharacter = {
+      id: number;
+      name: string;
+      description?: string | null;
+      personality?: string | null;
+      speaking_style?: string | null;
+      sample_dialogues?: string | null;
+    };
+    const characters = (characterData || []) as ConversationCharacter[];
+
+    if (charError || characters.length !== body.characterIds.length) {
       return NextResponse.json(
         { success: false, error: 'Invalid character IDs or characters not found' },
         { status: 400 }
@@ -145,7 +157,7 @@ export async function POST(request: NextRequest) {
         description: c.description || 'キャラクターの説明なし',
         personality: c.personality || '一般的な性格',
         speakingStyle: c.speaking_style || '普通の話し方',
-        sampleDialogues: c.sample_dialogues || []
+        sampleDialogues: []
       })),
       situation: body.situation,
       messageCount: body.messageCount,
@@ -216,7 +228,7 @@ export async function POST(request: NextRequest) {
       conversationData.story_scene_id = storySceneId;
     }
 
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .insert(conversationData)
       .select()
@@ -234,7 +246,7 @@ export async function POST(request: NextRequest) {
     console.log('[Conversation Generate] Available characters:', characters.map(c => ({ id: c.id, name: c.name })));
     console.log('[Conversation Generate] Generated messages:', parsed.messages.map(m => ({ speakerId: m.speakerId, speaker: m.speaker })));
     const messagesToInsert = parsed.messages.map((msg, idx) => {
-       let character = null;
+       let character: ConversationCharacter | undefined;
       // 優先順位1: speakerIdが指定されている場合はそれを使用
       if (msg.speakerId !== undefined && msg.speakerId !== null) {
         character = characters.find(c => c.id === msg.speakerId);
@@ -289,7 +301,7 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    const { data: messages, error: msgError } = await supabase
+    const { data: messages, error: msgError } = await db
       .from('conversation_messages')
       .insert(messagesToInsert)
       .select(`
@@ -300,7 +312,7 @@ export async function POST(request: NextRequest) {
     if (msgError || !messages) {
       console.error('Failed to save messages:', msgError);
       // Rollback conversation
-      await supabase.from('conversations').delete().eq('id', conversation.id);
+      await db.from('conversations').delete().eq('id', conversation.id);
       return NextResponse.json(
         { success: false, error: 'Failed to save messages' },
         { status: 500 }
@@ -339,7 +351,7 @@ export async function POST(request: NextRequest) {
     // Generate conversation scenes
     // Group messages into scenes (e.g., every 3-5 messages or based on topic changes)
     const scenesPerConversation = Math.max(1, Math.ceil(messages.length / 4)); // Aim for ~4 messages per scene
-    const scenesToInsert = [];
+    const scenesToInsert: Array<Record<string, unknown>> = [];
 
     // Fetch camera angles and shot distances from database for scene generation
     const cameraAngles = await getAllCameraAngles();
@@ -386,7 +398,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert scenes into database
-    const { data: scenes, error: sceneError } = await supabase
+    const { data: scenes, error: sceneError } = await db
       .from('conversation_scenes')
       .insert(scenesToInsert)
       .select();
@@ -398,8 +410,8 @@ export async function POST(request: NextRequest) {
       console.log(`Created ${scenes?.length || 0} scenes for conversation ${conversation.id}`);
     }
 
-    // Save generation log with actual model used
-    await supabase.from('conversation_generation_logs').insert({
+    // Save generation log
+    await db.from('conversation_generation_logs').insert({
       conversation_id: conversation.id,
       prompt_template: prompt,
       prompt_variables: body,
@@ -432,7 +444,7 @@ export async function POST(request: NextRequest) {
       const scenePromptData = await parseScenePromptResponse(sceneAiResponse);
 
       // Save scene to database with camera info
-      const { data: scene, error: sceneError } = await supabase
+      const { data: scene, error: sceneError } = await db
         .from('conversation_scenes')
         .insert({
           conversation_id: conversation.id,

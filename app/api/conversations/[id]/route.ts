@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedSupabase } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import type { GetConversationResponse } from '@/types/conversation';
 
 /**
@@ -13,11 +13,12 @@ export async function GET(
   try {
     const { id } = await params;
     console.log('[GET /api/conversations/:id] Fetching conversation ID:', id);
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
-    const { user, supabase, authMethod } = await getAuthenticatedSupabase(request);
-    if (!user) {
-      console.log('[GET /api/conversations/:id] Auth error: No user');
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
+      console.log('[GET /api/conversations/:id] Auth error:', authError);
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -26,7 +27,7 @@ export async function GET(
     console.log('[GET /api/conversations/:id] User authenticated:', user.id, 'method:', authMethod);
 
     // Fetch conversation with studio information
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .select(`
         *,
@@ -57,7 +58,7 @@ export async function GET(
     }
 
     // Fetch messages
-    const { data: messages, error: msgError } = await supabase
+    const { data: messages, error: msgError } = await db
       .from('conversation_messages')
       .select(`
         *,
@@ -137,10 +138,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
-    const { user, supabase } = await getAuthenticatedSupabase(request);
-    if (!user) {
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -148,7 +150,7 @@ export async function DELETE(
     }
 
     // Verify ownership
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .select(`
         *,
@@ -176,7 +178,7 @@ export async function DELETE(
     }
 
     // Delete conversation (cascade will delete messages and logs)
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from('conversations')
       .delete()
       .eq('id', id);
@@ -213,10 +215,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート（認証方法に応じたSupabaseクライアントを取得）
-    const { user, supabase } = await getAuthenticatedSupabase(request);
-    if (!user) {
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -227,7 +230,7 @@ export async function PATCH(
     const { title, description, location, draft, metadata, draftParams } = body;
 
     // Verify ownership
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .select(`
         *,
@@ -280,7 +283,7 @@ export async function PATCH(
       }
     }
 
-    const { data: updated, error: updateError} = await supabase
+    const { data: updated, error: updateError} = await db
       .from('conversations')
       .update(updates)
       .eq('id', id)

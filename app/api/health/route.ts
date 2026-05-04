@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 // データベース接続とテーブル存在確認
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const db = await createKazikaClient();
 
     // 認証チェック
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await db.auth.getUser();
 
     // テーブルの存在確認
-    const { data: tablesData, error: tablesError } = await supabase
+    const { data: tablesData, error: tablesError } = await db
       .from('workflows')
       .select('count')
       .limit(0);

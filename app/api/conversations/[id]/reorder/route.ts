@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 interface ReorderMessagesRequest {
   messages: Array<{
@@ -20,10 +19,11 @@ export async function POST(
   try {
     const { id } = await params;
     const conversationId = parseInt(id, 10);
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -35,7 +35,7 @@ export async function POST(
     const body: ReorderMessagesRequest = await request.json();
 
     // Verify conversation ownership
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .select(`
         id,
@@ -71,7 +71,7 @@ export async function POST(
     // Update message orders in two steps to avoid unique constraint violation
     // Step 1: Set all to temporary values (10000 + index)
     const tempUpdatePromises = body.messages.map((msg, index) =>
-      supabase
+      db
         .from('conversation_messages')
         .update({ sequence_order: 10000 + index })
         .eq('id', msg.id)
@@ -90,7 +90,7 @@ export async function POST(
 
     // Step 2: Set to actual values
     const finalUpdatePromises = body.messages.map(msg =>
-      supabase
+      db
         .from('conversation_messages')
         .update({ sequence_order: msg.sequence_order })
         .eq('id', msg.id)
@@ -108,7 +108,7 @@ export async function POST(
     }
 
     // Update conversation's updated_at timestamp
-    await supabase
+    await db
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);

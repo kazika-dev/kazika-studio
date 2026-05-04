@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { executeWorkflow } from '@/lib/workflow/executor';
 import { getWorkflowById, getCharacterSheetById } from '@/lib/db';
 import { Node } from 'reactflow';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 
 // Next.jsのルートハンドラの設定（ワークフロー実行は時間がかかる可能性がある）
@@ -561,8 +561,8 @@ export async function POST(request: NextRequest) {
 
     // 実行結果をoutputsテーブルに保存（最終ノードのみ）
     try {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const db = await createKazikaClient();
+      const { data: { user } } = await db.auth.getUser();
 
       if (user) {
         // 最終ノードを特定（出力エッジがないノード）
@@ -606,7 +606,7 @@ export async function POST(request: NextRequest) {
               };
 
               savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
+                db.from('workflow_outputs').insert(insertData).select()
               );
             }
 
@@ -626,7 +626,7 @@ export async function POST(request: NextRequest) {
               };
 
               savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
+                db.from('workflow_outputs').insert(insertData).select()
               );
             }
           } else if (nodeType === 'gemini') {
@@ -646,7 +646,7 @@ export async function POST(request: NextRequest) {
               };
 
               savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
+                db.from('workflow_outputs').insert(insertData).select()
               );
             } else if (output.response) {
               const insertData: any = {
@@ -663,7 +663,7 @@ export async function POST(request: NextRequest) {
               };
 
               savePromises.push(
-                supabase.from('workflow_outputs').insert(insertData).select()
+                db.from('workflow_outputs').insert(insertData).select()
               );
             }
           } else if (nodeType === 'elevenlabs') {
@@ -702,7 +702,7 @@ export async function POST(request: NextRequest) {
                   },
                 };
 
-                return supabase.from('workflow_outputs').insert(insertData).select();
+                return db.from('workflow_outputs').insert(insertData).select();
               })();
 
               savePromises.push(uploadPromise);

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     let workflowId = null;
 
     if (originalOutputId) {
-      const { data: originalOutput } = await supabase
+      const { data: originalOutput } = await db
         .from('workflow_outputs')
         .select('prompt, workflow_id, metadata')
         .eq('id', originalOutputId)
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // workflow_outputsテーブルに保存
-    const { data: newOutput, error: insertError } = await supabase
+    const { data: newOutput, error: insertError } = await db
       .from('workflow_outputs')
       .insert({
         user_id: user.id,

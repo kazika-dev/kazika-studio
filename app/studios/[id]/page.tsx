@@ -25,6 +25,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import HubIcon from '@mui/icons-material/Hub';
 import StudioBoard from '@/components/studio/StudioBoard';
 
 interface Studio {
@@ -270,6 +271,13 @@ export default function StudioDetailPage() {
             )}
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<HubIcon />}
+              onClick={() => router.push(`/studios/${studioId}/generations`)}
+            >
+              生成ワークフロー
+            </Button>
             <Button
               variant="outlined"
               startIcon={<TimelineIcon />}

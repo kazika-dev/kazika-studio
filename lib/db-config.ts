@@ -1,6 +1,6 @@
 import type { PoolConfig } from 'pg';
 
-function buildConnectionString(prefix: 'DB' | 'SUPABASE_DB') {
+function buildConnectionString(prefix: 'DB') {
   const host = process.env[`${prefix}_HOST`];
   const name = process.env[`${prefix}_NAME`];
   const user = process.env[`${prefix}_USER`];
@@ -19,8 +19,7 @@ export function getDatabaseUrl() {
     process.env.DATABASE_URL ||
     process.env.NEON_DB ||
     process.env.NEON_DATABASE_URL ||
-    buildConnectionString('DB') ||
-    buildConnectionString('SUPABASE_DB');
+    buildConnectionString('DB');
 
   if (!connectionString) {
     throw new Error(

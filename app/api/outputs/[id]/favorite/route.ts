@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,7 +28,7 @@ export async function PATCH(
     }
 
     // Update favorite column
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('workflow_outputs')
       .update({ favorite: isFavorite })
       .eq('id', outputId)

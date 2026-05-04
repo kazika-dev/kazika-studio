@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 export async function GET(
   request: NextRequest,
@@ -8,9 +7,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -19,7 +21,7 @@ export async function GET(
     const supabase = await createClient();
 
     // RLSポリシーにより、自動的にuser_idでフィルタリングされる
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .select('id, name, description, nodes, edges, form_config, created_at, updated_at')
       .eq('id', id)

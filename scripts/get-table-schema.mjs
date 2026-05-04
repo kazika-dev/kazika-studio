@@ -1,72 +1,30 @@
-import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 import dotenv from 'dotenv';
+import { createRequire } from 'module';
 
 dotenv.config({ path: '.env.local' });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const require = createRequire(import.meta.url);
+const { getDatabaseConnectionConfig } = require('./db-config.js');
+const { Pool } = pg;
+const pool = new Pool(getDatabaseConnectionConfig());
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase credentials');
-  process.exit(1);
-}
+const tables = [
+  'm_camera_angles',
+  'm_camera_movements',
+  'm_shot_distances',
+];
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function getTableSchema() {
-  const tables = [
-    'kazikastudio.m_camera_angles',
-    'kazikastudio.m_camera_movements',
-    'kazikastudio.m_shot_distances'
-  ];
-
+try {
   for (const tableName of tables) {
-    console.log(`\n=== ${tableName} ===`);
-
-    try {
-      // Get sample data to see column structure
-      const { data, error } = await supabase
-        .schema('kazikastudio')
-        .from(tableName.replace('kazikastudio.', ''))
-        .select('*')
-        .limit(3);
-
-      if (error) {
-        console.error(`Error: ${error.message}`);
-        console.error(`Details: ${JSON.stringify(error, null, 2)}`);
-      } else {
-        console.log(`Row count: ${data.length}`);
-        if (data.length > 0) {
-          console.log(`Columns: ${Object.keys(data[0]).join(', ')}`);
-          console.log(`\nSample data:`);
-          data.forEach((row, idx) => {
-            console.log(`\nRow ${idx + 1}:`);
-            Object.entries(row).forEach(([key, value]) => {
-              const valueStr = typeof value === 'object' ? JSON.stringify(value) : value;
-              console.log(`  ${key}: ${valueStr}`);
-            });
-          });
-        } else {
-          console.log('Table is empty');
-          // Try to insert and delete to get error with column info
-          const { error: insertError } = await supabase
-            .schema('kazikastudio')
-            .from(tableName.replace('kazikastudio.', ''))
-            .insert({ test: 'test' })
-            .select();
-          if (insertError) {
-            console.log('Insert error (shows column info):');
-            console.log(insertError.message);
-          }
-        }
-      }
-    } catch (err) {
-      console.error(`Exception: ${err.message}`);
+    console.log(`\n=== kazikastudio.${tableName} ===`);
+    const result = await pool.query(`SELECT * FROM kazikastudio.${tableName} LIMIT 3`);
+    console.log(`Row count: ${result.rows.length}`);
+    if (result.rows.length > 0) {
+      console.log(`Columns: ${Object.keys(result.rows[0]).join(', ')}`);
+      console.log(JSON.stringify(result.rows, null, 2));
     }
   }
+} finally {
+  await pool.end();
 }
-
-getTableSchema().then(() => process.exit(0)).catch(err => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getFileFromStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -13,12 +14,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    // Cookie または Authorization ヘッダーで認証
-    console.log('[Storage Proxy] Authenticating request for:', request.url);
-    console.log('[Storage Proxy] Authorization header:', request.headers.get('authorization') ? 'Present' : 'None');
-    console.log('[Storage Proxy] Cookies:', request.headers.get('cookie') ? 'Present' : 'None');
+    const db = await createKazikaClient();
 
-    const user = await authenticateRequest(request);
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       console.error('[Storage Proxy] Authentication failed - no user found');
@@ -48,7 +49,7 @@ export async function GET(
 
     // ファイルパスからoutput_idを推測してアクセス権限を確認
     // （オプション: より厳密な権限チェックが必要な場合）
-    // const { data: output } = await supabase
+    // const { data: output } = await db
     //   .from('workflow_outputs')
     //   .select('id, user_id')
     //   .eq('content_url', filePath)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { createComfyUIQueueItem, getComfyUIQueueItemsByUserId } from '@/lib/db';
 
 /**
@@ -8,9 +8,10 @@ import { createComfyUIQueueItem, getComfyUIQueueItemsByUserId } from '@/lib/db';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -86,9 +87,10 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

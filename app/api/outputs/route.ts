@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { uploadImageToStorage, deleteImageFromStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 import { query } from '@/lib/db';
@@ -6,8 +7,12 @@ import { query } from '@/lib/db';
 // アウトプット一覧取得
 export async function GET(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,12 +38,11 @@ export async function GET(request: NextRequest) {
 
     // 特定のIDで取得する場合
     if (id) {
-      const result = await query(
-        `SELECT id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, source_url, favorite, created_at, updated_at
-         FROM kazikastudio.workflow_outputs
-         WHERE id = $1 AND user_id = $2`,
-        [parseInt(id), user.id]
-      );
+      const { data, error } = await db
+        .from('workflow_outputs')
+        .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+        .eq('id', parseInt(id))
+        .single();
 
       if (result.rows.length === 0) {
         return NextResponse.json(
@@ -59,10 +63,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 動的にWHERE句を構築
-    const conditions: string[] = ['user_id = $1'];
-    const params: any[] = [user.id];
-    let paramIndex = 2;
+    // クエリ構築
+    let query = db
+      .from('workflow_outputs')
+      .select('id, user_id, workflow_id, output_type, content_url, content_text, prompt, metadata, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
 
     if (outputType) {
       conditions.push(`output_type = $${paramIndex}`);
@@ -154,8 +160,12 @@ export async function GET(request: NextRequest) {
 // アウトプット保存
 export async function POST(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -244,7 +254,25 @@ export async function POST(request: NextRequest) {
       ]
     );
 
-    if (result.rows.length === 0) {
+    if (workflowId) {
+      insertData.workflow_id = workflowId;
+    }
+
+    if (contentUrl) {
+      insertData.content_url = contentUrl;
+    }
+
+    if (contentText) {
+      insertData.content_text = contentText;
+    }
+
+    const { data, error } = await db
+      .from('workflow_outputs')
+      .insert(insertData)
+      .select('id, workflow_id, output_type, content_url, content_text, prompt, metadata, favorite, created_at, updated_at')
+      .single();
+
+    if (error) {
       // アップロードしたファイルがある場合は削除
       if (contentUrl) {
         try {
@@ -275,8 +303,12 @@ export async function POST(request: NextRequest) {
 // アウトプット削除
 export async function DELETE(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -289,13 +321,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    // 削除前にアウトプット情報を取得（GCPから削除するため、所有者確認も兼ねる）
-    const fetchResult = await query(
-      `SELECT id, output_type, content_url
-       FROM kazikastudio.workflow_outputs
-       WHERE id = $1 AND user_id = $2`,
-      [parseInt(id), user.id]
-    );
+    // 削除前にアウトプット情報を取得（GCPから削除するため）
+    const { data: output, error: fetchError } = await db
+      .from('workflow_outputs')
+      .select('id, output_type, content_url')
+      .eq('id', parseInt(id))
+      .single();
 
     if (fetchResult.rows.length === 0) {
       return NextResponse.json(
@@ -307,10 +338,14 @@ export async function DELETE(request: NextRequest) {
     const output = fetchResult.rows[0];
 
     // DBから削除
-    await query(
-      `DELETE FROM kazikastudio.workflow_outputs WHERE id = $1 AND user_id = $2`,
-      [parseInt(id), user.id]
-    );
+    const { error: deleteError } = await db
+      .from('workflow_outputs')
+      .delete()
+      .eq('id', parseInt(id));
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     // GCPストレージからも削除（ファイル系の場合のみ）
     if (output.content_url && ['image', 'video', 'audio', 'file'].includes(output.output_type)) {

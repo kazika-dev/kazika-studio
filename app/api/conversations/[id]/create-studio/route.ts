@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
-import { getNodeTypeConfig } from '@/lib/workflow/formConfigGenerator';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 /**
  * POST /api/conversations/:id/create-studio
@@ -21,11 +19,12 @@ export async function POST(
     const workflowIdsArray = workflowIds.length > 0 ? workflowIds : (workflowId ? [workflowId] : []);
 
     console.log('[POST /api/conversations/:id/create-studio] Creating studio from conversation ID:', id, 'with workflow IDs:', workflowIdsArray);
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
-      console.log('[POST /api/conversations/:id/create-studio] Auth error: No user');
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
+      console.log('[POST /api/conversations/:id/create-studio] Auth error:', authError);
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -36,7 +35,7 @@ export async function POST(
     const supabase = await createClient();
 
     // Fetch conversation
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await db
       .from('conversations')
       .select('*')
       .eq('id', id)
@@ -61,7 +60,7 @@ export async function POST(
     console.log('[POST /api/conversations/:id/create-studio] Conversation found:', conversation.id);
 
     // Fetch messages
-    const { data: messages, error: msgError } = await supabase
+    const { data: messages, error: msgError } = await db
       .from('conversation_messages')
       .select(`
         id,
@@ -120,7 +119,7 @@ export async function POST(
     console.log('[POST /api/conversations/:id/create-studio] Found', messages.length, 'messages');
 
     // Create studio
-    const { data: studio, error: studioError } = await supabase
+    const { data: studio, error: studioError } = await db
       .from('studios')
       .insert({
         user_id: user.id,
@@ -162,7 +161,7 @@ export async function POST(
       };
     });
 
-    const { data: boards, error: boardsError } = await supabase
+    const { data: boards, error: boardsError } = await db
       .from('studio_boards')
       .insert(boardsToInsert)
       .select();
@@ -170,7 +169,7 @@ export async function POST(
     if (boardsError || !boards) {
       console.error('Failed to create boards:', boardsError);
       // Rollback studio creation
-      await supabase.from('studios').delete().eq('id', studio.id);
+      await db.from('studios').delete().eq('id', studio.id);
       return NextResponse.json(
         { success: false, error: 'Failed to create boards' },
         { status: 500 }
@@ -189,7 +188,7 @@ export async function POST(
         console.log('[POST /api/conversations/:id/create-studio] Processing workflow ID:', workflowId);
 
         // Verify workflow exists and belongs to user
-        const { data: workflow, error: workflowError } = await supabase
+        const { data: workflow, error: workflowError } = await db
           .from('workflows')
           .select('id, name, nodes')
           .eq('id', workflowId)
@@ -228,7 +227,7 @@ export async function POST(
         // Create workflow steps for each board
         const workflowStepsToInsert = boards.map((board, idx) => {
           const message = messages[idx];
-          // Type assertion: Supabase infers character as array, but it's actually a single object
+          // Type assertion: Postgres infers character as array, but it's actually a single object
           const character = Array.isArray(message.character) ? message.character[0] : message.character;
           const characterVoiceId = character?.elevenlabs_voice_id;
 
@@ -338,7 +337,7 @@ export async function POST(
           };
         });
 
-        const { data: createdSteps, error: stepsError } = await supabase
+        const { data: createdSteps, error: stepsError } = await db
           .from('studio_board_workflow_steps')
           .insert(workflowStepsToInsert)
           .select();

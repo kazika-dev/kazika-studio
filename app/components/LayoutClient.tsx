@@ -1,5 +1,6 @@
 'use client';
 
+import { SessionProvider } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import Header from './Header';
 
@@ -14,9 +15,9 @@ export default function LayoutClient({
   const hideHeader = pathname === '/login';
 
   return (
-    <>
+    <SessionProvider>
       {!hideHeader && <Header />}
       {children}
-    </>
+    </SessionProvider>
   );
 }

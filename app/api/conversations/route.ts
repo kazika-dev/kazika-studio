@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
-import type { ListConversationsResponse, CreateConversationRequest, CreateConversationResponse, ConversationDraftParams } from '@/types/conversation';
+import { createKazikaClient } from '@/lib/kazika-db-client';
+import type { ListConversationsResponse } from '@/types/conversation';
 
 /**
  * GET /api/conversations
@@ -9,9 +8,11 @@ import type { ListConversationsResponse, CreateConversationRequest, CreateConver
  */
 export async function GET(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -28,14 +29,14 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // Build query based on whether studioId is provided
-    let query = supabase
+    let query = db
       .from('conversations')
       .select('*, studios(id, name, user_id), story_scenes:story_scene_id(id, title, stories:story_id(id, title))')
       .order('created_at', { ascending: false });
 
     if (studioId) {
       // If studioId is provided, verify studio ownership
-      const { data: studio, error: studioError } = await supabase
+      const { data: studio, error: studioError } = await db
         .from('studios')
         .select('id, user_id')
         .eq('id', studioId)
@@ -64,8 +65,8 @@ export async function GET(request: NextRequest) {
 
     // Get total count
     const countQuery = studioId
-      ? supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('studio_id', studioId)
-      : supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+      ? db.from('conversations').select('*', { count: 'exact', head: true }).eq('studio_id', studioId)
+      : db.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
 
     const { count, error: countError } = await countQuery;
 
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     if (conversationIds.length > 0) {
       // Get message counts
-      const { data: messageCountData, error: msgCountError } = await supabase
+      const { data: messageCountData, error: msgCountError } = await db
         .from('conversation_messages')
         .select('conversation_id')
         .in('conversation_id', conversationIds);
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Get scene counts
-      const { data: sceneCountData, error: sceneCountError } = await supabase
+      const { data: sceneCountData, error: sceneCountError } = await db
         .from('conversation_scenes')
         .select('conversation_id')
         .in('conversation_id', conversationIds);

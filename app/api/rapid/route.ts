@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
 
     // outputsから画像を取得
     const outputs = historyData.outputs || {};
-    let outputImageData = null;
+    let outputImageData: string | null = null;
     let outputImageMimeType = 'image/png';
 
     // 最初の画像出力を取得

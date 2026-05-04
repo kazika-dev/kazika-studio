@@ -26,7 +26,7 @@ async function runConversationMigrations() {
       '20251109000003_add_user_id_to_conversations.sql'
     ];
 
-    const migrationsDir = path.join(__dirname, '../supabase/migrations');
+    const migrationsDir = path.join(__dirname, '../db/migrations');
 
     for (const file of migrationFiles) {
       console.log(`→ Running migration: ${file}`);

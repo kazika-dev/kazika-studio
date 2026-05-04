@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 画像データを探す
-    let imageData = null;
+    let imageData: { mimeType: string; data: string } | null = null;
     for (const candidate of candidates) {
       // finishReasonをチェック
       if (candidate.finishReason && candidate.finishReason.toString() === 'NO_IMAGE') {

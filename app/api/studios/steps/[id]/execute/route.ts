@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getStepById, getBoardById, getStudioById, updateStep, getStepsByBoardId, getWorkflowById, createWorkflowOutput, getCharacterSheetById } from '@/lib/db';
 import { executeWorkflow } from '@/lib/workflow/executor';
 import { Node } from 'reactflow';
@@ -17,8 +17,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
@@ -296,7 +296,7 @@ export async function POST(
                   };
 
                   savePromises.push(
-                    supabase.from('workflow_outputs').insert(insertData).select()
+                    db.from('workflow_outputs').insert(insertData).select()
                   );
                 } else {
                   console.log(`Skipping image output for node ${nodeId} - no content_url available`);
@@ -320,7 +320,7 @@ export async function POST(
                   };
 
                   savePromises.push(
-                    supabase.from('workflow_outputs').insert(insertData).select()
+                    db.from('workflow_outputs').insert(insertData).select()
                   );
                 }
               } else if (nodeType === 'gemini') {
@@ -343,7 +343,7 @@ export async function POST(
                   };
 
                   savePromises.push(
-                    supabase.from('workflow_outputs').insert(insertData).select()
+                    db.from('workflow_outputs').insert(insertData).select()
                   );
                 } else if (output.response) {
                   const insertData: any = {
@@ -362,7 +362,7 @@ export async function POST(
                   };
 
                   savePromises.push(
-                    supabase.from('workflow_outputs').insert(insertData).select()
+                    db.from('workflow_outputs').insert(insertData).select()
                   );
                 }
               } else if (nodeType === 'elevenlabs') {
@@ -387,7 +387,7 @@ export async function POST(
                   };
 
                   savePromises.push(
-                    supabase.from('workflow_outputs').insert(insertData).select()
+                    db.from('workflow_outputs').insert(insertData).select()
                   );
                 }
               }

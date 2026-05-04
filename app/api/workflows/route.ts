@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { Node } from 'reactflow';
 import { generateFormConfig as generateFormConfigFromNodes } from '@/lib/workflow/formConfigGenerator';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
@@ -7,8 +7,12 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
 // ワークフロー一覧取得
 export async function GET(request: NextRequest) {
   try {
-    // Cookie または Authorization ヘッダーで認証
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     // RLSポリシーにより、自動的にuser_idでフィルタリングされる
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .select('id, name, description, created_at, updated_at')
       .order('updated_at', { ascending: false });
@@ -45,8 +49,12 @@ export async function GET(request: NextRequest) {
 // ワークフロー保存
 export async function POST(request: NextRequest) {
   try {
-    // Cookie または Authorization ヘッダーで認証
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,7 +77,7 @@ export async function POST(request: NextRequest) {
     console.log('Creating workflow with auto-generated form_config:', finalFormConfig);
 
     // user_idを自動設定してRLSポリシーを適用
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .insert({
         name,
@@ -111,8 +119,12 @@ export async function POST(request: NextRequest) {
 // ワークフロー更新
 export async function PUT(request: NextRequest) {
   try {
-    // Cookie または Authorization ヘッダーで認証
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -135,7 +147,7 @@ export async function PUT(request: NextRequest) {
     console.log('Updating workflow with auto-generated form_config:', finalFormConfig);
 
     // RLSポリシーにより、自分のワークフローのみ更新可能
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .update({
         name,
@@ -177,8 +189,12 @@ export async function PUT(request: NextRequest) {
 // ワークフロー削除
 export async function DELETE(request: NextRequest) {
   try {
-    // Cookie または Authorization ヘッダーで認証
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+
+    // 認証チェック
+    const {
+      data: { user },
+    } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -194,7 +210,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // RLSポリシーにより、自分のワークフローのみ削除可能
-    const { error } = await supabase.from('workflows').delete().eq('id', id);
+    const { error } = await db.from('workflows').delete().eq('id', id);
 
     if (error) {
       if (error.code === 'PGRST116') {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 /**
  * GET /api/test-db
@@ -7,22 +7,22 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const db = await createKazikaClient();
 
     // Test conversations table
-    const { data: conversations, error: convError } = await supabase
+    const { data: conversations, error: convError } = await db
       .from('conversations')
       .select('*')
       .limit(5);
 
     // Test conversation_messages table
-    const { data: messages, error: msgError } = await supabase
+    const { data: messages, error: msgError } = await db
       .from('conversation_messages')
       .select('*')
       .limit(5);
 
     // Test character_sheets for conversation fields
-    const { data: characters, error: charError } = await supabase
+    const { data: characters, error: charError } = await db
       .from('character_sheets')
       .select('id, name, personality, speaking_style, sample_dialogues')
       .limit(5);

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 /**
  * GET /api/characters
@@ -8,9 +7,11 @@ import { authenticateRequest } from '@/lib/auth/apiAuth';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     console.log('[GET /api/characters] Fetching all characters for user:', user.id);
 
     // Get all character sheets for the user
-    const { data: characters, error: charError } = await supabase
+    const { data: characters, error: charError } = await db
       .from('character_sheets')
       .select('id, name, image_url, description')
       .eq('user_id', user.id)

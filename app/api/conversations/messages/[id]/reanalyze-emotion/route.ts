@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildEmotionTagReanalysisPrompt,
@@ -16,9 +15,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -31,7 +34,7 @@ export async function POST(
     const messageId = parseInt(id);
 
     // メッセージを取得
-    const { data: message, error: messageError } = await supabase
+    const { data: message, error: messageError } = await db
       .from('conversation_messages')
       .select(`
         *,
@@ -66,7 +69,7 @@ export async function POST(
 
     // studioまたはstoryの所有権チェック
     if (conversation.studio_id) {
-      const { data: studio } = await supabase
+      const { data: studio } = await db
         .from('studios')
         .select('user_id')
         .eq('id', conversation.studio_id)
@@ -79,7 +82,7 @@ export async function POST(
         );
       }
     } else if (conversation.story_scene_id) {
-      const { data: scene } = await supabase
+      const { data: scene } = await db
         .from('story_scenes')
         .select('story:stories(user_id)')
         .eq('id', conversation.story_scene_id)
@@ -100,7 +103,7 @@ export async function POST(
     }
 
     // 前後のメッセージを取得（コンテキスト用）
-    const { data: contextMessages } = await supabase
+    const { data: contextMessages } = await db
       .from('conversation_messages')
       .select('speaker_name, message_text, sequence_order')
       .eq('conversation_id', conversation.id)
@@ -151,7 +154,7 @@ export async function POST(
     // メッセージを更新（感情タグプレフィックスを追加）
     const newMessageText = `[${emotionTag}] ${cleanMessageText}`;
 
-    const { data: updatedMessage, error: updateError } = await supabase
+    const { data: updatedMessage, error: updateError } = await db
       .from('conversation_messages')
       .update({
         message_text: newMessageText,

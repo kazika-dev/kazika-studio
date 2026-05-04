@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import {
   getCharacterSheetById,
   updateCharacterSheet,
@@ -15,8 +16,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -92,8 +93,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -165,8 +166,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
 
     if (!user) {
       return NextResponse.json(

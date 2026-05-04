@@ -43,7 +43,7 @@ async function runMigration(sqlFilePath) {
 const args = process.argv.slice(2);
 if (args.length === 0) {
   console.error('Usage: node scripts/run-migration.js <migration-file.sql>');
-  console.error('Example: node scripts/run-migration.js supabase/migrations/20251106000001_move_character_sheets_to_kazikastudio.sql');
+  console.error('Example: node scripts/run-migration.js db/migrations/20251106000001_move_character_sheets_to_kazikastudio.sql');
   process.exit(1);
 }
 

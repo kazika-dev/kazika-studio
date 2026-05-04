@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getComfyUIQueueItemById } from '@/lib/db';
 
 /**
@@ -11,9 +11,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    const db = await createKazikaClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -48,7 +49,7 @@ export async function GET(
     }
 
     // 出力画像をbase64形式に変換（もしGCPストレージパスがある場合）
-    let outputImages = null;
+    let outputImages: Array<{ mimeType: string; data: string; storagePath: string }> | null = null;
     if (queueItem.status === 'completed' && queueItem.output_gcp_storage_paths) {
       const paths = Array.isArray(queueItem.output_gcp_storage_paths)
         ? queueItem.output_gcp_storage_paths

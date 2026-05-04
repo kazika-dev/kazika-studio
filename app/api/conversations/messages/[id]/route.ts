@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 import type { UpdateMessageRequest, UpdateMessageResponse } from '@/types/conversation';
 
 /**
@@ -13,10 +12,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -28,7 +28,7 @@ export async function PATCH(
     const body: UpdateMessageRequest = await request.json();
 
     // Fetch message and verify ownership
-    const { data: message, error: msgError } = await supabase
+    const { data: message, error: msgError } = await db
       .from('conversation_messages')
       .select(`
         *,
@@ -76,7 +76,7 @@ export async function PATCH(
     if (body.characterId !== undefined) {
       updates.character_id = body.characterId;
       // Update speaker_name based on character
-      const { data: character } = await supabase
+      const { data: character } = await db
         .from('character_sheets')
         .select('name')
         .eq('id', body.characterId)
@@ -95,7 +95,7 @@ export async function PATCH(
       updates.metadata = body.metadata;
     }
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await db
       .from('conversation_messages')
       .update(updates)
       .eq('id', id)
@@ -114,7 +114,7 @@ export async function PATCH(
     }
 
     // Update conversation's updated_at timestamp
-    await supabase
+    await db
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', message.conversation.id);
@@ -143,10 +143,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const db = await createKazikaClient();
 
-    // Cookie、APIキー、JWT認証をサポート
-    const user = await authenticateRequest(request);
-    if (!user) {
+    // Authentication check
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -156,7 +157,7 @@ export async function DELETE(
     const supabase = await createClient();
 
     // Fetch message and verify ownership
-    const { data: message, error: msgError } = await supabase
+    const { data: message, error: msgError } = await db
       .from('conversation_messages')
       .select(`
         *,
@@ -197,7 +198,7 @@ export async function DELETE(
     }
 
     // Delete message
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from('conversation_messages')
       .delete()
       .eq('id', id);
@@ -211,7 +212,7 @@ export async function DELETE(
     }
 
     // Update conversation's updated_at timestamp
-    await supabase
+    await db
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', message.conversation.id);

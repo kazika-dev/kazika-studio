@@ -1,12 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { signOut, useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-
-import { LogOut, User, Workflow, Home, Image, Video, MessageCircle, Database, Key, Menu as MenuIcon, X, ListOrdered, Scissors, FileText } from 'lucide-react';
-
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { LogOut, User, Workflow, Home, ImageIcon, Video, Users, MessageCircle, Database } from 'lucide-react';
 import Link from 'next/link';
 import { Menu, MenuItem, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Divider } from '@mui/material';
 
@@ -23,29 +19,9 @@ const navItems = [
 ];
 
 export default function Header() {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
-  const menuOpen = Boolean(anchorEl);
-
-  useEffect(() => {
-    // 初期ユーザー取得
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
-
-    // 認証状態の変化を監視
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [supabase]);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -56,33 +32,17 @@ export default function Header() {
   };
 
   const handleLogout = async () => {
-    handleMenuClose();
-    setMobileMenuOpen(false);
-    await supabase.auth.signOut();
+    await signOut({ redirect: false });
     router.push('/login');
     router.refresh();
   };
 
-  const handleNavigateToSettings = () => {
-    handleMenuClose();
-    setMobileMenuOpen(false);
-    router.push('/settings/api-keys');
-  };
-
-  const isActiveLink = (href: string, matchExact: boolean) => {
-    if (matchExact) {
-      return pathname === href;
-    }
-    return pathname.startsWith(href);
-  };
-
-  if (!user) return null;
+  if (status === 'loading' || !session?.user) return null;
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
       <div className="mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* ロゴとナビゲーション */}
           <div className="flex items-center gap-6">
             {/* モバイルメニューボタン */}
             <button
@@ -97,32 +57,83 @@ export default function Header() {
               <Workflow size={24} />
               <span className="hidden sm:inline">Kazika Studio</span>
             </Link>
-
-            {/* デスクトップナビゲーション */}
-            <nav className="hidden lg:flex items-center gap-4">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = isActiveLink(item.href, item.matchExact);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
-                      isActive
-                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <nav className="flex items-center gap-4">
+              <Link
+                href="/"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname === '/'
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Home size={16} />
+                ホーム
+              </Link>
+              <Link
+                href="/outputs"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname === '/outputs'
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <ImageIcon size={16} />
+                アウトプット
+              </Link>
+              <Link
+                href="/studios"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/studios')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Video size={16} />
+                スタジオ
+              </Link>
+              <Link
+                href="/character-sheets"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/character-sheets')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Users size={16} />
+                キャラクターシート
+              </Link>
+              <Link
+                href="/conversations"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/conversations')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <MessageCircle size={16} />
+                会話
+              </Link>
+              <Link
+                href="/master"
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                  pathname.startsWith('/master')
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Database size={16} />
+                マスター管理
+              </Link>
             </nav>
           </div>
 
-          {/* ユーザー情報とメニュー */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <User size={20} className="text-gray-600 dark:text-gray-400" />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                {session.user.email}
+              </span>
+            </div>
             <button
               onClick={handleMenuOpen}
               className="flex items-center gap-2 px-2 sm:px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"

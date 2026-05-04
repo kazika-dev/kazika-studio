@@ -82,7 +82,7 @@ export default function BoardBlock({
     const failed = steps.filter((s) => s.execution_status === 'failed').length;
     const running = steps.filter((s) => s.execution_status === 'running').length;
 
-    const parts = [];
+    const parts: string[] = [];
     if (completed > 0) parts.push(`${completed}✓`);
     if (running > 0) parts.push(`${running}▶`);
     if (failed > 0) parts.push(`${failed}✗`);

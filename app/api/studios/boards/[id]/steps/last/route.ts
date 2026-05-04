@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
 
 export async function GET(
   request: NextRequest,
@@ -15,10 +15,10 @@ export async function GET(
       );
     }
 
-    const supabase = await createClient();
+    const db = await createKazikaClient();
 
     // ボードの存在確認
-    const { data: board, error: boardError } = await supabase
+    const { data: board, error: boardError } = await db
       .from('boards')
       .select('id')
       .eq('id', boardId)
@@ -32,7 +32,7 @@ export async function GET(
     }
 
     // ボードのWorkflowStepsを取得（step_orderで降順ソート）
-    const { data: steps, error: stepsError } = await supabase
+    const { data: steps, error: stepsError } = await db
       .from('workflow_steps')
       .select(`
         *,

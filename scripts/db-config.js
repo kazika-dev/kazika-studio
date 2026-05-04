@@ -17,8 +17,7 @@ function getDatabaseUrl() {
     process.env.DATABASE_URL ||
     process.env.NEON_DB ||
     process.env.NEON_DATABASE_URL ||
-    buildConnectionString('DB') ||
-    buildConnectionString('SUPABASE_DB');
+    buildConnectionString('DB');
 
   if (!connectionString) {
     throw new Error(
