@@ -3185,3 +3185,319 @@ export async function deleteProp(id: number): Promise<Prop | null> {
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }
+
+// ============================================================================
+// Scene Timeline (scene_timeline_tracks / clips / renders)
+// ============================================================================
+
+export type SceneTimelineTrackType = 'visual' | 'dialogue' | 'bgm' | 'sfx' | 'overlay' | 'text' | 'other';
+export type SceneTimelineClipType = 'image' | 'video' | 'dialogue' | 'bgm' | 'sfx' | 'audio' | 'text' | 'overlay' | 'other';
+export type SceneRenderStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface SceneTimelineTrack {
+  id: number;
+  scene_id: number;
+  user_id: string;
+  track_type: SceneTimelineTrackType;
+  name: string;
+  sort_order: number;
+  muted: boolean;
+  locked: boolean;
+  visible: boolean;
+  metadata: Record<string, any>;
+  clips?: SceneTimelineClip[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SceneTimelineClip {
+  id: number;
+  scene_id: number;
+  track_id: number;
+  scene_asset_id: number | null;
+  output_id: number | null;
+  clip_type: SceneTimelineClipType;
+  title: string | null;
+  start_time: string | number;
+  duration: string | number;
+  source_start_time: string | number | null;
+  source_end_time: string | number | null;
+  volume: string | number;
+  opacity: string | number;
+  z_index: number;
+  playback_rate: string | number;
+  transition_in: Record<string, any>;
+  transition_out: Record<string, any>;
+  transform: Record<string, any>;
+  metadata: Record<string, any>;
+  asset?: SceneAsset | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SceneRender {
+  id: number;
+  scene_id: number;
+  user_id: string;
+  output_id: number | null;
+  status: SceneRenderStatus;
+  render_settings: Record<string, any>;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SceneTimeline {
+  tracks: SceneTimelineTrack[];
+  renders: SceneRender[];
+}
+
+export async function getSceneTimeline(sceneId: number, userId: string): Promise<SceneTimeline> {
+  const tracksResult = await query(
+    `SELECT * FROM kazikastudio.scene_timeline_tracks
+     WHERE scene_id = $1 AND user_id = $2
+     ORDER BY sort_order ASC, id ASC`,
+    [sceneId, userId]
+  );
+
+  const tracks = tracksResult.rows as SceneTimelineTrack[];
+  const trackIds = tracks.map((track) => track.id);
+
+  let clips: SceneTimelineClip[] = [];
+  if (trackIds.length > 0) {
+    const clipsResult = await query(
+      `SELECT
+         clip.*,
+         CASE WHEN asset.id IS NULL THEN NULL ELSE row_to_json(asset) END AS asset
+       FROM kazikastudio.scene_timeline_clips clip
+       LEFT JOIN kazikastudio.scene_assets asset ON asset.id = clip.scene_asset_id
+       WHERE clip.track_id = ANY($1::bigint[])
+       ORDER BY clip.start_time ASC, clip.z_index ASC, clip.id ASC`,
+      [trackIds]
+    );
+    clips = clipsResult.rows as SceneTimelineClip[];
+  }
+
+  const clipsByTrackId = new Map<number, SceneTimelineClip[]>();
+  for (const clip of clips) {
+    const current = clipsByTrackId.get(clip.track_id) || [];
+    current.push(clip);
+    clipsByTrackId.set(clip.track_id, current);
+  }
+
+  const rendersResult = await query(
+    `SELECT * FROM kazikastudio.scene_renders
+     WHERE scene_id = $1 AND user_id = $2
+     ORDER BY created_at DESC, id DESC`,
+    [sceneId, userId]
+  );
+
+  return {
+    tracks: tracks.map((track) => ({
+      ...track,
+      clips: clipsByTrackId.get(track.id) || [],
+    })),
+    renders: rendersResult.rows as SceneRender[],
+  };
+}
+
+export async function ensureDefaultSceneTimelineTracks(sceneId: number, userId: string): Promise<SceneTimelineTrack[]> {
+  const defaults: Array<{ track_type: SceneTimelineTrackType; name: string; sort_order: number }> = [
+    { track_type: 'visual', name: 'Visual', sort_order: 0 },
+    { track_type: 'dialogue', name: 'Dialogue', sort_order: 10 },
+    { track_type: 'bgm', name: 'BGM', sort_order: 20 },
+    { track_type: 'sfx', name: 'SFX', sort_order: 30 },
+    { track_type: 'overlay', name: 'Overlay', sort_order: 40 },
+  ];
+
+  for (const track of defaults) {
+    await query(
+      `INSERT INTO kazikastudio.scene_timeline_tracks
+        (scene_id, user_id, track_type, name, sort_order, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (scene_id, user_id, track_type, name) DO NOTHING`,
+      [sceneId, userId, track.track_type, track.name, track.sort_order, { source: 'ensure_default_tracks' }]
+    );
+  }
+
+  const timeline = await getSceneTimeline(sceneId, userId);
+  return timeline.tracks;
+}
+
+export async function createSceneTimelineTrack(data: {
+  scene_id: number;
+  user_id: string;
+  track_type: SceneTimelineTrackType;
+  name?: string;
+  sort_order?: number;
+  muted?: boolean;
+  locked?: boolean;
+  visible?: boolean;
+  metadata?: Record<string, any>;
+}): Promise<SceneTimelineTrack> {
+  const result = await query(
+    `INSERT INTO kazikastudio.scene_timeline_tracks
+      (scene_id, user_id, track_type, name, sort_order, muted, locked, visible, metadata)
+     VALUES ($1, $2, $3, $4, COALESCE($5, (SELECT COALESCE(MAX(sort_order) + 10, 0) FROM kazikastudio.scene_timeline_tracks WHERE scene_id = $1 AND user_id = $2)), $6, $7, $8, $9)
+     ON CONFLICT (scene_id, user_id, track_type, name) DO UPDATE SET
+       sort_order = EXCLUDED.sort_order,
+       muted = EXCLUDED.muted,
+       locked = EXCLUDED.locked,
+       visible = EXCLUDED.visible,
+       metadata = kazikastudio.scene_timeline_tracks.metadata || EXCLUDED.metadata,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      data.scene_id,
+      data.user_id,
+      data.track_type,
+      data.name || data.track_type,
+      data.sort_order ?? null,
+      data.muted || false,
+      data.locked || false,
+      data.visible ?? true,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function createSceneTimelineClip(data: {
+  scene_id: number;
+  track_id: number;
+  scene_asset_id?: number | null;
+  output_id?: number | null;
+  clip_type: SceneTimelineClipType;
+  title?: string | null;
+  start_time?: number;
+  duration?: number;
+  source_start_time?: number | null;
+  source_end_time?: number | null;
+  volume?: number;
+  opacity?: number;
+  z_index?: number;
+  playback_rate?: number;
+  transition_in?: Record<string, any>;
+  transition_out?: Record<string, any>;
+  transform?: Record<string, any>;
+  metadata?: Record<string, any>;
+}): Promise<SceneTimelineClip> {
+  const result = await query(
+    `INSERT INTO kazikastudio.scene_timeline_clips
+      (scene_id, track_id, scene_asset_id, output_id, clip_type, title, start_time, duration,
+       source_start_time, source_end_time, volume, opacity, z_index, playback_rate,
+       transition_in, transition_out, transform, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+     RETURNING *`,
+    [
+      data.scene_id,
+      data.track_id,
+      data.scene_asset_id || null,
+      data.output_id || null,
+      data.clip_type,
+      data.title || null,
+      data.start_time ?? 0,
+      data.duration ?? 1,
+      data.source_start_time ?? null,
+      data.source_end_time ?? null,
+      data.volume ?? 1,
+      data.opacity ?? 1,
+      data.z_index ?? 0,
+      data.playback_rate ?? 1,
+      data.transition_in || {},
+      data.transition_out || {},
+      data.transform || {},
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateSceneTimelineClip(
+  id: number,
+  updates: Partial<{
+    track_id: number;
+    scene_asset_id: number | null;
+    output_id: number | null;
+    clip_type: SceneTimelineClipType;
+    title: string | null;
+    start_time: number;
+    duration: number;
+    source_start_time: number | null;
+    source_end_time: number | null;
+    volume: number;
+    opacity: number;
+    z_index: number;
+    playback_rate: number;
+    transition_in: Record<string, any>;
+    transition_out: Record<string, any>;
+    transform: Record<string, any>;
+    metadata: Record<string, any>;
+  }>
+): Promise<SceneTimelineClip | null> {
+  const allowed = [
+    'track_id', 'scene_asset_id', 'output_id', 'clip_type', 'title', 'start_time', 'duration',
+    'source_start_time', 'source_end_time', 'volume', 'opacity', 'z_index', 'playback_rate',
+    'transition_in', 'transition_out', 'transform', 'metadata',
+  ] as const;
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  for (const key of allowed) {
+    if (updates[key] !== undefined) {
+      setClauses.push(`${key} = $${paramIndex++}`);
+      values.push(updates[key]);
+    }
+  }
+
+  if (setClauses.length === 0) {
+    const existing = await query('SELECT * FROM kazikastudio.scene_timeline_clips WHERE id = $1', [id]);
+    return existing.rows.length > 0 ? existing.rows[0] : null;
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE kazikastudio.scene_timeline_clips
+     SET ${setClauses.join(', ')}, updated_at = NOW()
+     WHERE id = $${paramIndex}
+     RETURNING *`,
+    values
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function deleteSceneTimelineClip(id: number): Promise<boolean> {
+  const result = await query(
+    'DELETE FROM kazikastudio.scene_timeline_clips WHERE id = $1 RETURNING id',
+    [id]
+  );
+  return result.rows.length > 0;
+}
+
+export async function createSceneRender(data: {
+  scene_id: number;
+  user_id: string;
+  output_id?: number | null;
+  status?: SceneRenderStatus;
+  render_settings?: Record<string, any>;
+  error_message?: string | null;
+}): Promise<SceneRender> {
+  const result = await query(
+    `INSERT INTO kazikastudio.scene_renders
+      (scene_id, user_id, output_id, status, render_settings, error_message)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      data.scene_id,
+      data.user_id,
+      data.output_id || null,
+      data.status || 'draft',
+      data.render_settings || {},
+      data.error_message || null,
+    ]
+  );
+  return result.rows[0];
+}
