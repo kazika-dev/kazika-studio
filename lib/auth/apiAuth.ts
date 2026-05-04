@@ -49,7 +49,7 @@ export async function authenticateRequestWithMethod(request: NextRequest): Promi
     const { data: { user }, error } = await db.auth.getUser();
 
     if (error) {
-      console.error('[API Auth] Cookie session authentication error:', error);
+      console.warn('[API Auth] Cookie session authentication failed');
       return { user: null, authMethod: null };
     }
 

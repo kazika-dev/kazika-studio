@@ -199,11 +199,18 @@ export async function createKazikaClient(): Promise<any> {
   return {
     auth: {
       async getUser() {
-        const session = await auth();
-        const user = session?.user
-          ? { id: session.user.id, email: session.user.email || null }
-          : null;
-        return { data: { user }, error: null };
+        try {
+          const session = await auth();
+          const user = session?.user
+            ? { id: session.user.id, email: session.user.email || null }
+            : null;
+          return { data: { user }, error: null };
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AuthSessionMissingError') {
+            return { data: { user: null }, error: null };
+          }
+          throw error;
+        }
       },
     },
     from(table: string) {
