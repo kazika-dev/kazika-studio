@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSceneMastersByUserId, createSceneMaster } from '@/lib/db';
+import { getSceneMastersByUserId, createSceneMaster, createSceneImage } from '@/lib/db';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /**
  * GET /api/scene-masters
@@ -30,16 +32,20 @@ export async function GET(request: NextRequest) {
     const scenesWithUrls = scenes.map((scene) => ({
       ...scene,
       signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+      scene_images: (scene.scene_images || []).map((image) => ({
+        ...image,
+        signed_url: `/api/storage/${image.image_url}`,
+      })),
     }));
 
     return NextResponse.json({
       success: true,
       scenes: scenesWithUrls,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Scene masters fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch scene masters', details: error.message },
+      { error: 'Failed to fetch scene masters', details: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -84,7 +90,7 @@ export async function POST(request: NextRequest) {
     let tags: string[] = [];
     try {
       tags = tagsJson ? JSON.parse(tagsJson) : [];
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid tags format' },
         { status: 400 }
@@ -139,17 +145,37 @@ export async function POST(request: NextRequest) {
       tags,
     });
 
+    if (scene.image_url) {
+      await createSceneImage({
+        scene_id: scene.id,
+        user_id: user.id,
+        image_url: scene.image_url,
+        title: scene.name,
+        is_primary: true,
+        metadata: { source: 'scene_master_create' },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       scene: {
         ...scene,
         signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+        scene_images: scene.image_url ? [{
+          id: 0,
+          scene_id: scene.id,
+          user_id: user.id,
+          image_url: scene.image_url,
+          title: scene.name,
+          is_primary: true,
+          signed_url: `/api/storage/${scene.image_url}`,
+        }] : [],
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Scene master creation error:', error);
     return NextResponse.json(
-      { error: 'Failed to create scene master', details: error.message },
+      { error: 'Failed to create scene master', details: getErrorMessage(error) },
       { status: 500 }
     );
   }

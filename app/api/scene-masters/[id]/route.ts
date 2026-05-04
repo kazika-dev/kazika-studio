@@ -5,6 +5,9 @@ import {
   deleteImageFromStorage,
 } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { createSceneImage, getSceneImagesBySceneIds, query } from '@/lib/db';
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /**
  * GET /api/scene-masters/[id]
@@ -48,17 +51,23 @@ export async function GET(
       );
     }
 
+    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+
     return NextResponse.json({
       success: true,
       scene: {
         ...scene,
         signed_url: scene.image_url ? `/api/storage/${scene.image_url}` : undefined,
+        scene_images: sceneImages.map((image) => ({
+          ...image,
+          signed_url: `/api/storage/${image.image_url}`,
+        })),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Scene master fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch scene master', details: error.message },
+      { error: 'Failed to fetch scene master', details: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -139,7 +148,7 @@ export async function PUT(
     let tags: string[] = [];
     try {
       tags = tagsJson ? JSON.parse(tagsJson) : [];
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid tags format' },
         { status: 400 }
@@ -168,10 +177,14 @@ export async function PUT(
         );
       }
 
-      // 古い画像を削除
+      // 古い代表画像を削除
       if (existingScene.image_url) {
         try {
           await deleteImageFromStorage(existingScene.image_url);
+          await query(
+            `DELETE FROM kazikastudio.m_scene_images WHERE scene_id = $1 AND image_url = $2`,
+            [sceneId, existingScene.image_url]
+          );
         } catch (error) {
           console.error('Failed to delete old image:', error);
         }
@@ -215,17 +228,34 @@ export async function PUT(
       );
     }
 
+    if (updatedScene.image_url) {
+      await createSceneImage({
+        scene_id: sceneId,
+        user_id: user.id,
+        image_url: updatedScene.image_url,
+        title: updatedScene.name,
+        is_primary: true,
+        metadata: { source: 'scene_master_update' },
+      });
+    }
+
+    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+
     return NextResponse.json({
       success: true,
       scene: {
         ...updatedScene,
         signed_url: updatedScene.image_url ? `/api/storage/${updatedScene.image_url}` : undefined,
+        scene_images: sceneImages.map((image) => ({
+          ...image,
+          signed_url: `/api/storage/${image.image_url}`,
+        })),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Scene master update error:', error);
     return NextResponse.json(
-      { error: 'Failed to update scene master', details: error.message },
+      { error: 'Failed to update scene master', details: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -282,6 +312,8 @@ export async function DELETE(
       );
     }
 
+    const sceneImages = await getSceneImagesBySceneIds([sceneId]);
+
     // データベースから削除
     const { error: deleteError } = await supabase
       .from('m_scenes')
@@ -296,9 +328,14 @@ export async function DELETE(
     }
 
     // GCP Storageから画像を削除
-    if (scene.image_url) {
+    const imageUrls = Array.from(new Set([
+      scene.image_url,
+      ...sceneImages.map((image) => image.image_url),
+    ].filter(Boolean) as string[]));
+
+    for (const imageUrl of imageUrls) {
       try {
-        await deleteImageFromStorage(scene.image_url);
+        await deleteImageFromStorage(imageUrl);
       } catch (error) {
         console.error('Failed to delete from GCP Storage:', error);
         // Storageからの削除に失敗してもデータベースからは削除済みなので警告のみ
@@ -309,10 +346,10 @@ export async function DELETE(
       success: true,
       message: 'Scene master deleted successfully',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Scene master deletion error:', error);
     return NextResponse.json(
-      { error: 'Failed to delete scene master', details: error.message },
+      { error: 'Failed to delete scene master', details: getErrorMessage(error) },
       { status: 500 }
     );
   }

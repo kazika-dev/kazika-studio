@@ -41,7 +41,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
-import { Scene } from '@/lib/db';
+import { Scene, SceneImage } from '@/lib/db';
 import ImageEditor from '@/components/common/ImageEditor';
 
 // シーン設定オプション
@@ -80,8 +80,13 @@ const MOOD_OPTIONS = [
   { value: 'melancholic', label: '憂鬱' },
 ];
 
+interface SceneImageWithUrl extends SceneImage {
+  signed_url?: string;
+}
+
 interface SceneWithUrl extends Scene {
   signed_url?: string;
+  scene_images?: SceneImageWithUrl[];
 }
 
 export default function SceneMasterManager() {
@@ -96,6 +101,7 @@ export default function SceneMasterManager() {
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
   const [imagePreviewScene, setImagePreviewScene] = useState<SceneWithUrl | null>(null);
+  const [imagePreviewImage, setImagePreviewImage] = useState<SceneImageWithUrl | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // フォーム状態
@@ -414,12 +420,51 @@ export default function SceneMasterManager() {
     }
   };
 
-  const renderSceneImage = (scene: SceneWithUrl, height: number | string = 220) => (
-    scene.signed_url ? (
+  const getSceneImageCandidates = (scene: SceneWithUrl): SceneImageWithUrl[] => {
+    if (scene.scene_images && scene.scene_images.length > 0) {
+      return scene.scene_images;
+    }
+
+    if (scene.image_url && scene.signed_url && scene.user_id) {
+      return [{
+        id: 0,
+        scene_id: scene.id,
+        user_id: scene.user_id,
+        image_url: scene.image_url,
+        output_id: null,
+        title: scene.name,
+        prompt: null,
+        sort_order: 0,
+        is_primary: true,
+        metadata: {},
+        created_at: scene.created_at,
+        updated_at: scene.updated_at,
+        signed_url: scene.signed_url,
+      }];
+    }
+
+    return [];
+  };
+
+  const openImagePreview = (scene: SceneWithUrl, image: SceneImageWithUrl) => {
+    setImagePreviewScene(scene);
+    setImagePreviewImage(image);
+  };
+
+  const closeImagePreview = () => {
+    setImagePreviewScene(null);
+    setImagePreviewImage(null);
+  };
+
+  const renderSceneImage = (scene: SceneWithUrl, height: number | string = 220, image?: SceneImageWithUrl) => {
+    const targetImage = image || getSceneImageCandidates(scene)[0];
+    const imageSrc = targetImage?.signed_url || (targetImage?.image_url ? `/api/storage/${targetImage.image_url}` : scene.signed_url);
+
+    return imageSrc ? (
       <Box
         component="button"
         type="button"
-        onClick={() => setImagePreviewScene(scene)}
+        onClick={() => targetImage && openImagePreview(scene, targetImage)}
         aria-label={`${scene.name}の画像を拡大表示`}
         sx={{
           width: '100%',
@@ -436,18 +481,18 @@ export default function SceneMasterManager() {
       >
         <Box
           component="img"
-        src={scene.signed_url}
-        alt={scene.name}
-        sx={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          p: 0.5,
-          display: 'block',
-        }}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
+          src={imageSrc}
+          alt={targetImage?.title || scene.name}
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            p: 0.5,
+            display: 'block',
+          }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
         />
       </Box>
     ) : (
@@ -464,8 +509,46 @@ export default function SceneMasterManager() {
       >
         <LandscapeIcon color="disabled" />
       </Box>
-    )
-  );
+    );
+  };
+
+  const renderSceneImageGallery = (scene: SceneWithUrl, compact = false) => {
+    const images = getSceneImageCandidates(scene);
+
+    if (images.length === 0) {
+      return renderSceneImage(scene, compact ? 96 : 'min(68vw, 360px)');
+    }
+
+    return (
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: compact ? 'repeat(2, minmax(72px, 1fr))' : 'repeat(auto-fit, minmax(128px, 1fr))',
+          gap: compact ? 0.75 : 1,
+        }}
+      >
+        {images.map((image, imageIndex) => (
+          <Box key={`${image.id}-${image.image_url}`} sx={{ position: 'relative', minWidth: 0 }}>
+            {renderSceneImage(scene, compact ? 76 : 'min(42vw, 220px)', image)}
+            <Chip
+              label={`画像 ${imageIndex + 1}`}
+              size="small"
+              sx={{
+                position: 'absolute',
+                top: 6,
+                left: 6,
+                height: 22,
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                bgcolor: image.is_primary ? 'rgba(46, 125, 50, 0.92)' : 'rgba(25, 118, 210, 0.86)',
+                color: 'white',
+              }}
+            />
+          </Box>
+        ))}
+      </Box>
+    );
+  };
 
   const renderCopyRow = (label: string, value: string | number | null | undefined, compact = false) => (
     <Box
@@ -596,7 +679,7 @@ export default function SceneMasterManager() {
                 sx={{ overflow: 'hidden', borderRadius: 3 }}
               >
                 <Box sx={{ p: 1, position: 'relative' }}>
-                  {renderSceneImage(scene, 'min(68vw, 360px)')}
+                  {renderSceneImageGallery(scene)}
                   <Chip
                     label={`Scene ${index + 1}`}
                     size="small"
@@ -634,7 +717,12 @@ export default function SceneMasterManager() {
 
                   <Stack spacing={1} mb={1.5}>
                     {renderCopyRow('ID', scene.id)}
-                    {renderCopyRow('画像ID', scene.image_url)}
+                    {renderCopyRow('画像数', getSceneImageCandidates(scene).length)}
+                    {getSceneImageCandidates(scene).map((image, imageIndex) => (
+                      <Box key={image.image_url}>
+                        {renderCopyRow(`画像ID ${imageIndex + 1}`, image.image_url)}
+                      </Box>
+                    ))}
                   </Stack>
 
                   <Box display="flex" gap={0.75} flexWrap="wrap" mb={1}>
@@ -675,7 +763,7 @@ export default function SceneMasterManager() {
                   <TableRow key={scene.id} hover>
                     <TableCell>
                       <Box sx={{ width: 160, position: 'relative' }}>
-                        {renderSceneImage(scene, 96)}
+                        {renderSceneImageGallery(scene, true)}
                         <Chip
                           label={`Scene ${index + 1}`}
                           size="small"
@@ -707,7 +795,12 @@ export default function SceneMasterManager() {
                       )}
                       <Stack spacing={0.75} sx={{ maxWidth: 360 }}>
                         {renderCopyRow('ID', scene.id, true)}
-                        {renderCopyRow('画像ID', scene.image_url, true)}
+                        {renderCopyRow('画像数', getSceneImageCandidates(scene).length, true)}
+                        {getSceneImageCandidates(scene).slice(0, 3).map((image, imageIndex) => (
+                          <Box key={image.image_url}>
+                            {renderCopyRow(`画像ID ${imageIndex + 1}`, image.image_url, true)}
+                          </Box>
+                        ))}
                       </Stack>
                     </TableCell>
                     <TableCell>{getLabelForOption(LOCATION_OPTIONS, scene.location)}</TableCell>
@@ -741,8 +834,8 @@ export default function SceneMasterManager() {
 
       {/* 画像拡大プレビュー */}
       <Dialog
-        open={Boolean(imagePreviewScene)}
-        onClose={() => setImagePreviewScene(null)}
+        open={Boolean(imagePreviewScene && imagePreviewImage)}
+        onClose={closeImagePreview}
         maxWidth="lg"
         fullWidth
         PaperProps={{
@@ -759,15 +852,15 @@ export default function SceneMasterManager() {
           </Typography>
           {imagePreviewScene && (
             <Typography variant="caption" color="text.secondary" component="div" noWrap>
-              画像ID: {imagePreviewScene.image_url || '-'}
+              画像ID: {imagePreviewImage?.image_url || '-'}
             </Typography>
           )}
         </DialogTitle>
         <DialogContent sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'grey.950' }}>
-          {imagePreviewScene?.signed_url && (
+          {imagePreviewImage?.signed_url && (
             <Box
               component="img"
-              src={imagePreviewScene.signed_url}
+              src={imagePreviewImage.signed_url}
               alt={imagePreviewScene.name}
               sx={{
                 width: '100%',
@@ -782,12 +875,12 @@ export default function SceneMasterManager() {
           {imagePreviewScene && (
             <Button
               startIcon={<ContentCopyIcon />}
-              onClick={() => copyToClipboard('画像ID', imagePreviewScene.image_url)}
+              onClick={() => copyToClipboard('画像ID', imagePreviewImage?.image_url)}
             >
               画像IDコピー
             </Button>
           )}
-          <Button onClick={() => setImagePreviewScene(null)}>閉じる</Button>
+          <Button onClick={closeImagePreview}>閉じる</Button>
         </DialogActions>
       </Dialog>
 

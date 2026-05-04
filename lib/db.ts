@@ -2625,6 +2625,21 @@ export async function getPendingPromptQueues(userId: string): Promise<PromptQueu
 // Scene Master (m_scenes)
 // ============================================================================
 
+export interface SceneImage {
+  id: number;
+  scene_id: number;
+  user_id: string;
+  image_url: string;
+  output_id: number | null;
+  title: string | null;
+  prompt: string | null;
+  sort_order: number;
+  is_primary: boolean;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Scene {
   id: number;
   user_id: string | null;
@@ -2639,8 +2654,108 @@ export interface Scene {
   prompt_hint_en: string | null;
   tags: string[];
   metadata: Record<string, any>;
+  scene_images?: SceneImage[];
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * ユーザーのシーンマスタ一覧を取得（共有シーン含む）
+ */
+async function attachSceneImages(scenes: Scene[]): Promise<Scene[]> {
+  if (scenes.length === 0) {
+    return scenes;
+  }
+
+  const images = await getSceneImagesBySceneIds(scenes.map((scene) => scene.id));
+  const imagesBySceneId = new Map<number, SceneImage[]>();
+
+  for (const image of images) {
+    const current = imagesBySceneId.get(image.scene_id) || [];
+    current.push(image);
+    imagesBySceneId.set(image.scene_id, current);
+  }
+
+  return scenes.map((scene) => {
+    const sceneImages = imagesBySceneId.get(scene.id) || [];
+
+    // 新テーブルが未投入/未バックフィルでも、既存の代表画像は必ず表示する。
+    if (sceneImages.length === 0 && scene.image_url && scene.user_id) {
+      sceneImages.push({
+        id: 0,
+        scene_id: scene.id,
+        user_id: scene.user_id,
+        image_url: scene.image_url,
+        output_id: null,
+        title: scene.name,
+        prompt: null,
+        sort_order: 0,
+        is_primary: true,
+        metadata: { source: 'm_scenes.image_url_fallback' },
+        created_at: scene.created_at,
+        updated_at: scene.updated_at,
+      });
+    }
+
+    return {
+      ...scene,
+      scene_images: sceneImages,
+    };
+  });
+}
+
+export async function getSceneImagesBySceneIds(sceneIds: number[]): Promise<SceneImage[]> {
+  if (sceneIds.length === 0) {
+    return [];
+  }
+
+  const result = await query(
+    `SELECT * FROM kazikastudio.m_scene_images
+     WHERE scene_id = ANY($1::bigint[])
+     ORDER BY scene_id ASC, sort_order ASC, id ASC`,
+    [sceneIds]
+  );
+
+  return result.rows;
+}
+
+export async function createSceneImage(data: {
+  scene_id: number;
+  user_id: string;
+  image_url: string;
+  output_id?: number | null;
+  title?: string | null;
+  prompt?: string | null;
+  sort_order?: number;
+  is_primary?: boolean;
+  metadata?: Record<string, any>;
+}): Promise<SceneImage> {
+  const result = await query(
+    `INSERT INTO kazikastudio.m_scene_images
+      (scene_id, user_id, image_url, output_id, title, prompt, sort_order, is_primary, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6,
+       COALESCE($7, (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM kazikastudio.m_scene_images WHERE scene_id = $1)),
+       $8, $9)
+     ON CONFLICT (scene_id, image_url) DO UPDATE SET
+       output_id = COALESCE(EXCLUDED.output_id, kazikastudio.m_scene_images.output_id),
+       title = COALESCE(EXCLUDED.title, kazikastudio.m_scene_images.title),
+       prompt = COALESCE(EXCLUDED.prompt, kazikastudio.m_scene_images.prompt),
+       metadata = kazikastudio.m_scene_images.metadata || EXCLUDED.metadata,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      data.scene_id,
+      data.user_id,
+      data.image_url,
+      data.output_id || null,
+      data.title || null,
+      data.prompt || null,
+      data.sort_order ?? null,
+      data.is_primary || false,
+      data.metadata || {},
+    ]
+  );
+  return result.rows[0];
 }
 
 /**
@@ -2653,7 +2768,7 @@ export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> 
      ORDER BY id ASC`,
     [userId]
   );
-  return result.rows;
+  return attachSceneImages(result.rows);
 }
 
 /**
@@ -2664,7 +2779,7 @@ export async function getAllSceneMasters(): Promise<Scene[]> {
     'SELECT * FROM kazikastudio.m_scenes ORDER BY id ASC',
     []
   );
-  return result.rows;
+  return attachSceneImages(result.rows);
 }
 
 /**

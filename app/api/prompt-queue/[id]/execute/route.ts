@@ -4,6 +4,9 @@ import {
   getPromptQueueById,
   updatePromptQueue,
   getCharacterSheetById,
+  getSceneMasterById,
+  getPropById,
+  createSceneImage,
   query,
 } from '@/lib/db';
 import { getApiUrl } from '@/lib/utils/apiUrl';
@@ -11,6 +14,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { generateText } from 'ai';
 import { getVertexClient, isVertexAIConfigured, getVertexAuthMethod, callVertexAIWithApiKey } from '@/lib/vertex-ai/client';
 import { getModelProvider } from '@/lib/vertex-ai/constants';
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /**
  * POST /api/prompt-queue/[id]/execute
@@ -85,6 +90,16 @@ export async function POST(
             if (outputResult.rows.length > 0) {
               imageUrl = outputResult.rows[0].content_url;
             }
+          } else if (img.image_type === 'scene') {
+            const scene = await getSceneMasterById(img.reference_id);
+            if (scene) {
+              imageUrl = scene.image_url;
+            }
+          } else if (img.image_type === 'prop') {
+            const prop = await getPropById(img.reference_id);
+            if (prop) {
+              imageUrl = prop.image_url;
+            }
           }
 
           if (imageUrl) {
@@ -116,8 +131,8 @@ export async function POST(
 
       if (queue.enhance_prompt === 'enhance') {
         // metadata から補完用モデルを取得（デフォルト: gemini-2.5-flash）
-        const queueMetadata = queue.metadata as Record<string, any> || {};
-        const enhanceModelName = queueMetadata.enhance_model || 'gemini-2.5-flash';
+        const queueMetadata = (queue.metadata || {}) as Record<string, unknown>;
+        const enhanceModelName = typeof queueMetadata.enhance_model === 'string' ? queueMetadata.enhance_model : 'gemini-2.5-flash';
         const provider = getModelProvider(enhanceModelName);
 
         console.log(`[Execute] Enhancing prompt with model: ${enhanceModelName}, provider: ${provider}`);
@@ -206,13 +221,13 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
           let result;
           if (referenceImages.length > 0) {
             console.log(`Enhancing prompt with ${referenceImages.length} reference image(s)`);
-            const parts: any[] = [{ text: enhanceSystemPrompt }];
+            const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: enhanceSystemPrompt }];
 
             // 参照画像を追加（最大4枚）
             referenceImages.slice(0, 4).forEach((img) => {
               parts.push({
-                inline_data: {
-                  mime_type: img.mimeType,
+                inlineData: {
+                  mimeType: img.mimeType,
                   data: img.data,
                 },
               });
@@ -249,11 +264,11 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
       });
 
       if (!nanobanaResponse.ok) {
-        const errorData = await nanobanaResponse.json().catch(() => ({}));
+        const errorData = await nanobanaResponse.json().catch(() => ({})) as { error?: string };
         throw new Error(errorData.error || 'Nanobana API failed');
       }
 
-      const nanobanaResult = await nanobanaResponse.json();
+      const nanobanaResult = await nanobanaResponse.json() as { storagePath?: string; imageUrl?: string };
 
       // 生成結果を workflow_outputs に保存
       const outputResult = await query(
@@ -283,6 +298,29 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
 
       const output = outputResult.rows[0];
 
+      const referencedSceneIds = Array.from(new Set(
+        queue.images
+          .filter((image) => image.image_type === 'scene')
+          .map((image) => image.reference_id)
+      ));
+
+      for (const sceneId of referencedSceneIds) {
+        await createSceneImage({
+          scene_id: sceneId,
+          user_id: user.id,
+          image_url: output.content_url,
+          output_id: output.id,
+          title: queue.name || `Prompt Queue #${queueId}`,
+          prompt: finalPrompt,
+          metadata: {
+            source: 'prompt_queue_execute',
+            queue_id: queueId,
+            model: queue.model,
+            aspect_ratio: queue.aspect_ratio,
+          },
+        });
+      }
+
       // キューを完了に更新
       const updatedQueue = await updatePromptQueue(queueId, {
         status: 'completed',
@@ -298,19 +336,19 @@ ${queue.negative_prompt ? `ネガティブプロンプト（参考）: ${queue.n
           content_url: output.content_url,
         },
       });
-    } catch (executeError: any) {
+    } catch (executeError: unknown) {
       // 実行に失敗した場合はステータスを failed に更新
       await updatePromptQueue(queueId, {
         status: 'failed',
-        error_message: executeError.message,
+        error_message: getErrorMessage(executeError),
       });
 
       throw executeError;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to execute prompt queue:', error);
     return NextResponse.json(
-      { error: 'Failed to execute prompt queue', details: error.message },
+      { error: 'Failed to execute prompt queue', details: getErrorMessage(error) },
       { status: 500 }
     );
   }
