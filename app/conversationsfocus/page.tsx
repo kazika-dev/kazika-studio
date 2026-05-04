@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -49,7 +49,6 @@ interface Character {
 
 function ConversationsFocusContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [storyTree, setStoryTree] = useState<StoryTreeNode[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithCount | null>(null);
   const [messages, setMessages] = useState<ConversationMessageWithCharacter[]>([]);
@@ -95,7 +94,8 @@ function ConversationsFocusContent() {
   }, []);
 
   useEffect(() => {
-    const conversationIdParam = searchParams.get('conversationId');
+    const params = new URLSearchParams(window.location.search);
+    const conversationIdParam = params.get('conversationId');
     if (!conversationIdParam) return;
 
     const conversationId = Number(conversationIdParam);
@@ -103,7 +103,7 @@ function ConversationsFocusContent() {
 
     if (selectedConversation?.id === conversationId) return;
     loadConversation(conversationId);
-  }, [searchParams, selectedConversation?.id]);
+  }, [selectedConversation?.id]);
 
   const loadStoryTree = async () => {
     try {
