@@ -34,7 +34,7 @@ export async function checkRateLimit(key: string, limit: number, windowMs: numbe
   const result = await query(
     `WITH upserted AS (
        INSERT INTO kazikastudio.auth_rate_limits (key, count, reset_at)
-       VALUES ($1, 1, timezone('utc'::text, now()) + ($3::int * interval '1 second'))
+       VALUES ($1, 1, timezone('utc'::text, now()) + ($2::int * interval '1 second'))
        ON CONFLICT (key) DO UPDATE SET
          count = CASE
            WHEN kazikastudio.auth_rate_limits.reset_at <= timezone('utc'::text, now()) THEN 1
@@ -42,13 +42,13 @@ export async function checkRateLimit(key: string, limit: number, windowMs: numbe
          END,
          reset_at = CASE
            WHEN kazikastudio.auth_rate_limits.reset_at <= timezone('utc'::text, now())
-             THEN timezone('utc'::text, now()) + ($3::int * interval '1 second')
+             THEN timezone('utc'::text, now()) + ($2::int * interval '1 second')
            ELSE kazikastudio.auth_rate_limits.reset_at
          END
        RETURNING count, reset_at
      )
      SELECT count, reset_at FROM upserted`,
-    [key, limit, windowSeconds]
+    [key, windowSeconds]
   );
 
   const row = result.rows[0];
