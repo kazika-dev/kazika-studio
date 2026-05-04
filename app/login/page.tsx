@@ -208,9 +208,6 @@ export default function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-            <p>Auth.js + Neonでログインします。新規登録は招待制です。</p>
-          </div>
         </div>
       </div>
     </div>
