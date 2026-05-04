@@ -421,9 +421,10 @@ export default function SceneMasterManager() {
         sx={{
           width: '100%',
           height,
-          objectFit: 'cover',
+          objectFit: 'contain',
           borderRadius: 2,
           bgcolor: 'grey.100',
+          p: 0.5,
           display: 'block',
         }}
         onError={(e) => {
@@ -522,18 +523,23 @@ export default function SceneMasterManager() {
   );
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: { xs: 1.5, sm: 4 }, px: { xs: 1.5, sm: 3 } }}>
       <Toaster position="top-center" richColors />
 
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => router.push('/master')}
-        sx={{ mb: 2 }}
+        sx={{ mb: 2, display: { xs: 'none', sm: 'inline-flex' } }}
       >
         マスタ管理に戻る
       </Button>
 
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+      <Box
+        display={{ xs: 'none', sm: 'flex' }}
+        justifyContent="space-between"
+        alignItems="center"
+        mb={3}
+      >
         <Box>
           <Typography variant="h4" component="h1" gutterBottom>
             シーンマスタ
