@@ -218,6 +218,17 @@ export default function MobileSceneTimelineEditor({ sceneId }: { sceneId: number
     } catch (err) { console.error(err); toast.error('削除に失敗しました'); }
   };
 
+  const copyAssetId = async (assetId: number) => {
+    const text = `asset_id:${assetId}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${text} をコピーしました`);
+    } catch (err) {
+      console.error(err);
+      toast.error('コピーに失敗しました');
+    }
+  };
+
   if (loading) return <Container sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container sx={{ py: 3 }}><Alert severity="error">{error}</Alert><Button startIcon={<ArrowBackIcon />} onClick={() => router.back()} sx={{ mt: 2 }}>戻る</Button></Container>;
 
@@ -250,7 +261,11 @@ export default function MobileSceneTimelineEditor({ sceneId }: { sceneId: number
                 {asset.asset_type === 'image' && asset.signed_url ? <Box component="img" src={asset.signed_url} alt={asset.title || 'asset'} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : assetIcon(asset.asset_type)}
               </ButtonBase>
               <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Stack direction="row" spacing={0.75} flexWrap="wrap" mb={0.5}><Chip icon={assetIcon(asset.asset_type)} label={ASSET_LABELS[asset.asset_type]} size="small" /><Chip label={asset.status} size="small" variant="outlined" color={asset.status === 'selected' ? 'success' : 'default'} /></Stack>
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" mb={0.5}>
+                  <Chip icon={assetIcon(asset.asset_type)} label={ASSET_LABELS[asset.asset_type]} size="small" />
+                  <Chip label={asset.status} size="small" variant="outlined" color={asset.status === 'selected' ? 'success' : 'default'} />
+                  <Chip label={`asset_id:${asset.id}`} size="small" color="primary" variant="outlined" onClick={() => copyAssetId(asset.id)} />
+                </Stack>
                 <Typography variant="body2" fontWeight={700} noWrap>{asset.title || asset.content_url}</Typography>
                 <Typography variant="caption" color="text.secondary" noWrap component="div">{asset.content_url}</Typography>
               </Box>
@@ -266,7 +281,7 @@ export default function MobileSceneTimelineEditor({ sceneId }: { sceneId: number
           <Stack spacing={1}>{track.clips.length === 0 ? <Typography variant="caption" color="text.secondary">まだ配置なし</Typography> : track.clips.map((clip) => <Box key={clip.id} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.default' }}>
             <Stack direction="row" alignItems="center" spacing={1}>
               {clip.asset?.asset_type === 'image' && clip.asset.signed_url && <ButtonBase onClick={() => setPreviewAsset(clip.asset || null)} sx={{ width: 44, height: 44, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0, bgcolor: 'grey.100' }}><Box component="img" src={clip.asset.signed_url} alt={clip.asset.title || 'clip'} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /></ButtonBase>}
-              <Box sx={{ flex: 1, minWidth: 0 }} onClick={() => openClipEditor(clip)}><Typography variant="body2" fontWeight={700} noWrap>{clip.title || clip.asset?.title || clip.clip_type}</Typography><Typography variant="caption" color="text.secondary">{asNumber(clip.start_time).toFixed(1)}s → {(asNumber(clip.start_time) + asNumber(clip.duration, 1)).toFixed(1)}s / vol {asNumber(clip.volume, 1).toFixed(2)}</Typography></Box><IconButton size="small" onClick={() => deleteClip(clip)} color="error"><DeleteIcon fontSize="small" /></IconButton></Stack>
+              <Box sx={{ flex: 1, minWidth: 0 }} onClick={() => openClipEditor(clip)}><Typography variant="body2" fontWeight={700} noWrap>{clip.title || clip.asset?.title || clip.clip_type}</Typography><Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap"><Typography variant="caption" color="text.secondary">{asNumber(clip.start_time).toFixed(1)}s → {(asNumber(clip.start_time) + asNumber(clip.duration, 1)).toFixed(1)}s / vol {asNumber(clip.volume, 1).toFixed(2)}</Typography>{clip.asset && <Chip label={`asset_id:${clip.asset.id}`} size="small" color="primary" variant="outlined" onClick={(event) => { event.stopPropagation(); copyAssetId(clip.asset!.id); }} />}</Stack></Box><IconButton size="small" onClick={() => deleteClip(clip)} color="error"><DeleteIcon fontSize="small" /></IconButton></Stack>
           </Box>)}</Stack>
         </CardContent></Card>)}
       </Stack>}
