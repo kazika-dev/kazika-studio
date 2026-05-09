@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSceneMastersByUserId, createSceneMaster, createSceneAsset } from '@/lib/db';
+import { getSceneMastersByUserId, getSceneMastersPageByUserId, createSceneMaster, createSceneAsset } from '@/lib/db';
 import { uploadImageToStorage } from '@/lib/gcp-storage';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
 
@@ -20,12 +20,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const pageParam = request.nextUrl.searchParams.get('page');
+    const limitParam = request.nextUrl.searchParams.get('limit');
+    const hasPagination = pageParam !== null || limitParam !== null;
+    const page = Math.max(0, Number.parseInt(pageParam || '0', 10) || 0);
+    const limit = Math.max(1, Math.min(100, Number.parseInt(limitParam || '20', 10) || 20));
+
     // lib/db.tsの関数を使用（PostgreSQL直接接続、RLSバイパス）
-    const scenes = await getSceneMastersByUserId(user.id);
+    const { scenes, total } = hasPagination
+      ? await getSceneMastersPageByUserId(user.id, { limit, offset: page * limit })
+      : { scenes: await getSceneMastersByUserId(user.id), total: undefined };
 
     console.log('[Scene Masters] Query result:', {
       userId: user.id,
       count: scenes.length,
+      total,
+      page: hasPagination ? page : undefined,
+      limit: hasPagination ? limit : undefined,
     });
 
     // GCS署名付きURLではなく、認証済みNext APIプロキシ経由のURLを返す
@@ -45,6 +56,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       scenes: scenesWithUrls,
+      pagination: hasPagination ? {
+        page,
+        limit,
+        total: total ?? scenesWithUrls.length,
+        totalPages: Math.ceil((total ?? scenesWithUrls.length) / limit),
+      } : undefined,
     });
   } catch (error: unknown) {
     console.error('Scene masters fetch error:', error);

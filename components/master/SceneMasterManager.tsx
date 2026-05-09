@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -18,6 +18,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   Paper,
   IconButton,
   Chip,
@@ -94,6 +95,9 @@ export default function SceneMasterManager() {
   const router = useRouter();
   const [scenes, setScenes] = useState<SceneWithUrl[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [totalScenes, setTotalScenes] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -118,27 +122,19 @@ export default function SceneMasterManager() {
   const [formFile, setFormFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadScenes();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
-
-  const loadScenes = async () => {
+  const loadScenes = useCallback(async (targetPage = page, targetRowsPerPage = rowsPerPage) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/scene-masters');
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        limit: String(targetRowsPerPage),
+      });
+      const response = await fetch(`/api/scene-masters?${params.toString()}`);
       const data = await response.json();
 
       if (data.success) {
-        const sortedScenes = [...data.scenes].sort((a, b) => a.id - b.id);
-        setScenes(sortedScenes);
+        setScenes(data.scenes);
+        setTotalScenes(data.pagination?.total ?? data.scenes.length);
       } else {
         toast.error('データの取得に失敗しました');
       }
@@ -148,7 +144,30 @@ export default function SceneMasterManager() {
     } finally {
       setLoading(false);
     }
+  }, [page, rowsPerPage]);
+
+  useEffect(() => {
+    loadScenes(page, rowsPerPage);
+  }, [loadScenes, page, rowsPerPage]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
   };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(Number.parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const getSceneNumber = (index: number) => page * rowsPerPage + index + 1;
 
   const handleDelete = async () => {
     if (!selectedScene) return;
@@ -162,7 +181,11 @@ export default function SceneMasterManager() {
 
       if (data.success) {
         toast.success('削除しました');
-        loadScenes();
+        if (scenes.length === 1 && page > 0) {
+          setPage(page - 1);
+        } else {
+          loadScenes();
+        }
       } else {
         toast.error('削除に失敗しました');
       }
@@ -209,7 +232,8 @@ export default function SceneMasterManager() {
         toast.success('作成しました');
         setCreateDialogOpen(false);
         resetForm();
-        loadScenes();
+        setPage(0);
+        loadScenes(0, rowsPerPage);
       } else {
         toast.error(data.error || '作成に失敗しました');
       }
@@ -388,7 +412,12 @@ export default function SceneMasterManager() {
         setImageEditorOpen(false);
         setEditingImageUrl(null);
         setSelectedScene(null);
-        loadScenes();
+        if (saveMode === 'new') {
+          setPage(0);
+          loadScenes(0, rowsPerPage);
+        } else {
+          loadScenes();
+        }
       } else {
         toast.error(data.error || '画像の保存に失敗しました');
       }
@@ -551,6 +580,44 @@ export default function SceneMasterManager() {
     );
   };
 
+  const getTimelinePath = (sceneId: number) => `/scenes/${sceneId}/timeline`;
+
+  const renderTimelineLinkRow = (scene: SceneWithUrl, compact = false) => (
+    <Button
+      variant="outlined"
+      size="small"
+      fullWidth
+      startIcon={<MovieCreationIcon />}
+      onClick={() => router.push(getTimelinePath(scene.id))}
+      sx={{
+        justifyContent: 'flex-start',
+        borderRadius: 1.5,
+        px: compact ? 1 : 1.5,
+        py: compact ? 0.5 : 0.75,
+        textTransform: 'none',
+        fontWeight: 700,
+      }}
+    >
+      タイムラインを開く
+      <Typography
+        component="span"
+        variant="caption"
+        sx={{
+          ml: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontFamily: 'monospace',
+          fontWeight: 400,
+          color: 'text.secondary',
+        }}
+      >
+        {getTimelinePath(scene.id)}
+      </Typography>
+    </Button>
+  );
+
   const renderCopyRow = (label: string, value: string | number | null | undefined, compact = false) => (
     <Box
       sx={{
@@ -690,7 +757,7 @@ export default function SceneMasterManager() {
                 <Box sx={{ p: 1, position: 'relative' }}>
                   {renderSceneImageGallery(scene)}
                   <Chip
-                    label={`Scene ${index + 1}`}
+                    label={`Scene ${getSceneNumber(index)}`}
                     size="small"
                     color="primary"
                     sx={{
@@ -708,7 +775,7 @@ export default function SceneMasterManager() {
                   <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1} mb={1}>
                     <Box minWidth={0}>
                       <Typography variant="caption" color="primary" fontWeight="bold">
-                        Scene {index + 1}
+                        Scene {getSceneNumber(index)}
                       </Typography>
                       <Typography variant="subtitle1" fontWeight="bold" sx={{ wordBreak: 'break-word' }}>
                         {scene.name}
@@ -726,6 +793,7 @@ export default function SceneMasterManager() {
 
                   <Stack spacing={1} mb={1.5}>
                     {renderCopyRow('ID', scene.id)}
+                    {renderTimelineLinkRow(scene)}
                     {renderCopyRow('画像数', getSceneImageCandidates(scene).length)}
                     {getSceneImageCandidates(scene).map((image, imageIndex) => (
                       <Box key={image.image_url}>
@@ -774,7 +842,7 @@ export default function SceneMasterManager() {
                       <Box sx={{ width: 160, position: 'relative' }}>
                         {renderSceneImageGallery(scene, true)}
                         <Chip
-                          label={`Scene ${index + 1}`}
+                          label={`Scene ${getSceneNumber(index)}`}
                           size="small"
                           color="primary"
                           sx={{
@@ -792,7 +860,7 @@ export default function SceneMasterManager() {
                     </TableCell>
                     <TableCell sx={{ minWidth: 240 }}>
                       <Typography variant="caption" color="primary" fontWeight="bold">
-                        Scene {index + 1}
+                        Scene {getSceneNumber(index)}
                       </Typography>
                       <Typography variant="body2" fontWeight="medium">
                         {scene.name}
@@ -804,6 +872,7 @@ export default function SceneMasterManager() {
                       )}
                       <Stack spacing={0.75} sx={{ maxWidth: 360 }}>
                         {renderCopyRow('ID', scene.id, true)}
+                        {renderTimelineLinkRow(scene, true)}
                         {renderCopyRow('画像数', getSceneImageCandidates(scene).length, true)}
                         {getSceneImageCandidates(scene).slice(0, 3).map((image, imageIndex) => (
                           <Box key={image.image_url}>
@@ -838,6 +907,25 @@ export default function SceneMasterManager() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          <TablePagination
+            component="div"
+            count={totalScenes}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 20, 50, 100]}
+            labelRowsPerPage="表示件数"
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
+            sx={{
+              mt: 1,
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          />
         </>
       )}
 

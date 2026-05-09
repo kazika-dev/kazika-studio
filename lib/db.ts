@@ -2857,6 +2857,35 @@ export async function getSceneMastersByUserId(userId: string): Promise<Scene[]> 
   return attachSceneAssets(result.rows);
 }
 
+export async function getSceneMastersPageByUserId(
+  userId: string,
+  options: { limit: number; offset: number }
+): Promise<{ scenes: Scene[]; total: number }> {
+  const limit = Math.max(1, Math.min(100, Math.floor(options.limit)));
+  const offset = Math.max(0, Math.floor(options.offset));
+
+  const [itemsResult, countResult] = await Promise.all([
+    query(
+      `SELECT * FROM kazikastudio.m_scenes
+       WHERE user_id = $1 OR user_id IS NULL
+       ORDER BY created_at DESC NULLS LAST, id DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    ),
+    query(
+      `SELECT COUNT(*)::int AS total
+       FROM kazikastudio.m_scenes
+       WHERE user_id = $1 OR user_id IS NULL`,
+      [userId]
+    ),
+  ]);
+
+  return {
+    scenes: await attachSceneAssets(itemsResult.rows),
+    total: countResult.rows[0]?.total ?? 0,
+  };
+}
+
 /**
  * 全てのシーンマスタを取得
  */
