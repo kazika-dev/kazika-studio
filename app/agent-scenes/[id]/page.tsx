@@ -296,8 +296,15 @@ function MiniCount({ label, value }: { label: string; value: number }) {
 
 function AssetRow({ asset }: { asset: AnyRow }) {
   const isAudio = asset.asset_type === 'audio';
+  const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
+  const src = assetUrl(asset);
   return (
     <div className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
+      {isImage && src && (
+        <a href={src} target="_blank" rel="noreferrer" className="mb-3 block overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
+          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
+        </a>
+      )}
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
         {asset.is_primary && <Badge>primary</Badge>}
@@ -310,9 +317,9 @@ function AssetRow({ asset }: { asset: AnyRow }) {
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
       {isAudio && <AudioPlayer asset={asset} />}
-      {!isAudio && typeof asset.url === 'string' && asset.url && (
-        <a href={assetUrl(asset)} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
-          {asset.url}
+      {!isAudio && src && (
+        <a href={src} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
+          {String(asset.storage_path || asset.url || src)}
         </a>
       )}
     </div>
