@@ -29,6 +29,7 @@ export default function AgentSceneDetailPage() {
   const [data, setData] = useState<ScenePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showAssetHistory, setShowAssetHistory] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -57,15 +58,34 @@ export default function AgentSceneDetailPage() {
     void load();
   }, [sceneId]);
 
+  const currentAssets = useMemo(() => {
+    const allAssets = data?.assets || [];
+    const activeLayoutAssetIds = new Set((data?.sceneLayouts || []).map((layout) => String(layout.asset_id || '')));
+    const imageAssets = allAssets.filter((asset) => isSceneImageAsset(asset));
+    const latestImageCreatedAt = imageAssets[0]?.created_at ? String(imageAssets[0].created_at) : '';
+
+    return allAssets.filter((asset) => {
+      const type = String(asset.asset_type || 'unknown');
+      if (type === 'layout_reference' || type === 'placement_diagram') {
+        return Boolean(asset.is_primary) || activeLayoutAssetIds.has(String(asset.id));
+      }
+      if (type === 'audio') return Boolean(asset.is_primary);
+      if (isSceneImageAsset(asset)) return latestImageCreatedAt ? String(asset.created_at) === latestImageCreatedAt : Boolean(asset.is_primary);
+      return Boolean(asset.is_primary);
+    });
+  }, [data?.assets, data?.sceneLayouts]);
+
+  const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
+
   const assetGroups = useMemo(() => {
     const groups: Record<string, AnyRow[]> = {};
-    for (const asset of data?.assets || []) {
+    for (const asset of visibleAssets) {
       const key = typeof asset.asset_type === 'string' ? asset.asset_type : 'unknown';
       groups[key] = groups[key] || [];
       groups[key].push(asset);
     }
     return groups;
-  }, [data?.assets]);
+  }, [visibleAssets]);
 
   if (loading) {
     return (
@@ -95,7 +115,7 @@ export default function AgentSceneDetailPage() {
   }
 
   const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, generationJobs, sceneLayouts } = data;
-  const layoutAssets = assets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
+  const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -176,7 +196,7 @@ export default function AgentSceneDetailPage() {
                       </div>
                       <div className="space-y-2">
                         {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
-                          const lineAudioAssets = assets.filter((asset) => asset.asset_type === 'audio' && asset.script_line_id === line.id);
+                          const lineAudioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && asset.script_line_id === line.id);
                           return (
                             <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
                               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -240,13 +260,25 @@ export default function AgentSceneDetailPage() {
                 <Empty>まだ assets がありません。</Empty>
               ) : (
                 <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {showAssetHistory ? `履歴を含めて ${visibleAssets.length} 件表示中` : `現行素材のみ ${visibleAssets.length} 件表示中`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAssetHistory((value) => !value)}
+                      className="rounded-full border border-slate-200 px-3 py-1 font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950"
+                    >
+                      {showAssetHistory ? '履歴を隠す' : '履歴表示'}
+                    </button>
+                  </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
                     <div key={type}>
                       <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                         {assetIcon(type)} {type} <span className="text-xs text-slate-400">{rows.length}</span>
                       </h3>
                       <div className="space-y-2">
-                        {rows.slice(0, 8).map((asset) => (
+                        {rows.slice(0, showAssetHistory ? 50 : 8).map((asset) => (
                           <AssetRow key={String(asset.id)} asset={asset} />
                         ))}
                       </div>
@@ -410,6 +442,11 @@ function compactJson(value: unknown) {
       .join(' / ');
   }
   return String(value);
+}
+
+function isSceneImageAsset(asset: AnyRow) {
+  const type = String(asset.asset_type || '');
+  return type === 'image' || type === 'thumbnail' || type === 'storyboard';
 }
 
 function AssetRow({ asset }: { asset: AnyRow }) {
