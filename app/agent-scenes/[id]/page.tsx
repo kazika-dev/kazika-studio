@@ -141,20 +141,30 @@ export default function AgentSceneDetailPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        {scriptLines.filter((line) => line.script_id === script.id).map((line) => (
-                          <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
-                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                              <span>#{line.line_index}</span>
-                              <span>{line.line_type}</span>
-                              {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
-                              {Number(line.audio_count || 0) > 0 && <span className="inline-flex items-center gap-1"><Mic2 size={13} /> {line.audio_count}</span>}
+                        {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
+                          const lineAudioAssets = assets.filter((asset) => asset.asset_type === 'audio' && asset.script_line_id === line.id);
+                          return (
+                            <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
+                              <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <span>#{line.line_index}</span>
+                                <span>{line.line_type}</span>
+                                {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
+                                {lineAudioAssets.length > 0 && <span className="inline-flex items-center gap-1"><Mic2 size={13} /> {lineAudioAssets.length}</span>}
+                              </div>
+                              <p className="leading-6 text-slate-800 dark:text-slate-100">{line.text}</p>
+                              {line.tts_text && line.tts_text !== line.text && (
+                                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {line.tts_text}</p>
+                              )}
+                              {lineAudioAssets.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  {lineAudioAssets.map((asset) => (
+                                    <AudioPlayer key={String(asset.id)} asset={asset} compact />
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <p className="leading-6 text-slate-800 dark:text-slate-100">{line.text}</p>
-                            {line.tts_text && line.tts_text !== line.text && (
-                              <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {line.tts_text}</p>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -285,6 +295,7 @@ function MiniCount({ label, value }: { label: string; value: number }) {
 }
 
 function AssetRow({ asset }: { asset: AnyRow }) {
+  const isAudio = asset.asset_type === 'audio';
   return (
     <div className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
       <div className="flex items-center justify-between gap-2">
@@ -294,16 +305,39 @@ function AssetRow({ asset }: { asset: AnyRow }) {
       <div className="mt-1 flex flex-wrap gap-2 text-slate-500 dark:text-slate-400">
         {asset.shot_index != null && <span>shot #{asset.shot_index}</span>}
         {asset.line_index != null && <span>line #{asset.line_index}</span>}
+        {asset.speaker_name && <span>{asset.speaker_name}</span>}
         {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
-      {typeof asset.url === 'string' && asset.url && (
-        <a href={asset.url} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
+      {isAudio && <AudioPlayer asset={asset} />}
+      {!isAudio && typeof asset.url === 'string' && asset.url && (
+        <a href={assetUrl(asset)} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
           {asset.url}
         </a>
       )}
     </div>
   );
+}
+
+function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: boolean }) {
+  const src = assetUrl(asset);
+  if (!src) return null;
+  return (
+    <div className={compact ? 'rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900' : 'mt-3'}>
+      <audio controls preload="none" src={src} className="h-9 w-full" />
+      <a href={src} target="_blank" rel="noreferrer" className="mt-1 block truncate text-[11px] text-indigo-600 hover:underline dark:text-indigo-300">
+        {String(asset.storage_path || asset.url || src)}
+      </a>
+    </div>
+  );
+}
+
+function assetUrl(asset: AnyRow) {
+  const raw = typeof asset.url === 'string' && asset.url ? asset.url : typeof asset.storage_path === 'string' ? asset.storage_path : '';
+  if (!raw) return '';
+  if (/^https?:\/\//.test(raw) || raw.startsWith('/api/storage/')) return raw;
+  const clean = raw.replace(/^\/+/, '').replace(/^api\/storage\//, '');
+  return `/api/storage/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 function assetIcon(type: string) {
