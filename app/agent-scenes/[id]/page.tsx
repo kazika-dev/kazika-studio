@@ -482,6 +482,7 @@ function AssetRow({ asset }: { asset: AnyRow }) {
   const isAudio = asset.asset_type === 'audio';
   const isVideo = asset.asset_type === 'video' || String(asset.mime_type || '').includes('video');
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
+  const canRemakeCheck = isAudio || asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
   const src = assetUrl(asset);
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
@@ -505,6 +506,7 @@ function AssetRow({ asset }: { asset: AnyRow }) {
         {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
+      {canRemakeCheck && <RemakeCheckControl asset={asset} />}
       {isAudio && <AudioPlayer asset={asset} />}
       {!isAudio && src && (
         <a href={src} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
@@ -521,6 +523,60 @@ function VideoPlayer({ asset }: { asset: AnyRow }) {
   return (
     <div className="mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
       <video controls preload="metadata" src={src} className="max-h-[420px] w-full max-w-full bg-black" />
+    </div>
+  );
+}
+
+function RemakeCheckControl({ asset }: { asset: AnyRow }) {
+  const metadata: Record<string, unknown> = isRecord(asset.metadata) ? asset.metadata : {};
+  const [checked, setChecked] = useState(Boolean(metadata.remake_check));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const assetId = String(asset.id ?? '');
+
+  const toggle = async () => {
+    if (!assetId || saving) return;
+    const nextChecked = !checked;
+    setChecked(nextChecked);
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/agent-assets/${assetId}/remake-check`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checked: nextChecked }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '保存に失敗しました');
+      }
+    } catch (err) {
+      setChecked(!nextChecked);
+      setError(err instanceof Error ? err.message : '保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={saving}
+        className="flex w-full items-center justify-between gap-3 text-left text-[12px] font-medium text-amber-800 disabled:opacity-60 dark:text-amber-200"
+        title="エージェントが作り直し対象として検索できます"
+      >
+        <span className="flex items-center gap-2">
+          <span className={`flex h-4 w-4 items-center justify-center rounded border ${checked ? 'border-amber-600 bg-amber-500 text-white' : 'border-amber-300 bg-white dark:border-amber-800 dark:bg-slate-950'}`}>
+            {checked && <Check size={12} />}
+          </span>
+          作り直しチェック
+        </span>
+        <span className="text-[11px] text-amber-600 dark:text-amber-300">{saving ? '保存中...' : checked ? 'ON' : 'OFF'}</span>
+      </button>
+      {checked && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">metadata.remake_check=true として保存済み。エージェントが再生成対象として拾えます。</p>}
+      {error && <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p>}
     </div>
   );
 }
@@ -588,6 +644,10 @@ function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
       {copied ? 'copied' : 'copy asset_id'}
     </button>
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function assetUrl(asset: AnyRow) {
