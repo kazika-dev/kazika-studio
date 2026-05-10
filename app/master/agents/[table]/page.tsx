@@ -10,6 +10,7 @@ const CONFIGS = {
   story_scenes: { displayName: 'シーン', description: 'kazika_studio_agents.story_scenes_domain', fields: { story_id: 'number', title: 'text', description: 'text', summary: 'text', location: 'text', time_of_day: 'text', mood: 'text', sequence_order: 'number', metadata: 'json' } },
   conversations: { displayName: '会話', description: 'kazika_studio_agents.conversations', fields: { story_scene_id: 'number', title: 'text', description: 'text', location: 'text', draft: 'text', metadata: 'json' } },
   conversation_messages: { displayName: '会話メッセージ', description: 'kazika_studio_agents.conversation_messages', fields: { conversation_id: 'number', character_id: 'number', speaker_name: 'text', message_text: 'text', sequence_order: 'number', timestamp_ms: 'number', scene_prompt_ja: 'text', scene_prompt_en: 'text', metadata: 'json' } },
+  text_templates: { displayName: 'テキストテンプレート', description: 'kazika_studio_agents.text_templates', fields: { source_text_template_id: 'number', user_id: 'text', name: 'text', name_ja: 'text', content: 'text', description: 'text', description_ja: 'text', category: 'text', is_active: 'boolean', metadata: 'json' } },
 } as const;
 
 type TableKey = keyof typeof CONFIGS;

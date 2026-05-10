@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Box, Button, Card, CardActions, CardContent, Container, Grid, Typography } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, People as PeopleIcon, RecordVoiceOver as VoiceIcon, AutoStories as StoryIcon, Movie as SceneIcon, Forum as ConversationIcon, Chat as MessageIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, People as PeopleIcon, RecordVoiceOver as VoiceIcon, AutoStories as StoryIcon, Movie as SceneIcon, Forum as ConversationIcon, Chat as MessageIcon, TextSnippet as TextTemplateIcon } from '@mui/icons-material';
 
 const tables = [
   { id: 'characters', title: 'キャラクター', description: 'agents側のキャラクター正本', icon: <PeopleIcon />, color: '#3f51b5' },
@@ -11,6 +11,7 @@ const tables = [
   { id: 'story_scenes', title: 'シーン', description: 'agents側の物語シーン', icon: <SceneIcon />, color: '#0288d1' },
   { id: 'conversations', title: '会話', description: 'agents側の会話コンテナ', icon: <ConversationIcon />, color: '#ef6c00' },
   { id: 'conversation_messages', title: '会話メッセージ', description: 'agents側のセリフ・発話', icon: <MessageIcon />, color: '#6d4c41' },
+  { id: 'text_templates', title: 'テキストテンプレート', description: 'agents側のプロンプト・テキスト雛形', icon: <TextTemplateIcon />, color: '#455a64' },
 ];
 
 export default function AgentMasterPage() {

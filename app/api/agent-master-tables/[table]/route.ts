@@ -12,6 +12,7 @@ const TABLES: Record<string, TableConfig> = {
   story_scenes: { table: 'story_scenes_domain', orderBy: 'sequence_order asc, id asc', required: ['title'], fields: { story_id: 'number', title: 'text', description: 'text', summary: 'text', location: 'text', time_of_day: 'text', mood: 'text', sequence_order: 'number', metadata: 'json' } },
   conversations: { table: 'conversations', orderBy: 'updated_at desc, id desc', required: ['title'], fields: { story_scene_id: 'number', title: 'text', description: 'text', location: 'text', draft: 'text', metadata: 'json' } },
   conversation_messages: { table: 'conversation_messages', orderBy: 'conversation_id desc, sequence_order asc, id asc', required: ['conversation_id', 'speaker_name', 'message_text', 'sequence_order'], fields: { conversation_id: 'number', character_id: 'number', speaker_name: 'text', message_text: 'text', sequence_order: 'number', timestamp_ms: 'number', scene_prompt_ja: 'text', scene_prompt_en: 'text', metadata: 'json' } },
+  text_templates: { table: 'text_templates', orderBy: 'updated_at desc, id desc', required: ['name', 'content'], fields: { source_text_template_id: 'number', user_id: 'text', name: 'text', name_ja: 'text', content: 'text', description: 'text', description_ja: 'text', category: 'text', is_active: 'boolean', metadata: 'json' } },
 };
 
 async function requireUser() {
