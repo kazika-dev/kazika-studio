@@ -146,8 +146,9 @@ export async function GET(
           from kazika_studio_agents.scene_layouts sl
           left join kazika_studio_agents.assets a on a.id = sl.asset_id
           where sl.agent_story_scene_id = $1
-          order by sl.is_active desc, sl.version desc, sl.id desc
-          limit 20
+            and sl.is_active = true
+          order by sl.version desc, sl.id desc
+          limit 5
         `,
         [scene.id]
       ),
