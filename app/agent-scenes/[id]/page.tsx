@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowLeft, Clapperboard, Clock, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, Clapperboard, Clock, Copy, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles } from 'lucide-react';
 
 type AnyRow = Record<string, ReactNode>;
 
@@ -307,7 +307,10 @@ function AssetRow({ asset }: { asset: AnyRow }) {
       )}
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
-        {asset.is_primary && <Badge>primary</Badge>}
+        <div className="flex shrink-0 items-center gap-2">
+          <CopyAssetIdButton assetId={asset.id} />
+          {asset.is_primary && <Badge>primary</Badge>}
+        </div>
       </div>
       <div className="mt-1 flex flex-wrap gap-2 text-slate-500 dark:text-slate-400">
         {asset.shot_index != null && <span>shot #{asset.shot_index}</span>}
@@ -331,11 +334,43 @@ function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: bool
   if (!src) return null;
   return (
     <div className={compact ? 'min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900' : 'mt-3 min-w-0 overflow-hidden'}>
+      {compact && (
+        <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">asset #{asset.id}</span>
+          <CopyAssetIdButton assetId={asset.id} />
+        </div>
+      )}
       <audio controls preload="none" src={src} className="h-9 w-full max-w-full" />
       <a href={src} target="_blank" rel="noreferrer" className="mt-1 block truncate text-[11px] text-indigo-600 hover:underline dark:text-indigo-300">
         {String(asset.storage_path || asset.url || src)}
       </a>
     </div>
+  );
+}
+
+
+function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const value = String(assetId ?? '');
+
+  const copy = async () => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      disabled={!value}
+      title="asset_idをコピー"
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? 'copied' : 'copy id'}
+    </button>
   );
 }
 
