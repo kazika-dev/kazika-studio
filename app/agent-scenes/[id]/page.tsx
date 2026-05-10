@@ -125,8 +125,8 @@ export default function AgentSceneDetailPage() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <div className="min-w-0 space-y-6">
             <Panel title="台本 / セリフ" icon={<ScrollText size={18} />}>
               {scripts.length === 0 && scriptLines.length === 0 ? (
                 <Empty>まだ scripts / script_lines がありません。</Empty>
@@ -200,7 +200,7 @@ export default function AgentSceneDetailPage() {
             </Panel>
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <Panel title="素材" icon={<Layers size={18} />}>
               {assets.length === 0 ? (
                 <Empty>まだ assets がありません。</Empty>
@@ -251,8 +251,8 @@ export default function AgentSceneDetailPage() {
 
 function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">{icon}{title}</h2>
+    <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+      <h2 className="mb-4 flex min-w-0 items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">{icon}{title}</h2>
       {children}
     </section>
   );
@@ -299,14 +299,14 @@ function AssetRow({ asset }: { asset: AnyRow }) {
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
   const src = assetUrl(asset);
   return (
-    <div className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
       {isImage && src && (
-        <a href={src} target="_blank" rel="noreferrer" className="mb-3 block overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
-          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
+        <a href={src} target="_blank" rel="noreferrer" className="mb-3 block max-w-full overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
+          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] h-auto w-full max-w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
         </a>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
         {asset.is_primary && <Badge>primary</Badge>}
       </div>
       <div className="mt-1 flex flex-wrap gap-2 text-slate-500 dark:text-slate-400">
@@ -330,8 +330,8 @@ function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: bool
   const src = assetUrl(asset);
   if (!src) return null;
   return (
-    <div className={compact ? 'rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900' : 'mt-3'}>
-      <audio controls preload="none" src={src} className="h-9 w-full" />
+    <div className={compact ? 'min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900' : 'mt-3 min-w-0 overflow-hidden'}>
+      <audio controls preload="none" src={src} className="h-9 w-full max-w-full" />
       <a href={src} target="_blank" rel="noreferrer" className="mt-1 block truncate text-[11px] text-indigo-600 hover:underline dark:text-indigo-300">
         {String(asset.storage_path || asset.url || src)}
       </a>
