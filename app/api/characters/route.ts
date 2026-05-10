@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
 /**
  * GET /api/characters
  * Get all character sheets for the authenticated user
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const db = await createKazikaClient();
 
@@ -19,38 +19,33 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
     console.log('[GET /api/characters] Fetching all characters for user:', user.id);
 
-    // Get all character sheets for the user
-    const { data: characters, error: charError } = await db
-      .from('character_sheets')
-      .select('id, name, image_url, description')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // Get all non-deleted character sheets for the user.
+    // Legacy/non-canonical sheets are soft-deleted via metadata.logical_deleted.
+    const charactersResult = await query(
+      `select id, name, image_url, description
+       from kazikastudio.character_sheets
+       where user_id = $1
+         and coalesce((metadata->>'logical_deleted')::boolean, false) = false
+       order by created_at desc`,
+      [user.id]
+    );
 
-    if (charError) {
-      console.error('[GET /api/characters] Error fetching characters:', charError);
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch characters' },
-        { status: 500 }
-      );
-    }
-
-    console.log('[GET /api/characters] Found characters:', characters?.length || 0);
+    console.log('[GET /api/characters] Found characters:', charactersResult.rows.length || 0);
 
     return NextResponse.json({
       success: true,
       data: {
-        characters: characters || []
+        characters: charactersResult.rows || []
       }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get characters error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

@@ -47,8 +47,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(Number(searchParams.get('limit') || 100), 300);
     const offset = Math.max(Number(searchParams.get('offset') || 0), 0);
-    const result = await query(`select * from kazika_studio_agents.${config.table} order by ${config.orderBy} limit $1 offset $2`, [limit, offset]);
-    const count = await query(`select count(*)::integer as total from kazika_studio_agents.${config.table}`);
+    const hideDeleted = table === 'characters' ? `where coalesce((metadata->>'logical_deleted')::boolean, false) = false` : '';
+    const result = await query(`select * from kazika_studio_agents.${config.table} ${hideDeleted} order by ${config.orderBy} limit $1 offset $2`, [limit, offset]);
+    const count = await query(`select count(*)::integer as total from kazika_studio_agents.${config.table} ${hideDeleted}`);
     return NextResponse.json({ success: true, data: { records: result.rows, total: count.rows[0]?.total || 0, fields: config.fields } });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to fetch records';
