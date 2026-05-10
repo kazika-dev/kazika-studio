@@ -1,0 +1,314 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ArrowLeft, Clapperboard, Clock, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles } from 'lucide-react';
+
+type AnyRow = Record<string, ReactNode>;
+
+type ScenePayload = {
+  scene: AnyRow;
+  scripts: AnyRow[];
+  scriptLines: AnyRow[];
+  conversations: AnyRow[];
+  shots: AnyRow[];
+  assets: AnyRow[];
+  timelineTracks: AnyRow[];
+  generationJobs: AnyRow[];
+};
+
+export default function AgentSceneDetailPage() {
+  const params = useParams();
+  const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
+  const sceneId = idParam ? Number.parseInt(idParam, 10) : NaN;
+
+  const [data, setData] = useState<ScenePayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!Number.isFinite(sceneId)) {
+      setError('無効なシーンIDです');
+      setLoading(false);
+      return;
+    }
+
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await fetch(`/api/agent-scenes/${sceneId}`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'シーンの取得に失敗しました');
+        }
+        setData(result.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'シーンの取得に失敗しました');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
+  }, [sceneId]);
+
+  const assetGroups = useMemo(() => {
+    const groups: Record<string, AnyRow[]> = {};
+    for (const asset of data?.assets || []) {
+      const key = typeof asset.asset_type === 'string' ? asset.asset_type : 'unknown';
+      groups[key] = groups[key] || [];
+      groups[key].push(asset);
+    }
+    return groups;
+  }, [data?.assets]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
+        <div className="mx-auto max-w-7xl">
+          <div className="h-8 w-40 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+          <div className="mt-6 h-56 animate-pulse rounded-3xl bg-white dark:bg-slate-900" />
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
+        <div className="mx-auto max-w-3xl">
+          <Link href="/agent-scenes" className="mb-4 inline-flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-300">
+            <ArrowLeft size={16} /> 新シーン一覧へ
+          </Link>
+          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+            <AlertCircle className="mt-0.5 shrink-0" size={18} />
+            <p>{error || 'シーンが見つかりません'}</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const { scene, scripts, scriptLines, conversations, shots, assets, timelineTracks, generationJobs } = data;
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
+      <div className="mx-auto max-w-7xl">
+        <Link href="/agent-scenes" className="mb-4 inline-flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-300">
+          <ArrowLeft size={16} /> 新シーン一覧へ
+        </Link>
+
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{scene.story_title}</p>
+              <h1 className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                {scene.summary || scene.description || 'シーン概要は未設定です。'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                {scene.location && <Badge>{scene.location}</Badge>}
+                {scene.time_of_day && <Badge>{scene.time_of_day}</Badge>}
+                {scene.mood && <Badge>{scene.mood}</Badge>}
+                {scene.source_story_scene_id && <Badge>source #{scene.source_story_scene_id}</Badge>}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[420px]">
+              <Stat icon={<ScrollText size={17} />} label="台本" value={scripts.length} />
+              <Stat icon={<Clapperboard size={17} />} label="ショット" value={shots.length} />
+              <Stat icon={<Layers size={17} />} label="素材" value={assets.length} />
+              <Stat icon={<Sparkles size={17} />} label="生成Job" value={generationJobs.length} />
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-6">
+            <Panel title="台本 / セリフ" icon={<ScrollText size={18} />}>
+              {scripts.length === 0 && scriptLines.length === 0 ? (
+                <Empty>まだ scripts / script_lines がありません。</Empty>
+              ) : (
+                <div className="space-y-5">
+                  {scripts.map((script) => (
+                    <div key={String(script.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="font-semibold text-slate-900 dark:text-white">{script.title}</h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">v{script.version} / {script.status} / {script.line_count || 0} lines</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {scriptLines.filter((line) => line.script_id === script.id).map((line) => (
+                          <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
+                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <span>#{line.line_index}</span>
+                              <span>{line.line_type}</span>
+                              {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
+                              {Number(line.audio_count || 0) > 0 && <span className="inline-flex items-center gap-1"><Mic2 size={13} /> {line.audio_count}</span>}
+                            </div>
+                            <p className="leading-6 text-slate-800 dark:text-slate-100">{line.text}</p>
+                            {line.tts_text && line.tts_text !== line.text && (
+                              <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {line.tts_text}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="ショット" icon={<Clapperboard size={18} />}>
+              {shots.length === 0 ? (
+                <Empty>まだ shots がありません。</Empty>
+              ) : (
+                <div className="space-y-3">
+                  {shots.map((shot) => (
+                    <div key={String(shot.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Shot #{shot.shot_index}</p>
+                          <h3 className="font-semibold text-slate-900 dark:text-white">{shot.title || 'Untitled shot'}</h3>
+                          {shot.description && <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{shot.description}</p>}
+                        </div>
+                        <Badge>{shot.asset_count || 0} assets</Badge>
+                      </div>
+                      {(shot.image_prompt || shot.video_prompt) && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {shot.image_prompt && <PromptBox label="image prompt" text={String(shot.image_prompt)} />}
+                          {shot.video_prompt && <PromptBox label="video prompt" text={String(shot.video_prompt)} />}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
+
+          <div className="space-y-6">
+            <Panel title="素材" icon={<Layers size={18} />}>
+              {assets.length === 0 ? (
+                <Empty>まだ assets がありません。</Empty>
+              ) : (
+                <div className="space-y-4">
+                  {Object.entries(assetGroups).map(([type, rows]) => (
+                    <div key={type}>
+                      <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                        {assetIcon(type)} {type} <span className="text-xs text-slate-400">{rows.length}</span>
+                      </h3>
+                      <div className="space-y-2">
+                        {rows.slice(0, 8).map((asset) => (
+                          <AssetRow key={String(asset.id)} asset={asset} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="会話 / タイムライン / Jobs" icon={<Clock size={18} />}>
+              <div className="grid gap-3">
+                <MiniCount label="Conversations" value={conversations.length} />
+                <MiniCount label="Timeline tracks" value={timelineTracks.length} />
+                <MiniCount label="Generation jobs" value={generationJobs.length} />
+              </div>
+              {generationJobs.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {generationJobs.slice(0, 8).map((job) => (
+                    <div key={String(job.id)} className="rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-950">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-800 dark:text-slate-100">{job.job_type}</span>
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{job.status}</span>
+                      </div>
+                      <p className="mt-1 text-slate-500 dark:text-slate-400">{job.provider}{job.model ? ` / ${job.model}` : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">{icon}{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Stat({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3 text-center dark:bg-slate-950">
+      <div className="mx-auto mb-1 flex justify-center text-indigo-500">{icon}</div>
+      <div className="text-xl font-bold text-slate-900 dark:text-white">{value}</div>
+      <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function Badge({ children }: { children: ReactNode }) {
+  return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{children}</span>;
+}
+
+function Empty({ children }: { children: ReactNode }) {
+  return <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">{children}</div>;
+}
+
+function PromptBox({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="line-clamp-4 text-xs leading-5 text-slate-600 dark:text-slate-300">{text}</p>
+    </div>
+  );
+}
+
+function MiniCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-950">
+      <span className="text-slate-600 dark:text-slate-300">{label}</span>
+      <span className="font-semibold text-slate-900 dark:text-white">{value}</span>
+    </div>
+  );
+}
+
+function AssetRow({ asset }: { asset: AnyRow }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
+        {asset.is_primary && <Badge>primary</Badge>}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-2 text-slate-500 dark:text-slate-400">
+        {asset.shot_index != null && <span>shot #{asset.shot_index}</span>}
+        {asset.line_index != null && <span>line #{asset.line_index}</span>}
+        {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
+        {asset.generation_status && <span>{asset.generation_status}</span>}
+      </div>
+      {typeof asset.url === 'string' && asset.url && (
+        <a href={asset.url} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
+          {asset.url}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function assetIcon(type: string) {
+  if (type.includes('audio')) return <Mic2 size={16} />;
+  if (type.includes('video')) return <Film size={16} />;
+  if (type.includes('image') || type.includes('thumbnail')) return <ImageIcon size={16} />;
+  return <Layers size={16} />;
+}

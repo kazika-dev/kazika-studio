@@ -1,0 +1,180 @@
+import { NextResponse } from 'next/server';
+import { createKazikaClient } from '@/lib/kazika-db-client';
+import { query } from '@/lib/db';
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const db = await createKazikaClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const sceneId = Number.parseInt(id, 10);
+    if (!Number.isFinite(sceneId)) {
+      return NextResponse.json({ success: false, error: 'Invalid scene id' }, { status: 400 });
+    }
+
+    const sceneResult = await query(
+      `
+        select
+          ssd.*,
+          st.title as story_title,
+          st.user_id,
+          st.description as story_description
+        from kazika_studio_agents.story_scenes_domain ssd
+        join kazika_studio_agents.stories st on st.id = ssd.story_id
+        where ssd.id = $1
+          and st.user_id = $2
+      `,
+      [sceneId, user.id]
+    );
+
+    const scene = sceneResult.rows[0];
+    if (!scene) {
+      return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
+    }
+
+    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, jobsResult] = await Promise.all([
+      query(
+        `
+          select
+            sc.*,
+            count(sl.id)::integer as line_count
+          from kazika_studio_agents.scripts sc
+          left join kazika_studio_agents.script_lines sl on sl.script_id = sc.id
+          where sc.agent_story_scene_id = $1
+             or sc.story_scene_id = $2
+          group by sc.id
+          order by sc.version desc, sc.id desc
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+      query(
+        `
+          select
+            c.*,
+            count(cm.id)::integer as message_count
+          from kazika_studio_agents.conversations c
+          left join kazika_studio_agents.conversation_messages cm on cm.conversation_id = c.id
+          where c.story_scene_id = $1
+          group by c.id
+          order by c.updated_at desc, c.id desc
+        `,
+        [scene.id]
+      ),
+      query(
+        `
+          select
+            sh.*,
+            count(a.id)::integer as asset_count
+          from kazika_studio_agents.shots sh
+          left join kazika_studio_agents.assets a on a.shot_id = sh.id
+          where sh.agent_story_scene_id = $1
+             or sh.story_scene_id = $2
+             or sh.script_id in (select id from kazika_studio_agents.scripts where agent_story_scene_id = $1)
+          group by sh.id
+          order by sh.shot_index asc, sh.id asc
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+      query(
+        `
+          select
+            a.*,
+            sl.line_index,
+            sl.speaker_name,
+            sh.shot_index,
+            gj.provider,
+            gj.model,
+            gj.status as generation_status
+          from kazika_studio_agents.assets a
+          left join kazika_studio_agents.script_lines sl on sl.id = a.script_line_id
+          left join kazika_studio_agents.shots sh on sh.id = a.shot_id
+          left join kazika_studio_agents.generation_jobs gj on gj.id = a.generation_job_id
+          where a.agent_story_scene_id = $1
+             or a.story_scene_id = $2
+             or a.script_id in (select id from kazika_studio_agents.scripts where agent_story_scene_id = $1)
+             or a.shot_id in (select id from kazika_studio_agents.shots where agent_story_scene_id = $1)
+          order by a.created_at desc, a.id desc
+          limit 200
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+      query(
+        `
+          select
+            tt.*,
+            count(tc.id)::integer as clip_count
+          from kazika_studio_agents.timeline_tracks tt
+          left join kazika_studio_agents.timeline_clips tc on tc.track_id = tt.id
+          where tt.agent_story_scene_id = $1
+             or tt.story_scene_id = $2
+          group by tt.id
+          order by tt.sort_order asc, tt.id asc
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+      query(
+        `
+          select *
+          from kazika_studio_agents.generation_jobs
+          where agent_story_scene_id = $1
+             or story_scene_id = $2
+          order by created_at desc, id desc
+          limit 100
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+    ]);
+
+    const scriptIds = scriptsResult.rows.map((script) => script.id);
+    const linesResult = scriptIds.length
+      ? await query(
+          `
+            select
+              sl.*,
+              ch.name as character_name,
+              ch.image_url as character_image_url,
+              count(a.id) filter (where a.asset_type = 'audio')::integer as audio_count
+            from kazika_studio_agents.script_lines sl
+            left join kazika_studio_agents.characters ch on ch.id = sl.agent_character_id or ch.source_character_sheet_id = sl.character_sheet_id
+            left join kazika_studio_agents.assets a on a.script_line_id = sl.id
+            where sl.script_id = any($1::bigint[])
+            group by sl.id, ch.name, ch.image_url
+            order by sl.script_id asc, sl.line_index asc
+          `,
+          [scriptIds]
+        )
+      : { rows: [] };
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        scene,
+        scripts: scriptsResult.rows,
+        scriptLines: linesResult.rows,
+        conversations: conversationsResult.rows,
+        shots: shotsResult.rows,
+        assets: assetsResult.rows,
+        timelineTracks: tracksResult.rows,
+        generationJobs: jobsResult.rows,
+      },
+    });
+  } catch (error: unknown) {
+    console.error('Failed to fetch agent scene:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch agent scene';
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
+  }
+}

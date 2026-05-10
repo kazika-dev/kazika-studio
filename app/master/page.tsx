@@ -25,6 +25,7 @@ import {
   Landscape as LandscapeIcon,
   Category as CategoryIcon,
   People as PeopleIcon,
+  Hub as HubIcon,
 } from '@mui/icons-material';
 
 interface MasterTable {
@@ -38,6 +39,15 @@ interface MasterTable {
 }
 
 const masterTables: MasterTable[] = [
+  {
+    id: 'agent_masters',
+    name: 'agent_masters',
+    displayName: 'Agentsマスタ',
+    description: 'kazika_studio_agents のキャラクター・ストーリー・会話を編集',
+    icon: <HubIcon />,
+    color: '#1e3a8a',
+    customPath: '/master/agents',
+  },
   {
     id: 'character_sheets',
     name: 'character_sheets',
