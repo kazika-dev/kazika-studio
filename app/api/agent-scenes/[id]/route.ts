@@ -43,7 +43,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
     }
 
-    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, jobsResult] = await Promise.all([
+    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, jobsResult, layoutsResult] = await Promise.all([
       query(
         `
           select
@@ -134,6 +134,23 @@ export async function GET(
         `,
         [scene.id, scene.source_story_scene_id]
       ),
+
+      query(
+        `
+          select
+            sl.*,
+            a.url as asset_url,
+            a.storage_path as asset_storage_path,
+            a.mime_type as asset_mime_type,
+            a.asset_type as linked_asset_type
+          from kazika_studio_agents.scene_layouts sl
+          left join kazika_studio_agents.assets a on a.id = sl.asset_id
+          where sl.agent_story_scene_id = $1
+          order by sl.is_active desc, sl.version desc, sl.id desc
+          limit 20
+        `,
+        [scene.id]
+      ),
     ]);
 
     const scriptIds = scriptsResult.rows.map((script) => script.id);
@@ -167,6 +184,7 @@ export async function GET(
         assets: assetsResult.rows,
         timelineTracks: tracksResult.rows,
         generationJobs: jobsResult.rows,
+        sceneLayouts: layoutsResult.rows,
       },
     });
   } catch (error: unknown) {

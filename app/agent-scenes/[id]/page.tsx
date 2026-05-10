@@ -17,6 +17,7 @@ type ScenePayload = {
   assets: AnyRow[];
   timelineTracks: AnyRow[];
   generationJobs: AnyRow[];
+  sceneLayouts: AnyRow[];
 };
 
 export default function AgentSceneDetailPage() {
@@ -92,7 +93,8 @@ export default function AgentSceneDetailPage() {
     );
   }
 
-  const { scene, scripts, scriptLines, conversations, shots, assets, timelineTracks, generationJobs } = data;
+  const { scene, scripts, scriptLines, conversations, shots, assets, timelineTracks, generationJobs, sceneLayouts } = data;
+  const layoutAssets = assets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -201,6 +203,25 @@ export default function AgentSceneDetailPage() {
           </div>
 
           <div className="min-w-0 space-y-6">
+            <Panel title="キャラクター配置図" icon={<Layers size={18} />}>
+              {sceneLayouts.length === 0 && layoutAssets.length === 0 ? (
+                <Empty>まだ配置図がありません。シーン作成時に layout_reference asset として登録します。</Empty>
+              ) : (
+                <div className="space-y-3">
+                  {sceneLayouts.slice(0, 3).map((layout) => (
+                    <SceneLayoutCard key={String(layout.id)} layout={layout} />
+                  ))}
+                  {layoutAssets.length > 0 && (
+                    <div className="space-y-2">
+                      {layoutAssets.slice(0, 3).map((asset) => (
+                        <AssetRow key={String(asset.id)} asset={asset} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Panel>
+
             <Panel title="素材" icon={<Layers size={18} />}>
               {assets.length === 0 ? (
                 <Empty>まだ assets がありません。</Empty>
@@ -294,9 +315,67 @@ function MiniCount({ label, value }: { label: string; value: number }) {
   );
 }
 
+
+function SceneLayoutCard({ layout }: { layout: AnyRow }) {
+  const characters = Array.isArray(layout.characters) ? layout.characters : [];
+  const anchors = Array.isArray(layout.anchors) ? layout.anchors : [];
+  const assetId = layout.asset_id || layout.linked_asset_id;
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-xs dark:border-indigo-950 dark:bg-indigo-950/30">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-slate-900 dark:text-white">{layout.title || 'キャラクター配置図'}</h3>
+            {layout.is_active && <Badge>active</Badge>}
+            {layout.version != null && <Badge>v{layout.version}</Badge>}
+          </div>
+          {layout.spatial_notes && <p className="mt-2 leading-5 text-slate-600 dark:text-slate-300">{String(layout.spatial_notes)}</p>}
+        </div>
+        {assetId && <CopyAssetIdButton assetId={assetId} />}
+      </div>
+      {(characters.length > 0 || anchors.length > 0) && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {characters.length > 0 && <JsonList label="characters" items={characters} />}
+          {anchors.length > 0 && <JsonList label="space anchors" items={anchors} />}
+        </div>
+      )}
+      <p className="mt-3 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+        配置図は相対位置・空間関係だけを参照。キャラ外見はキャラシ、画角/カメラワークは各ショット指示を優先。
+      </p>
+    </div>
+  );
+}
+
+function JsonList({ label, items }: { label: string; items: unknown[] }) {
+  return (
+    <div className="rounded-lg bg-white/70 p-2 dark:bg-slate-900/70">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <ul className="space-y-1 text-slate-600 dark:text-slate-300">
+        {items.slice(0, 5).map((item, index) => (
+          <li key={index} className="line-clamp-2">{compactJson(item)}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function compactJson(value: unknown) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.entries(record)
+      .slice(0, 4)
+      .map(([key, val]) => `${key}: ${typeof val === 'object' ? JSON.stringify(val) : String(val)}`)
+      .join(' / ');
+  }
+  return String(value);
+}
+
 function AssetRow({ asset }: { asset: AnyRow }) {
   const isAudio = asset.asset_type === 'audio';
-  const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
+  const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const src = assetUrl(asset);
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
@@ -385,6 +464,6 @@ function assetUrl(asset: AnyRow) {
 function assetIcon(type: string) {
   if (type.includes('audio')) return <Mic2 size={16} />;
   if (type.includes('video')) return <Film size={16} />;
-  if (type.includes('image') || type.includes('thumbnail')) return <ImageIcon size={16} />;
+  if (type.includes('image') || type.includes('thumbnail') || type.includes('layout') || type.includes('diagram')) return <ImageIcon size={16} />;
   return <Layers size={16} />;
 }
