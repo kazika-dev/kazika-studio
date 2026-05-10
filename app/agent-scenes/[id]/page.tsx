@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowLeft, Check, Clapperboard, Clock, Copy, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, Clapperboard, Clock, Copy, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles, Users } from 'lucide-react';
 
 type AnyRow = Record<string, ReactNode>;
 
@@ -12,6 +12,7 @@ type ScenePayload = {
   scene: AnyRow;
   scripts: AnyRow[];
   scriptLines: AnyRow[];
+  characters: AnyRow[];
   conversations: AnyRow[];
   shots: AnyRow[];
   assets: AnyRow[];
@@ -93,7 +94,7 @@ export default function AgentSceneDetailPage() {
     );
   }
 
-  const { scene, scripts, scriptLines, conversations, shots, assets, timelineTracks, generationJobs, sceneLayouts } = data;
+  const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, generationJobs, sceneLayouts } = data;
   const layoutAssets = assets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
 
   return (
@@ -129,6 +130,37 @@ export default function AgentSceneDetailPage() {
 
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div className="min-w-0 space-y-6">
+            <Panel title="登場キャラクター" icon={<Users size={18} />}>
+              {characters.length === 0 ? (
+                <Empty>まだ登場キャラクター情報がありません。</Empty>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {characters.map((character) => (
+                    <CharacterCard key={String(character.id)} character={character} />
+                  ))}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="キャラクター配置図" icon={<Layers size={18} />}>
+              {sceneLayouts.length === 0 && layoutAssets.length === 0 ? (
+                <Empty>まだ配置図がありません。シーン作成時に layout_reference asset として登録します。</Empty>
+              ) : (
+                <div className="space-y-3">
+                  {sceneLayouts.slice(0, 3).map((layout) => (
+                    <SceneLayoutCard key={String(layout.id)} layout={layout} />
+                  ))}
+                  {layoutAssets.length > 0 && (
+                    <div className="space-y-2">
+                      {layoutAssets.slice(0, 3).map((asset) => (
+                        <AssetRow key={String(asset.id)} asset={asset} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Panel>
+
             <Panel title="台本 / セリフ" icon={<ScrollText size={18} />}>
               {scripts.length === 0 && scriptLines.length === 0 ? (
                 <Empty>まだ scripts / script_lines がありません。</Empty>
@@ -203,25 +235,6 @@ export default function AgentSceneDetailPage() {
           </div>
 
           <div className="min-w-0 space-y-6">
-            <Panel title="キャラクター配置図" icon={<Layers size={18} />}>
-              {sceneLayouts.length === 0 && layoutAssets.length === 0 ? (
-                <Empty>まだ配置図がありません。シーン作成時に layout_reference asset として登録します。</Empty>
-              ) : (
-                <div className="space-y-3">
-                  {sceneLayouts.slice(0, 3).map((layout) => (
-                    <SceneLayoutCard key={String(layout.id)} layout={layout} />
-                  ))}
-                  {layoutAssets.length > 0 && (
-                    <div className="space-y-2">
-                      {layoutAssets.slice(0, 3).map((asset) => (
-                        <AssetRow key={String(asset.id)} asset={asset} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Panel>
-
             <Panel title="素材" icon={<Layers size={18} />}>
               {assets.length === 0 ? (
                 <Empty>まだ assets がありません。</Empty>
@@ -315,6 +328,32 @@ function MiniCount({ label, value }: { label: string; value: number }) {
   );
 }
 
+
+
+function CharacterCard({ character }: { character: AnyRow }) {
+  const imageUrl = typeof character.image_url === 'string' ? storageUrl(character.image_url) : '';
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex items-start gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-900">
+          {imageUrl ? (
+            <img src={imageUrl} alt={String(character.name || 'character')} className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <Users size={20} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className="truncate font-semibold text-slate-900 dark:text-white">{character.name}</h3>
+            {character.is_favorite && <Badge>fav</Badge>}
+          </div>
+          {character.video_character_tag && <p className="mt-1 truncate text-[11px] text-indigo-600 dark:text-indigo-300">{String(character.video_character_tag)}</p>}
+          {character.looks && <p className="mt-1 line-clamp-2 leading-5 text-slate-500 dark:text-slate-400">{String(character.looks)}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SceneLayoutCard({ layout }: { layout: AnyRow }) {
   const characters = Array.isArray(layout.characters) ? layout.characters : [];
@@ -455,6 +494,10 @@ function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
 
 function assetUrl(asset: AnyRow) {
   const raw = typeof asset.url === 'string' && asset.url ? asset.url : typeof asset.storage_path === 'string' ? asset.storage_path : '';
+  return storageUrl(raw);
+}
+
+function storageUrl(raw: string) {
   if (!raw) return '';
   if (/^https?:\/\//.test(raw) || raw.startsWith('/api/storage/')) return raw;
   const clean = raw.replace(/^\/+/, '').replace(/^api\/storage\//, '');

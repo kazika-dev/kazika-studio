@@ -173,12 +173,54 @@ export async function GET(
         )
       : { rows: [] };
 
+    const charactersResult = await query(
+      `
+        with metadata_character_ids as (
+          select (jsonb_array_elements_text(coalesce(ssd.metadata->'speaker_character_ids', '[]'::jsonb)))::bigint as id
+          from kazika_studio_agents.story_scenes_domain ssd
+          where ssd.id = $1
+          union
+          select (jsonb_array_elements_text(coalesce(ssd.metadata->'mentioned_character_ids', '[]'::jsonb)))::bigint as id
+          from kazika_studio_agents.story_scenes_domain ssd
+          where ssd.id = $1
+        ),
+        line_character_ids as (
+          select distinct sl.agent_character_id as id
+          from kazika_studio_agents.script_lines sl
+          where sl.script_id = any($2::bigint[])
+            and sl.agent_character_id is not null
+        ),
+        layout_character_names as (
+          select distinct nullif(item->>'name', '') as name
+          from kazika_studio_agents.scene_layouts layout
+          cross join lateral jsonb_array_elements(coalesce(layout.characters, '[]'::jsonb)) item
+          where layout.agent_story_scene_id = $1
+            and layout.is_active
+        )
+        select distinct on (ch.id)
+          ch.id,
+          ch.name,
+          ch.image_url,
+          ch.description,
+          ch.personality,
+          ch.looks,
+          ch.video_character_tag,
+          ch.is_favorite
+        from kazika_studio_agents.characters ch
+        where ch.id in (select id from metadata_character_ids union select id from line_character_ids)
+           or ch.name in (select name from layout_character_names where name is not null)
+        order by ch.id asc
+      `,
+      [scene.id, scriptIds]
+    );
+
     return NextResponse.json({
       success: true,
       data: {
         scene,
         scripts: scriptsResult.rows,
         scriptLines: linesResult.rows,
+        characters: charactersResult.rows,
         conversations: conversationsResult.rows,
         shots: shotsResult.rows,
         assets: assetsResult.rows,
