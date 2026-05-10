@@ -43,7 +43,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
     }
 
-    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, jobsResult, layoutsResult] = await Promise.all([
+    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, clipsResult, jobsResult, layoutsResult] = await Promise.all([
       query(
         `
           select
@@ -120,6 +120,27 @@ export async function GET(
              or tt.story_scene_id = $2
           group by tt.id
           order by tt.sort_order asc, tt.id asc
+        `,
+        [scene.id, scene.source_story_scene_id]
+      ),
+      query(
+        `
+          select
+            tc.*,
+            tt.name as track_name,
+            tt.track_type,
+            tt.sort_order as track_sort_order,
+            a.asset_type,
+            a.url as asset_url,
+            a.storage_path as asset_storage_path,
+            a.mime_type as asset_mime_type,
+            a.duration_seconds as asset_duration_seconds
+          from kazika_studio_agents.timeline_clips tc
+          join kazika_studio_agents.timeline_tracks tt on tt.id = tc.track_id
+          left join kazika_studio_agents.assets a on a.id = tc.asset_id
+          where tt.agent_story_scene_id = $1
+             or tt.story_scene_id = $2
+          order by tt.sort_order asc, tc.start_time_ms asc, tc.id asc
         `,
         [scene.id, scene.source_story_scene_id]
       ),
@@ -226,6 +247,7 @@ export async function GET(
         shots: shotsResult.rows,
         assets: assetsResult.rows,
         timelineTracks: tracksResult.rows,
+        timelineClips: clipsResult.rows,
         generationJobs: jobsResult.rows,
         sceneLayouts: layoutsResult.rows,
       },

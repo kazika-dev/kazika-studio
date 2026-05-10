@@ -17,6 +17,7 @@ type ScenePayload = {
   shots: AnyRow[];
   assets: AnyRow[];
   timelineTracks: AnyRow[];
+  timelineClips: AnyRow[];
   generationJobs: AnyRow[];
   sceneLayouts: AnyRow[];
 };
@@ -114,7 +115,7 @@ export default function AgentSceneDetailPage() {
     );
   }
 
-  const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, generationJobs, sceneLayouts } = data;
+  const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
 
   return (
@@ -292,8 +293,36 @@ export default function AgentSceneDetailPage() {
               <div className="grid gap-3">
                 <MiniCount label="Conversations" value={conversations.length} />
                 <MiniCount label="Timeline tracks" value={timelineTracks.length} />
+                <MiniCount label="Timeline clips" value={timelineClips.length} />
                 <MiniCount label="Generation jobs" value={generationJobs.length} />
               </div>
+              {timelineTracks.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {timelineTracks.map((track) => {
+                    const clips = timelineClips.filter((clip) => String(clip.track_id) === String(track.id));
+                    return (
+                      <div key={String(track.id)} className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {assetIcon(String(track.track_type || ''))}
+                            <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">{track.name || `Track #${track.id}`}</span>
+                          </div>
+                          <Badge>{String(track.track_type || 'track')} / {clips.length} clips</Badge>
+                        </div>
+                        {clips.length === 0 ? (
+                          <p className="text-slate-500 dark:text-slate-400">まだクリップがありません。</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {clips.map((clip) => (
+                              <TimelineClipRow key={String(clip.id)} clip={clip} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {generationJobs.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {generationJobs.slice(0, 8).map((job) => (
@@ -451,6 +480,7 @@ function isSceneImageAsset(asset: AnyRow) {
 
 function AssetRow({ asset }: { asset: AnyRow }) {
   const isAudio = asset.asset_type === 'audio';
+  const isVideo = asset.asset_type === 'video' || String(asset.mime_type || '').includes('video');
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const src = assetUrl(asset);
   return (
@@ -460,6 +490,7 @@ function AssetRow({ asset }: { asset: AnyRow }) {
           <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] h-auto w-full max-w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
         </a>
       )}
+      {isVideo && src && <VideoPlayer asset={asset} />}
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
         <div className="flex shrink-0 items-center gap-2">
@@ -478,6 +509,35 @@ function AssetRow({ asset }: { asset: AnyRow }) {
       {!isAudio && src && (
         <a href={src} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
           {String(asset.storage_path || asset.url || src)}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function VideoPlayer({ asset }: { asset: AnyRow }) {
+  const src = assetUrl(asset);
+  if (!src) return null;
+  return (
+    <div className="mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
+      <video controls preload="metadata" src={src} className="max-h-[420px] w-full max-w-full bg-black" />
+    </div>
+  );
+}
+
+function TimelineClipRow({ clip }: { clip: AnyRow }) {
+  const src = assetUrl({ url: clip.asset_url, storage_path: clip.asset_storage_path });
+  return (
+    <div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-950">
+      <div className="flex flex-wrap items-center gap-2 text-slate-500 dark:text-slate-400">
+        <span>clip #{clip.id}</span>
+        {clip.asset_id != null && <span>asset #{clip.asset_id}</span>}
+        <span>{formatMs(clip.start_time_ms)} → {formatMs(clip.end_time_ms)}</span>
+        {clip.asset_duration_seconds != null && <span>source {Number(clip.asset_duration_seconds).toFixed(1)}s</span>}
+      </div>
+      {src && (
+        <a href={src} target="_blank" rel="noreferrer" className="mt-1 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
+          {String(clip.asset_storage_path || clip.asset_url || src)}
         </a>
       )}
     </div>
@@ -540,6 +600,12 @@ function storageUrl(raw: string) {
   if (/^https?:\/\//.test(raw) || raw.startsWith('/api/storage/')) return raw;
   const clean = raw.replace(/^\/+/, '').replace(/^api\/storage\//, '');
   return `/api/storage/${clean.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+function formatMs(value: ReactNode) {
+  const ms = Number(value ?? 0);
+  if (!Number.isFinite(ms)) return '0.00s';
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function assetIcon(type: string) {
