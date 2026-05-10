@@ -470,10 +470,11 @@ function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: bool
 function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const value = String(assetId ?? '');
+  const copyValue = value ? `asset_id: ${value}` : '';
 
   const copy = async () => {
-    if (!value) return;
-    await navigator.clipboard.writeText(value);
+    if (!copyValue) return;
+    await navigator.clipboard.writeText(copyValue);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
@@ -482,12 +483,12 @@ function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
     <button
       type="button"
       onClick={copy}
-      disabled={!value}
-      title="asset_idをコピー"
+      disabled={!copyValue}
+      title="asset_id: 形式でコピー"
       className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? 'copied' : 'copy id'}
+      {copied ? 'copied' : 'copy asset_id'}
     </button>
   );
 }
