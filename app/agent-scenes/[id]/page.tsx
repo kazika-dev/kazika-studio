@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowLeft, Check, Clapperboard, Clock, Copy, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles, Users } from 'lucide-react';
 
-type AnyRow = Record<string, ReactNode>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRow = Record<string, any>;
 
 type ScenePayload = {
   scene: AnyRow;
@@ -31,6 +32,8 @@ export default function AgentSceneDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAssetHistory, setShowAssetHistory] = useState(false);
+  const [savingDisplayAssetId, setSavingDisplayAssetId] = useState('');
+  const [displayError, setDisplayError] = useState('');
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -64,6 +67,7 @@ export default function AgentSceneDetailPage() {
     const activeLayoutAssetIds = new Set((data?.sceneLayouts || []).map((layout) => String(layout.asset_id || '')));
     const imageAssets = allAssets.filter((asset) => isSceneImageAsset(asset));
     const latestImageCreatedAt = imageAssets[0]?.created_at ? String(imageAssets[0].created_at) : '';
+    const imageDisplayConfigured = imageAssets.some((asset) => hasSceneImageDisplayConfig(asset));
 
     return allAssets.filter((asset) => {
       const type = String(asset.asset_type || 'unknown');
@@ -71,22 +75,130 @@ export default function AgentSceneDetailPage() {
         return Boolean(asset.is_primary) || activeLayoutAssetIds.has(String(asset.id));
       }
       if (type === 'audio') return Boolean(asset.is_primary);
-      if (isSceneImageAsset(asset)) return latestImageCreatedAt ? String(asset.created_at) === latestImageCreatedAt : Boolean(asset.is_primary);
+      if (isSceneImageAsset(asset)) {
+        return imageDisplayConfigured
+          ? isSceneImageEnabled(asset)
+          : latestImageCreatedAt ? String(asset.created_at) === latestImageCreatedAt : Boolean(asset.is_primary);
+      }
       return Boolean(asset.is_primary);
-    });
+    }).sort(sortSceneAssets);
   }, [data?.assets, data?.sceneLayouts]);
 
   const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
 
+  const materialAssets = useMemo(
+    () => visibleAssets.filter((asset) => !(asset.asset_type === 'audio' && asset.script_line_id)).sort(sortSceneAssets),
+    [visibleAssets]
+  );
+
+  const sceneImageAssets = useMemo(
+    () => (data?.assets || []).filter((asset) => isSceneImageAsset(asset)).sort(sortSceneAssets),
+    [data?.assets]
+  );
+
+  const imageDisplayConfigured = useMemo(
+    () => sceneImageAssets.some((asset) => hasSceneImageDisplayConfig(asset)),
+    [sceneImageAssets]
+  );
+
+  const enabledSceneImageAssets = useMemo(
+    () => (imageDisplayConfigured ? sceneImageAssets.filter((asset) => isSceneImageEnabled(asset)) : currentAssets.filter((asset) => isSceneImageAsset(asset))).sort(sortSceneAssets),
+    [currentAssets, imageDisplayConfigured, sceneImageAssets]
+  );
+
   const assetGroups = useMemo(() => {
     const groups: Record<string, AnyRow[]> = {};
-    for (const asset of visibleAssets) {
+    for (const asset of materialAssets) {
       const key = typeof asset.asset_type === 'string' ? asset.asset_type : 'unknown';
       groups[key] = groups[key] || [];
       groups[key].push(asset);
     }
+    for (const key of Object.keys(groups)) {
+      groups[key] = groups[key].sort(sortSceneAssets);
+    }
     return groups;
-  }, [visibleAssets]);
+  }, [materialAssets]);
+
+  const persistSceneImageSettings = async (nextAssets: AnyRow[], targetAssetId: string) => {
+    if (!Number.isFinite(sceneId)) return;
+    setSavingDisplayAssetId(targetAssetId);
+    setDisplayError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/assets`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: nextAssets.map((asset, index) => ({
+            id: asset.id,
+            scene_image_enabled: isSceneImageEnabled(asset),
+            scene_image_order: getSceneImageOrder(asset) || index + 1,
+          })),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '画像表示設定の保存に失敗しました');
+      }
+      const updatedById = new Map<string, AnyRow>((result.data?.assets || []).map((asset: AnyRow) => [String(asset.id), asset]));
+      setData((current) => current ? {
+        ...current,
+        assets: current.assets.map((asset) => {
+          const updated = updatedById.get(String(asset.id));
+          return updated ? { ...asset, metadata: updated.metadata } : asset;
+        }),
+      } : current);
+    } catch (err) {
+      setDisplayError(err instanceof Error ? err.message : '画像表示設定の保存に失敗しました');
+    } finally {
+      setSavingDisplayAssetId('');
+    }
+  };
+
+  const toggleSceneImage = (asset: AnyRow) => {
+    const assetId = String(asset.id || '');
+    const currentlyEnabledIds = new Set(enabledSceneImageAssets.map((item) => String(item.id)));
+    const nextEnabled = !currentlyEnabledIds.has(assetId);
+    const maxOrder = Math.max(0, ...enabledSceneImageAssets.map((item, index) => getSceneImageOrder(item) || index + 1));
+    const nextAssets = sceneImageAssets.map((item) => {
+      const itemId = String(item.id);
+      const itemEnabled = itemId === assetId ? nextEnabled : currentlyEnabledIds.has(itemId);
+      return {
+        ...item,
+        metadata: {
+          ...assetMetadata(item),
+          scene_image_enabled: itemEnabled,
+          scene_image_order: getSceneImageOrder(item) || (itemEnabled ? maxOrder + 1 : sceneImageAssets.findIndex((candidate) => String(candidate.id) === itemId) + 1),
+        },
+      };
+    });
+    void persistSceneImageSettings(nextAssets, assetId);
+  };
+
+  const moveSceneImage = (asset: AnyRow, direction: -1 | 1) => {
+    const assetId = String(asset.id || '');
+    const enabled = enabledSceneImageAssets;
+    const currentIndex = enabled.findIndex((item) => String(item.id) === assetId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= enabled.length) return;
+
+    const reorderedEnabled = [...enabled];
+    const [moved] = reorderedEnabled.splice(currentIndex, 1);
+    reorderedEnabled.splice(nextIndex, 0, moved);
+    const orderById = new Map(reorderedEnabled.map((item, index) => [String(item.id), index + 1]));
+    const nextAssets = sceneImageAssets.map((item) => {
+      const nextOrder = orderById.get(String(item.id));
+      if (!nextOrder) return item;
+      return {
+        ...item,
+        metadata: {
+          ...assetMetadata(item),
+          scene_image_enabled: true,
+          scene_image_order: nextOrder,
+        },
+      };
+    });
+    void persistSceneImageSettings(nextAssets, assetId);
+  };
 
   if (loading) {
     return (
@@ -261,17 +373,23 @@ export default function AgentSceneDetailPage() {
                 <Empty>まだ assets がありません。</Empty>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
-                    <span className="text-slate-500 dark:text-slate-400">
-                      {showAssetHistory ? `履歴を含めて ${visibleAssets.length} 件表示中` : `現行素材のみ ${visibleAssets.length} 件表示中`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowAssetHistory((value) => !value)}
-                      className="rounded-full border border-slate-200 px-3 py-1 font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950"
-                    >
-                      {showAssetHistory ? '履歴を隠す' : '履歴表示'}
-                    </button>
+                  <div className="space-y-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {showAssetHistory ? `履歴を含めて ${materialAssets.length} 件表示中` : `使用中素材のみ ${materialAssets.length} 件表示中`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAssetHistory((value) => !value)}
+                        className="rounded-full border border-slate-200 px-3 py-1 font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950"
+                      >
+                        {showAssetHistory ? '履歴を隠す' : '履歴表示'}
+                      </button>
+                    </div>
+                    <p className="leading-5 text-slate-500 dark:text-slate-400">
+                      画像カードの「使う / 使わない」でシーン表示対象を切替、↑↓で使用画像の順番を保存できます。過去画像を使いたい時は履歴表示をON。
+                    </p>
+                    {displayError && <p className="text-red-600 dark:text-red-300">{displayError}</p>}
                   </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
                     <div key={type}>
@@ -280,7 +398,14 @@ export default function AgentSceneDetailPage() {
                       </h3>
                       <div className="space-y-2">
                         {rows.slice(0, showAssetHistory ? 50 : 8).map((asset) => (
-                          <AssetRow key={String(asset.id)} asset={asset} />
+                          <AssetRow
+                            key={String(asset.id)}
+                            asset={asset}
+                            enabledSceneImageAssets={enabledSceneImageAssets}
+                            savingDisplayAssetId={savingDisplayAssetId}
+                            onToggleSceneImage={toggleSceneImage}
+                            onMoveSceneImage={moveSceneImage}
+                          />
                         ))}
                       </div>
                     </div>
@@ -478,11 +603,55 @@ function isSceneImageAsset(asset: AnyRow) {
   return type === 'image' || type === 'thumbnail' || type === 'storyboard';
 }
 
-function AssetRow({ asset }: { asset: AnyRow }) {
+function assetMetadata(asset: AnyRow): Record<string, unknown> {
+  return isRecord(asset.metadata) ? asset.metadata : {};
+}
+
+function hasSceneImageDisplayConfig(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return typeof metadata.scene_image_enabled === 'boolean' || metadata.scene_image_order != null;
+}
+
+function isSceneImageEnabled(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return metadata.scene_image_enabled !== false;
+}
+
+function getSceneImageOrder(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  const raw = metadata.scene_image_order;
+  const order = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(order) && order > 0 ? order : 0;
+}
+
+function sortSceneAssets(a: AnyRow, b: AnyRow) {
+  const aIsImage = isSceneImageAsset(a);
+  const bIsImage = isSceneImageAsset(b);
+  if (aIsImage && bIsImage) {
+    const aOrder = getSceneImageOrder(a);
+    const bOrder = getSceneImageOrder(b);
+    if (aOrder || bOrder) return (aOrder || Number.MAX_SAFE_INTEGER) - (bOrder || Number.MAX_SAFE_INTEGER);
+  }
+  const aCreated = Date.parse(String(a.created_at || '')) || 0;
+  const bCreated = Date.parse(String(b.created_at || '')) || 0;
+  if (aCreated !== bCreated) return bCreated - aCreated;
+  return Number(b.id || 0) - Number(a.id || 0);
+}
+
+type AssetRowProps = {
+  asset: AnyRow;
+  enabledSceneImageAssets?: AnyRow[];
+  savingDisplayAssetId?: string;
+  onToggleSceneImage?: (asset: AnyRow) => void;
+  onMoveSceneImage?: (asset: AnyRow, direction: -1 | 1) => void;
+};
+
+function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', onToggleSceneImage, onMoveSceneImage }: AssetRowProps) {
   const isAudio = asset.asset_type === 'audio';
   const isVideo = asset.asset_type === 'video' || String(asset.mime_type || '').includes('video');
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const canRemakeCheck = isAudio || asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
+  const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
@@ -506,6 +675,15 @@ function AssetRow({ asset }: { asset: AnyRow }) {
         {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
+      {canEditSceneImageDisplay && (
+        <SceneImageDisplayControl
+          asset={asset}
+          enabledSceneImageAssets={enabledSceneImageAssets}
+          saving={savingDisplayAssetId === String(asset.id)}
+          onToggle={() => onToggleSceneImage?.(asset)}
+          onMove={(direction) => onMoveSceneImage?.(asset, direction)}
+        />
+      )}
       {canRemakeCheck && <RemakeCheckControl asset={asset} />}
       {isAudio && <AudioPlayer asset={asset} />}
       {!isAudio && src && (
@@ -513,6 +691,68 @@ function AssetRow({ asset }: { asset: AnyRow }) {
           {String(asset.storage_path || asset.url || src)}
         </a>
       )}
+    </div>
+  );
+}
+
+
+function SceneImageDisplayControl({
+  asset,
+  enabledSceneImageAssets,
+  saving,
+  onToggle,
+  onMove,
+}: {
+  asset: AnyRow;
+  enabledSceneImageAssets: AnyRow[];
+  saving: boolean;
+  onToggle: () => void;
+  onMove: (direction: -1 | 1) => void;
+}) {
+  const enabledIndex = enabledSceneImageAssets.findIndex((item) => String(item.id) === String(asset.id));
+  const enabled = enabledIndex >= 0;
+  const order = getSceneImageOrder(asset) || (enabled ? enabledIndex + 1 : 0);
+  const canMoveUp = enabled && enabledIndex > 0;
+  const canMoveDown = enabled && enabledIndex >= 0 && enabledIndex < enabledSceneImageAssets.length - 1;
+
+  return (
+    <div className={`mt-3 rounded-lg border px-3 py-2 ${enabled ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40' : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={saving}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium transition disabled:opacity-60 ${enabled ? 'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-slate-950 dark:text-emerald-300' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}
+          title="この画像をシーンページで使うか切り替え"
+        >
+          {enabled ? <Eye size={13} /> : <EyeOff size={13} />}
+          {saving ? '保存中...' : enabled ? 'シーンで使う' : '使わない'}
+        </button>
+        <div className="flex items-center gap-1">
+          {enabled && <span className="mr-1 rounded-full bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-slate-950 dark:text-emerald-300">順番 {order || enabledIndex + 1}</span>}
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={!canMoveUp || saving}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+            title="使用画像の順番を上へ"
+          >
+            <ArrowUp size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={!canMoveDown || saving}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+            title="使用画像の順番を下へ"
+          >
+            <ArrowDown size={13} />
+          </button>
+        </div>
+      </div>
+      <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+        {enabled ? '通常表示ではこの順番で並びます。' : '通常表示から外れます。履歴表示をONにすると再度選べます。'}
+      </p>
     </div>
   );
 }
@@ -608,15 +848,43 @@ function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: bool
       {compact && (
         <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">asset #{asset.id}</span>
-          <CopyAssetIdButton assetId={asset.id} />
+          <div className="flex shrink-0 items-center gap-1">
+            <DownloadAudioButton asset={asset} src={src} />
+            <CopyAssetIdButton assetId={asset.id} />
+          </div>
         </div>
       )}
       <audio controls preload="none" src={src} className="h-9 w-full max-w-full" />
-      <a href={src} target="_blank" rel="noreferrer" className="mt-1 block truncate text-[11px] text-indigo-600 hover:underline dark:text-indigo-300">
-        {String(asset.storage_path || asset.url || src)}
-      </a>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+        {!compact && <DownloadAudioButton asset={asset} src={src} />}
+        <a href={src} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[11px] text-indigo-600 hover:underline dark:text-indigo-300">
+          {String(asset.storage_path || asset.url || src)}
+        </a>
+      </div>
     </div>
   );
+}
+
+function DownloadAudioButton({ asset, src }: { asset: AnyRow; src: string }) {
+  return (
+    <a
+      href={src}
+      download={audioDownloadName(asset)}
+      title="音声ファイルをダウンロード"
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+    >
+      <Download size={12} />
+      download
+    </a>
+  );
+}
+
+function audioDownloadName(asset: AnyRow) {
+  const path = String(asset.storage_path || asset.url || '');
+  const basename = path.split('/').pop()?.split('?')[0] || '';
+  if (basename) return basename;
+  const ext = String(asset.mime_type || '').includes('mpeg') ? 'mp3' : String(asset.mime_type || '').includes('wav') ? 'wav' : 'audio';
+  return `asset-${String(asset.id || 'audio')}.${ext}`;
 }
 
 
