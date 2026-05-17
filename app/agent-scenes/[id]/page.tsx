@@ -34,8 +34,10 @@ export default function AgentSceneDetailPage() {
   const [showAssetHistory, setShowAssetHistory] = useState(false);
   const [savingDisplayAssetId, setSavingDisplayAssetId] = useState('');
   const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
+  const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
+  const [dialogueError, setDialogueError] = useState('');
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -172,6 +174,43 @@ export default function AgentSceneDetailPage() {
       setLinkError(err instanceof Error ? err.message : '素材の紐付け保存に失敗しました');
     } finally {
       setSavingLinkAssetId('');
+    }
+  };
+
+  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string) => {
+    if (!Number.isFinite(sceneId)) return;
+    const lineId = String(line.id || '');
+    if (!lineId) return;
+    setSavingDialogueLineId(lineId);
+    setDialogueError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/script-lines/${lineId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: nextText,
+          tts_text: nextTtsText,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '会話の保存に失敗しました');
+      }
+      const updatedLine = result.data?.scriptLine;
+      const updatedScript = result.data?.script;
+      setData((current) => current ? {
+        ...current,
+        scripts: updatedScript
+          ? current.scripts.map((script) => String(script.id) === String(updatedScript.id) ? { ...script, ...updatedScript } : script)
+          : current.scripts,
+        scriptLines: updatedLine
+          ? current.scriptLines.map((row) => String(row.id) === String(updatedLine.id) ? { ...row, ...updatedLine } : row)
+          : current.scriptLines,
+      } : current);
+    } catch (err) {
+      setDialogueError(err instanceof Error ? err.message : '会話の保存に失敗しました');
+    } finally {
+      setSavingDialogueLineId('');
     }
   };
 
@@ -380,10 +419,11 @@ export default function AgentSceneDetailPage() {
                                 <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
                                 <LinkedAssetCount icon={<Film size={13} />} count={lineVideoAssets.length} />
                               </div>
-                              <p className="leading-6 text-slate-800 dark:text-slate-100">{line.text}</p>
-                              {line.tts_text && line.tts_text !== line.text && (
-                                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {line.tts_text}</p>
-                              )}
+                              <EditableDialogueLine
+                                line={line}
+                                saving={savingDialogueLineId === String(line.id)}
+                                onSave={persistDialogueLine}
+                              />
                               <LineAssetBundle
                                 line={line}
                                 assets={lineAssets}
@@ -454,6 +494,7 @@ export default function AgentSceneDetailPage() {
                     </p>
                     {displayError && <p className="text-red-600 dark:text-red-300">{displayError}</p>}
                     {linkError && <p className="text-red-600 dark:text-red-300">{linkError}</p>}
+                    {dialogueError && <p className="text-red-600 dark:text-red-300">{dialogueError}</p>}
                   </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
                     <div key={type}>
@@ -808,6 +849,88 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 }
 
 
+function EditableDialogueLine({
+  line,
+  saving,
+  onSave,
+}: {
+  line: AnyRow;
+  saving: boolean;
+  onSave: (line: AnyRow, nextText: string, nextTtsText: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(String(line.text || ''));
+  const [ttsText, setTtsText] = useState(String(line.tts_text || line.text || ''));
+  const savedText = String(line.text || '');
+  const savedTtsText = String(line.tts_text || line.text || '');
+  const dirty = text !== savedText || ttsText !== savedTtsText;
+
+  if (!editing) {
+    return (
+      <div className="mt-2">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 flex-1 leading-6 text-slate-800 dark:text-slate-100">{savedText}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setText(savedText);
+              setTtsText(savedTtsText);
+              setEditing(true);
+            }}
+            className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+          >
+            編集
+          </button>
+        </div>
+        {savedTtsText && savedTtsText !== savedText && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {savedTtsText}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-indigo-100 bg-white p-3 dark:border-indigo-950 dark:bg-slate-900">
+      <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">会話テキスト</label>
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={2}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+      />
+      <label className="mt-3 block text-[11px] font-medium text-slate-500 dark:text-slate-400">TTSテキスト（空欄なら会話テキスト）</label>
+      <textarea
+        value={ttsText}
+        onChange={(event) => setTtsText(event.target.value)}
+        rows={2}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+      />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={saving || !text.trim() || !dirty}
+          onClick={() => onSave(line, text.trim(), ttsText.trim() || text.trim())}
+          className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+        >
+          {saving ? '保存中...' : '保存'}
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            setText(savedText);
+            setTtsText(savedTtsText);
+            setEditing(false);
+          }}
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+          キャンセル
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LinkedAssetCount({ icon, count }: { icon: ReactNode; count: number }) {
   return <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 dark:bg-slate-900">{icon}{count}</span>;
 }
@@ -1105,14 +1228,18 @@ function VideoPlayer({ asset }: { asset: AnyRow }) {
 
 function RemakeCheckControl({ asset }: { asset: AnyRow }) {
   const metadata: Record<string, unknown> = isRecord(asset.metadata) ? asset.metadata : {};
+  const initialNote = typeof metadata.remake_check_note === 'string' ? metadata.remake_check_note : '';
   const [checked, setChecked] = useState(Boolean(metadata.remake_check));
+  const [note, setNote] = useState(initialNote);
+  const [savedNote, setSavedNote] = useState(initialNote);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const assetId = String(asset.id ?? '');
+  const noteDirty = note.trim() !== savedNote.trim();
 
-  const toggle = async () => {
+  const save = async (nextChecked = checked) => {
     if (!assetId || saving) return;
-    const nextChecked = !checked;
+    const previousChecked = checked;
     setChecked(nextChecked);
     setSaving(true);
     setError('');
@@ -1120,14 +1247,15 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
       const response = await fetch(`/api/agent-assets/${assetId}/remake-check`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checked: nextChecked }),
+        body: JSON.stringify({ checked: nextChecked, note }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました');
       }
+      setSavedNote(note.trim());
     } catch (err) {
-      setChecked(!nextChecked);
+      setChecked(previousChecked);
       setError(err instanceof Error ? err.message : '保存に失敗しました');
     } finally {
       setSaving(false);
@@ -1138,7 +1266,7 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => save(!checked)}
         disabled={saving}
         className="flex w-full items-center justify-between gap-3 text-left text-[12px] font-medium text-amber-800 disabled:opacity-60 dark:text-amber-200"
         title="エージェントが作り直し対象として検索できます"
@@ -1151,7 +1279,25 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
         </span>
         <span className="text-[11px] text-amber-600 dark:text-amber-300">{saving ? '保存中...' : checked ? 'ON' : 'OFF'}</span>
       </button>
-      {checked && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">metadata.remake_check=true として保存済み。エージェントが再生成対象として拾えます。</p>}
+      <label className="mt-2 block text-[11px] font-medium text-amber-800 dark:text-amber-200">画像/音声の修正指示</label>
+      <textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        rows={2}
+        placeholder="例: みりあの髪留めを正しく、背景の人物を消す、表情をもっと焦らせる"
+        className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-[12px] leading-5 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-2 focus:ring-amber-100 dark:border-amber-900 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-amber-950"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => save(checked || Boolean(note.trim()))}
+          disabled={saving || (!noteDirty && checked) || (!checked && !note.trim())}
+          className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950"
+        >
+          {checked ? '修正指示を保存' : '修正指示を保存してON'}
+        </button>
+        {checked && <span className="text-[11px] text-amber-700 dark:text-amber-300">エージェントが再生成対象として拾えます。</span>}
+      </div>
       {error && <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p>}
     </div>
   );
