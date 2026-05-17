@@ -185,7 +185,16 @@ export async function GET(
               ch.image_url as character_image_url,
               count(a.id) filter (where a.asset_type = 'audio')::integer as audio_count
             from kazika_studio_agents.script_lines sl
-            left join kazika_studio_agents.characters ch on ch.id = sl.agent_character_id or ch.source_character_sheet_id = sl.character_sheet_id
+            left join lateral (
+              select ch.name, ch.image_url
+              from kazika_studio_agents.characters ch
+              where ch.id = sl.agent_character_id
+                 or ch.source_character_sheet_id = sl.character_sheet_id
+              order by
+                case when ch.id = sl.agent_character_id then 0 else 1 end,
+                ch.id desc
+              limit 1
+            ) ch on true
             left join kazika_studio_agents.assets a on a.script_line_id = sl.id
             where sl.script_id = any($1::bigint[])
             group by sl.id, ch.name, ch.image_url
