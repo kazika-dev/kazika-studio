@@ -10,6 +10,11 @@ type AssetDisplayUpdate = {
   scene_image_order?: unknown;
 };
 
+type AssetLineLinkUpdate = {
+  asset_id?: unknown;
+  script_line_id?: unknown;
+};
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,8 +38,9 @@ export async function PATCH(
 
     const body = await request.json().catch(() => ({}));
     const updates = Array.isArray(body.updates) ? body.updates as AssetDisplayUpdate[] : [];
-    if (updates.length === 0) {
-      return NextResponse.json({ success: false, error: 'updates is required' }, { status: 400 });
+    const linkUpdates = Array.isArray(body.linkUpdates) ? body.linkUpdates as AssetLineLinkUpdate[] : [];
+    if (updates.length === 0 && linkUpdates.length === 0) {
+      return NextResponse.json({ success: false, error: 'updates or linkUpdates is required' }, { status: 400 });
     }
 
     const sceneResult = await query(
@@ -53,6 +59,8 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
     }
 
+    const updatedRows = [];
+
     const normalizedUpdates = updates.map((item, index) => {
       const assetId = Number.parseInt(String(item.id ?? ''), 10);
       const orderSource = item.scene_image_order ?? index + 1;
@@ -67,47 +75,176 @@ export async function PATCH(
       };
     });
 
-    const assetIds = normalizedUpdates.map((item) => item.id);
-    const assetsResult = await query(
-      `
-        select id, asset_type
-        from kazika_studio_agents.assets
-        where id = any($1::bigint[])
-          and agent_story_scene_id = $2
-          and asset_type = any($3::text[])
-      `,
-      [assetIds, sceneId, SCENE_IMAGE_TYPES]
-    );
-
-    if (assetsResult.rows.length !== new Set(assetIds).size) {
-      return NextResponse.json(
-        { success: false, error: 'Some assets were not found or are not scene image assets' },
-        { status: 400 }
+    if (normalizedUpdates.length > 0) {
+      const assetIds = normalizedUpdates.map((item) => item.id);
+      const assetsResult = await query(
+        `
+          select id, asset_type
+          from kazika_studio_agents.assets
+          where id = any($1::bigint[])
+            and agent_story_scene_id = $2
+            and asset_type = any($3::text[])
+        `,
+        [assetIds, sceneId, SCENE_IMAGE_TYPES]
       );
+
+      if (assetsResult.rows.length !== new Set(assetIds).size) {
+        return NextResponse.json(
+          { success: false, error: 'Some assets were not found or are not scene image assets' },
+          { status: 400 }
+        );
+      }
+
+      for (const item of normalizedUpdates) {
+        const metadataPatch = {
+          scene_image_enabled: item.scene_image_enabled,
+          scene_image_order: item.scene_image_order,
+          scene_image_display_updated_at: new Date().toISOString(),
+          scene_image_display_updated_by: user.id,
+        };
+        const updated = await query(
+          `
+            update kazika_studio_agents.assets
+            set metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+                updated_at = now()
+            where id = $1
+            returning id, asset_type, metadata
+          `,
+          [item.id, JSON.stringify(metadataPatch)]
+        );
+        updatedRows.push(updated.rows[0]);
+      }
     }
 
-    const updatedRows = [];
-    for (const item of normalizedUpdates) {
+    const linkedRows = [];
+    for (const item of linkUpdates) {
+      const assetId = Number.parseInt(String(item.asset_id ?? ''), 10);
+      const rawLineId = item.script_line_id;
+      const nextLineId = rawLineId === null || rawLineId === '' || rawLineId === undefined
+        ? null
+        : Number.parseInt(String(rawLineId), 10);
+      if (!Number.isFinite(assetId) || (nextLineId !== null && !Number.isFinite(nextLineId))) {
+        return NextResponse.json({ success: false, error: 'Invalid asset link update' }, { status: 400 });
+      }
+
+      const assetResult = await query(
+        `
+          select id, generation_job_id, asset_type
+          from kazika_studio_agents.assets
+          where id = $1
+            and (agent_story_scene_id = $2 or story_scene_id = $2)
+            and asset_type in ('image', 'thumbnail', 'storyboard', 'audio', 'video')
+          limit 1
+        `,
+        [assetId, sceneId]
+      );
+      const asset = assetResult.rows[0];
+      if (!asset) {
+        return NextResponse.json({ success: false, error: `Asset ${assetId} was not found in this scene` }, { status: 400 });
+      }
+
+      let line = null;
+      if (nextLineId !== null) {
+        const lineResult = await query(
+          `
+            select
+              sl.id,
+              sl.script_id,
+              sl.line_index,
+              sl.speaker_name,
+              sl.agent_conversation_message_id,
+              sc.agent_conversation_id
+            from kazika_studio_agents.script_lines sl
+            join kazika_studio_agents.scripts sc on sc.id = sl.script_id
+            where sl.id = $1
+              and (sc.agent_story_scene_id = $2 or sc.story_scene_id = $2)
+            limit 1
+          `,
+          [nextLineId, sceneId]
+        );
+        line = lineResult.rows[0];
+        if (!line) {
+          return NextResponse.json({ success: false, error: `Script line ${nextLineId} was not found in this scene` }, { status: 400 });
+        }
+      }
+
       const metadataPatch = {
-        scene_image_enabled: item.scene_image_enabled,
-        scene_image_order: item.scene_image_order,
-        scene_image_display_updated_at: new Date().toISOString(),
-        scene_image_display_updated_by: user.id,
+        linked_script_line_id: nextLineId,
+        linked_line_index: line?.line_index ?? null,
+        linked_speaker_name: line?.speaker_name ?? null,
+        link_updated_at: new Date().toISOString(),
+        link_updated_by: user.id,
+        link_update_source: 'agent_scene_assets_ui',
       };
-      const updated = await query(
+
+      const updatedAsset = await query(
         `
           update kazika_studio_agents.assets
-          set metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+          set script_line_id = $2,
+              script_id = $3,
+              agent_conversation_id = $4,
+              agent_conversation_message_id = $5,
+              metadata = coalesce(metadata, '{}'::jsonb) || $6::jsonb,
               updated_at = now()
           where id = $1
-          returning id, asset_type, metadata
+          returning *
         `,
-        [item.id, JSON.stringify(metadataPatch)]
+        [
+          assetId,
+          nextLineId,
+          line?.script_id ?? null,
+          line?.agent_conversation_id ?? null,
+          line?.agent_conversation_message_id ?? null,
+          JSON.stringify(metadataPatch),
+        ]
       );
-      updatedRows.push(updated.rows[0]);
+
+      if (asset.generation_job_id) {
+        await query(
+          `
+            update kazika_studio_agents.generation_jobs
+            set script_line_id = $2,
+                script_id = $3,
+                agent_conversation_id = $4,
+                agent_conversation_message_id = $5,
+                metadata = coalesce(metadata, '{}'::jsonb) || $6::jsonb,
+                updated_at = now()
+            where id = $1
+          `,
+          [
+            asset.generation_job_id,
+            nextLineId,
+            line?.script_id ?? null,
+            line?.agent_conversation_id ?? null,
+            line?.agent_conversation_message_id ?? null,
+            JSON.stringify(metadataPatch),
+          ]
+        );
+      }
+
+      const refreshed = await query(
+        `
+          select
+            a.*,
+            sl.line_index,
+            sl.speaker_name,
+            sh.shot_index,
+            gj.provider,
+            gj.model,
+            gj.status as generation_status
+          from kazika_studio_agents.assets a
+          left join kazika_studio_agents.script_lines sl on sl.id = a.script_line_id
+          left join kazika_studio_agents.shots sh on sh.id = a.shot_id
+          left join kazika_studio_agents.generation_jobs gj on gj.id = a.generation_job_id
+          where a.id = $1
+          limit 1
+        `,
+        [updatedAsset.rows[0].id]
+      );
+      linkedRows.push(refreshed.rows[0] || updatedAsset.rows[0]);
     }
 
-    return NextResponse.json({ success: true, data: { assets: updatedRows } });
+    return NextResponse.json({ success: true, data: { assets: updatedRows, linkedAssets: linkedRows } });
   } catch (error: unknown) {
     console.error('Failed to update scene image display settings:', error);
     const message = error instanceof Error ? error.message : 'Failed to update scene image display settings';

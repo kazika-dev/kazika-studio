@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Sparkles, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Link2, Sparkles, Unlink, Users } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -33,7 +33,9 @@ export default function AgentSceneDetailPage() {
   const [error, setError] = useState('');
   const [showAssetHistory, setShowAssetHistory] = useState(false);
   const [savingDisplayAssetId, setSavingDisplayAssetId] = useState('');
+  const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
   const [displayError, setDisplayError] = useState('');
+  const [linkError, setLinkError] = useState('');
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -118,6 +120,60 @@ export default function AgentSceneDetailPage() {
     }
     return groups;
   }, [materialAssets]);
+
+
+  const relinkableAssets = useMemo(
+    () => (data?.assets || []).filter((asset) => isRelinkableAsset(asset)).sort(sortSceneAssets),
+    [data?.assets]
+  );
+
+  const assetsByLineId = useMemo(() => {
+    const groups = new Map<string, AnyRow[]>();
+    for (const asset of relinkableAssets) {
+      const lineId = asset.script_line_id == null ? '' : String(asset.script_line_id);
+      if (!lineId) continue;
+      const rows = groups.get(lineId) || [];
+      rows.push(asset);
+      groups.set(lineId, rows);
+    }
+    for (const [lineId, rows] of groups) {
+      groups.set(lineId, rows.sort(sortLinkedLineAssets));
+    }
+    return groups;
+  }, [relinkableAssets]);
+
+  const persistAssetLineLink = async (asset: AnyRow, nextLineId: string) => {
+    if (!Number.isFinite(sceneId)) return;
+    const assetId = String(asset.id || '');
+    if (!assetId) return;
+    setSavingLinkAssetId(assetId);
+    setLinkError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/assets`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkUpdates: [{
+            asset_id: asset.id,
+            script_line_id: nextLineId || null,
+          }],
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '素材の紐付け保存に失敗しました');
+      }
+      const linkedById = new Map<string, AnyRow>((result.data?.linkedAssets || []).map((row: AnyRow) => [String(row.id), row]));
+      setData((current) => current ? {
+        ...current,
+        assets: current.assets.map((row) => linkedById.get(String(row.id)) || row),
+      } : current);
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : '素材の紐付け保存に失敗しました');
+    } finally {
+      setSavingLinkAssetId('');
+    }
+  };
 
   const persistSceneImageSettings = async (nextAssets: AnyRow[], targetAssetId: string) => {
     if (!Number.isFinite(sceneId)) return;
@@ -309,26 +365,32 @@ export default function AgentSceneDetailPage() {
                       </div>
                       <div className="space-y-2">
                         {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
-                          const lineAudioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && asset.script_line_id === line.id);
+                          const lineAssets = assetsByLineId.get(String(line.id)) || [];
+                          const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
+                          const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio');
+                          const lineVideoAssets = lineAssets.filter((asset) => isVideoAsset(asset));
                           return (
                             <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
                               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <span>#{line.line_index}</span>
                                 <span>{line.line_type}</span>
                                 {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
-                                {lineAudioAssets.length > 0 && <span className="inline-flex items-center gap-1"><Mic2 size={13} /> {lineAudioAssets.length}</span>}
+                                <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
+                                <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
+                                <LinkedAssetCount icon={<Film size={13} />} count={lineVideoAssets.length} />
                               </div>
                               <p className="leading-6 text-slate-800 dark:text-slate-100">{line.text}</p>
                               {line.tts_text && line.tts_text !== line.text && (
                                 <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {line.tts_text}</p>
                               )}
-                              {lineAudioAssets.length > 0 && (
-                                <div className="mt-3 space-y-2">
-                                  {lineAudioAssets.map((asset) => (
-                                    <AudioPlayer key={String(asset.id)} asset={asset} compact />
-                                  ))}
-                                </div>
-                              )}
+                              <LineAssetBundle
+                                line={line}
+                                assets={lineAssets}
+                                allAssets={relinkableAssets}
+                                allLines={scriptLines}
+                                savingLinkAssetId={savingLinkAssetId}
+                                onRelinkAsset={persistAssetLineLink}
+                              />
                             </div>
                           );
                         })}
@@ -390,6 +452,7 @@ export default function AgentSceneDetailPage() {
                       画像カードの「使う / 使わない」でシーン表示対象を切替、↑↓で使用画像の順番を保存できます。過去画像を使いたい時は履歴表示をON。
                     </p>
                     {displayError && <p className="text-red-600 dark:text-red-300">{displayError}</p>}
+                    {linkError && <p className="text-red-600 dark:text-red-300">{linkError}</p>}
                   </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
                     <div key={type}>
@@ -403,6 +466,9 @@ export default function AgentSceneDetailPage() {
                             asset={asset}
                             enabledSceneImageAssets={enabledSceneImageAssets}
                             savingDisplayAssetId={savingDisplayAssetId}
+                            allLines={scriptLines}
+                            savingLinkAssetId={savingLinkAssetId}
+                            onRelinkAsset={persistAssetLineLink}
                             onToggleSceneImage={toggleSceneImage}
                             onMoveSceneImage={moveSceneImage}
                           />
@@ -603,6 +669,40 @@ function isSceneImageAsset(asset: AnyRow) {
   return type === 'image' || type === 'thumbnail' || type === 'storyboard';
 }
 
+function isVisualAsset(asset: AnyRow) {
+  const type = String(asset.asset_type || '');
+  return type === 'image' || type === 'thumbnail' || type === 'storyboard';
+}
+
+function isVideoAsset(asset: AnyRow) {
+  const type = String(asset.asset_type || '');
+  return type === 'video' || String(asset.mime_type || '').includes('video');
+}
+
+function isRelinkableAsset(asset: AnyRow) {
+  return isVisualAsset(asset) || asset.asset_type === 'audio' || isVideoAsset(asset);
+}
+
+function assetKindLabel(asset: AnyRow) {
+  if (asset.asset_type === 'audio') return '音声';
+  if (isVideoAsset(asset)) return '動画';
+  if (isVisualAsset(asset)) return '画像';
+  return String(asset.asset_type || '素材');
+}
+
+function sortLinkedLineAssets(a: AnyRow, b: AnyRow) {
+  const order = (assetTypeOrder(a) - assetTypeOrder(b));
+  if (order !== 0) return order;
+  return sortSceneAssets(a, b);
+}
+
+function assetTypeOrder(asset: AnyRow) {
+  if (isVisualAsset(asset)) return 1;
+  if (asset.asset_type === 'audio') return 2;
+  if (isVideoAsset(asset)) return 3;
+  return 9;
+}
+
 function assetMetadata(asset: AnyRow): Record<string, unknown> {
   return isRecord(asset.metadata) ? asset.metadata : {};
 }
@@ -642,11 +742,14 @@ type AssetRowProps = {
   asset: AnyRow;
   enabledSceneImageAssets?: AnyRow[];
   savingDisplayAssetId?: string;
+  allLines?: AnyRow[];
+  savingLinkAssetId?: string;
+  onRelinkAsset?: (asset: AnyRow, nextLineId: string) => void;
   onToggleSceneImage?: (asset: AnyRow) => void;
   onMoveSceneImage?: (asset: AnyRow, direction: -1 | 1) => void;
 };
 
-function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', onToggleSceneImage, onMoveSceneImage }: AssetRowProps) {
+function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage }: AssetRowProps) {
   const isAudio = asset.asset_type === 'audio';
   const isVideo = asset.asset_type === 'video' || String(asset.mime_type || '').includes('video');
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
@@ -675,6 +778,14 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
         {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
+      {isRelinkableAsset(asset) && onRelinkAsset && (
+        <AssetLineLinkControl
+          asset={asset}
+          allLines={allLines}
+          saving={savingLinkAssetId === String(asset.id)}
+          onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)}
+        />
+      )}
       {canEditSceneImageDisplay && (
         <SceneImageDisplayControl
           asset={asset}
@@ -691,6 +802,230 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
           {String(asset.storage_path || asset.url || src)}
         </a>
       )}
+    </div>
+  );
+}
+
+
+function LinkedAssetCount({ icon, count }: { icon: ReactNode; count: number }) {
+  return <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 dark:bg-slate-900">{icon}{count}</span>;
+}
+
+function LineAssetBundle({
+  line,
+  assets,
+  allAssets,
+  allLines,
+  savingLinkAssetId,
+  onRelinkAsset,
+}: {
+  line: AnyRow;
+  assets: AnyRow[];
+  allAssets: AnyRow[];
+  allLines: AnyRow[];
+  savingLinkAssetId: string;
+  onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+}) {
+  const imageAssets = assets.filter((asset) => isVisualAsset(asset));
+  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio');
+  const videoAssets = assets.filter((asset) => isVideoAsset(asset));
+  const linkedAssetIds = new Set(assets.map((asset) => String(asset.id)));
+  const candidateAssets = allAssets.filter((asset) => !linkedAssetIds.has(String(asset.id)));
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+          <Link2 size={14} />
+          このセリフの素材セット
+        </div>
+        <AttachAssetSelect
+          line={line}
+          assets={candidateAssets}
+          savingLinkAssetId={savingLinkAssetId}
+          onRelinkAsset={onRelinkAsset}
+        />
+      </div>
+      {assets.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。
+        </p>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-3">
+          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
+          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
+          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineAssetColumn({
+  title,
+  icon,
+  assets,
+  empty,
+  allLines,
+  savingLinkAssetId,
+  onRelinkAsset,
+}: {
+  title: string;
+  icon: ReactNode;
+  assets: AnyRow[];
+  empty: string;
+  allLines: AnyRow[];
+  savingLinkAssetId: string;
+  onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl bg-slate-50 p-2 dark:bg-slate-950">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+        {icon}{title}<Badge>{assets.length}</Badge>
+      </div>
+      {assets.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">{empty}</p>
+      ) : (
+        <div className="space-y-2">
+          {assets.map((asset) => (
+            <LinkedAssetCard
+              key={String(asset.id)}
+              asset={asset}
+              allLines={allLines}
+              saving={savingLinkAssetId === String(asset.id)}
+              onRelinkAsset={onRelinkAsset}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinkedAssetCard({
+  asset,
+  allLines,
+  saving,
+  onRelinkAsset,
+}: {
+  asset: AnyRow;
+  allLines: AnyRow[];
+  saving: boolean;
+  onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+}) {
+  const src = assetUrl(asset);
+  return (
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-800 dark:bg-slate-900">
+      {isVisualAsset(asset) && src && (
+        <a href={src} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950">
+          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-video w-full object-cover" loading="lazy" />
+        </a>
+      )}
+      {isVideoAsset(asset) && src && <video controls preload="metadata" src={src} className="mb-2 max-h-44 w-full rounded-md bg-black" />}
+      {asset.asset_type === 'audio' && <AudioPlayer asset={asset} compact />}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
+        {asset.is_primary && <Badge>primary</Badge>}
+      </div>
+      <AssetLineLinkControl asset={asset} allLines={allLines} saving={saving} compact onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)} />
+    </div>
+  );
+}
+
+function AttachAssetSelect({
+  line,
+  assets,
+  savingLinkAssetId,
+  onRelinkAsset,
+}: {
+  line: AnyRow;
+  assets: AnyRow[];
+  savingLinkAssetId: string;
+  onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+}) {
+  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const selected = assets.find((asset) => String(asset.id) === selectedAssetId);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <select
+        value={selectedAssetId}
+        onChange={(event) => setSelectedAssetId(event.target.value)}
+        className="max-w-[220px] rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+        title="未紐付け/別行の素材をこのセリフへ移動"
+      >
+        <option value="">素材を追加</option>
+        {assets.map((asset) => (
+          <option key={String(asset.id)} value={String(asset.id)}>
+            {assetKindLabel(asset)} #{asset.id}{asset.line_index ? ` / 現在 line ${asset.line_index}` : ' / 未紐付け'}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={!selected || Boolean(selected && savingLinkAssetId === String(selected.id))}
+        onClick={() => {
+          if (!selected) return;
+          onRelinkAsset(selected, String(line.id));
+          setSelectedAssetId('');
+        }}
+        className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+      >
+        <Link2 size={12} />
+        紐付け
+      </button>
+    </div>
+  );
+}
+
+function AssetLineLinkControl({
+  asset,
+  allLines,
+  saving,
+  compact = false,
+  onChange,
+}: {
+  asset: AnyRow;
+  allLines: AnyRow[];
+  saving: boolean;
+  compact?: boolean;
+  onChange: (nextLineId: string) => void;
+}) {
+  const currentLineId = asset.script_line_id == null ? '' : String(asset.script_line_id);
+  return (
+    <div className={compact ? 'mt-2 flex flex-wrap items-center gap-2' : 'mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 dark:border-indigo-950 dark:bg-indigo-950/30'}>
+      {!compact && (
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-200">
+          <Link2 size={13} /> セリフへの紐付け
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={currentLineId}
+          disabled={saving}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-w-[180px] rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          title="この素材をどのセリフに紐付けるか選択"
+        >
+          <option value="">未紐付け</option>
+          {allLines.map((line) => (
+            <option key={String(line.id)} value={String(line.id)}>
+              line {line.line_index} {line.speaker_name ? `/${line.speaker_name}` : ''}: {String(line.text || '').slice(0, 24)}
+            </option>
+          ))}
+        </select>
+        {currentLineId && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => onChange('')}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          >
+            <Unlink size={12} /> 外す
+          </button>
+        )}
+        {saving && <span className="text-[11px] text-indigo-600 dark:text-indigo-300">保存中...</span>}
+      </div>
     </div>
   );
 }
