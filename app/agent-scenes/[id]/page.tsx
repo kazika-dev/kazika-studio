@@ -373,6 +373,7 @@ export default function AgentSceneDetailPage() {
                             <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
                               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <span>#{line.line_index}</span>
+                                <CopyDialogueIdButton dialogueId={line.id} />
                                 <span>{line.line_type}</span>
                                 {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
                                 <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
@@ -1224,9 +1225,18 @@ function audioDownloadName(asset: AnyRow) {
 
 
 function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
-  const [copied, setCopied] = useState(false);
   const value = String(assetId ?? '');
-  const copyValue = value ? `asset_id: ${value}` : '';
+  return <CopyPrefixedIdButton label="asset_id" value={value} idleText="copy asset_id" title="asset_id: 形式でコピー" />;
+}
+
+function CopyDialogueIdButton({ dialogueId }: { dialogueId: ReactNode }) {
+  const value = String(dialogueId ?? '');
+  return <CopyPrefixedIdButton label="dialogue_id" value={value} idleText={`dialogue_id: ${value}`} title="dialogue_id: 形式でコピー" />;
+}
+
+function CopyPrefixedIdButton({ label, value, idleText, title }: { label: string; value: string; idleText: string; title: string }) {
+  const [copied, setCopied] = useState(false);
+  const copyValue = value ? `${label}: ${value}` : '';
 
   const copy = async () => {
     if (!copyValue) return;
@@ -1240,11 +1250,11 @@ function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
       type="button"
       onClick={copy}
       disabled={!copyValue}
-      title="asset_id: 形式でコピー"
+      title={title}
       className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? 'copied' : 'copy asset_id'}
+      {copied ? 'copied' : idleText}
     </button>
   );
 }
