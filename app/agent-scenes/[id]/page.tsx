@@ -861,9 +861,12 @@ function EditableDialogueLine({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(line.text || ''));
   const [ttsText, setTtsText] = useState(String(line.tts_text || line.text || ''));
+  const [customTts, setCustomTts] = useState(false);
   const savedText = String(line.text || '');
   const savedTtsText = String(line.tts_text || line.text || '');
-  const dirty = text !== savedText || ttsText !== savedTtsText;
+  const hasCustomTts = Boolean(savedTtsText && savedTtsText !== savedText);
+  const effectiveTtsText = customTts ? (ttsText.trim() || text.trim()) : text.trim();
+  const dirty = text !== savedText || effectiveTtsText !== savedTtsText;
 
   if (!editing) {
     return (
@@ -875,6 +878,7 @@ function EditableDialogueLine({
             onClick={() => {
               setText(savedText);
               setTtsText(savedTtsText);
+              setCustomTts(hasCustomTts);
               setEditing(true);
             }}
             className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
@@ -882,8 +886,8 @@ function EditableDialogueLine({
             編集
           </button>
         </div>
-        {savedTtsText && savedTtsText !== savedText && (
-          <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS: {savedTtsText}</p>
+        {hasCustomTts && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
         )}
       </div>
     );
@@ -894,22 +898,47 @@ function EditableDialogueLine({
       <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">会話テキスト</label>
       <textarea
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          const nextText = event.target.value;
+          setText(nextText);
+          if (!customTts) setTtsText(nextText);
+        }}
         rows={2}
         className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
       />
-      <label className="mt-3 block text-[11px] font-medium text-slate-500 dark:text-slate-400">TTSテキスト（空欄なら会話テキスト）</label>
-      <textarea
-        value={ttsText}
-        onChange={(event) => setTtsText(event.target.value)}
-        rows={2}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
-      />
+      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={() => {
+            const nextCustom = !customTts;
+            setCustomTts(nextCustom);
+            setTtsText(nextCustom ? (ttsText || text) : text);
+          }}
+          className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+        >
+          {customTts ? 'TTS個別指定を使わない' : 'TTSを個別指定する'}
+        </button>
+        {!customTts && (
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">TTSは会話テキストと同じ内容で保存されます。</p>
+        )}
+        {customTts && (
+          <div className="mt-2">
+            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">TTSテキスト</label>
+            <textarea
+              value={ttsText}
+              onChange={(event) => setTtsText(event.target.value)}
+              rows={2}
+              placeholder="読み・間・記号だけ変えたい時に入力"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+            />
+          </div>
+        )}
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           disabled={saving || !text.trim() || !dirty}
-          onClick={() => onSave(line, text.trim(), ttsText.trim() || text.trim())}
+          onClick={() => onSave(line, text.trim(), effectiveTtsText)}
           className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
         >
           {saving ? '保存中...' : '保存'}
@@ -920,6 +949,7 @@ function EditableDialogueLine({
           onClick={() => {
             setText(savedText);
             setTtsText(savedTtsText);
+            setCustomTts(hasCustomTts);
             setEditing(false);
           }}
           className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
