@@ -1041,8 +1041,8 @@ function LinkedAssetCard({
   return (
     <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-800 dark:bg-slate-900">
       {isVisualAsset(asset) && src && (
-        <a href={src} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950">
-          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-video w-full object-cover" loading="lazy" />
+        <a href={src} target="_blank" rel="noreferrer" className="mb-2 flex max-h-72 items-center justify-center overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950">
+          <img src={src} alt={`asset ${String(asset.id)}`} className="h-auto max-h-72 w-full object-contain" loading="lazy" />
         </a>
       )}
       {isVideoAsset(asset) && src && <video controls preload="metadata" src={src} className="mb-2 max-h-44 w-full rounded-md bg-black" />}
