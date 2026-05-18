@@ -15,6 +15,10 @@ type AssetLineLinkUpdate = {
   script_line_id?: unknown;
 };
 
+type AssetPrimaryUpdate = {
+  asset_id?: unknown;
+};
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,8 +43,9 @@ export async function PATCH(
     const body = await request.json().catch(() => ({}));
     const updates = Array.isArray(body.updates) ? body.updates as AssetDisplayUpdate[] : [];
     const linkUpdates = Array.isArray(body.linkUpdates) ? body.linkUpdates as AssetLineLinkUpdate[] : [];
-    if (updates.length === 0 && linkUpdates.length === 0) {
-      return NextResponse.json({ success: false, error: 'updates or linkUpdates is required' }, { status: 400 });
+    const primaryUpdates = Array.isArray(body.primaryUpdates) ? body.primaryUpdates as AssetPrimaryUpdate[] : [];
+    if (updates.length === 0 && linkUpdates.length === 0 && primaryUpdates.length === 0) {
+      return NextResponse.json({ success: false, error: 'updates, linkUpdates, or primaryUpdates is required' }, { status: 400 });
     }
 
     const sceneResult = await query(
@@ -244,7 +249,83 @@ export async function PATCH(
       linkedRows.push(refreshed.rows[0] || updatedAsset.rows[0]);
     }
 
-    return NextResponse.json({ success: true, data: { assets: updatedRows, linkedAssets: linkedRows } });
+    const primaryRows = [];
+    for (const item of primaryUpdates) {
+      const assetId = Number.parseInt(String(item.asset_id ?? ''), 10);
+      if (!Number.isFinite(assetId)) {
+        return NextResponse.json({ success: false, error: 'Invalid primary asset update' }, { status: 400 });
+      }
+
+      const assetResult = await query(
+        `
+          select id, asset_type, script_line_id, mime_type
+          from kazika_studio_agents.assets
+          where id = $1
+            and (agent_story_scene_id = $2 or story_scene_id = $2)
+            and asset_type in ('image', 'thumbnail', 'storyboard', 'audio', 'video')
+          limit 1
+        `,
+        [assetId, sceneId]
+      );
+      const asset = assetResult.rows[0];
+      if (!asset) {
+        return NextResponse.json({ success: false, error: `Asset ${assetId} was not found in this scene` }, { status: 400 });
+      }
+      if (asset.script_line_id == null) {
+        return NextResponse.json({ success: false, error: `Asset ${assetId} is not linked to a dialogue line` }, { status: 400 });
+      }
+
+      const assetType = String(asset.asset_type || '');
+      const scopeTypes = SCENE_IMAGE_TYPES.includes(assetType) ? SCENE_IMAGE_TYPES : [assetType];
+      const metadataPatch = {
+        dialogue_primary_updated_at: new Date().toISOString(),
+        dialogue_primary_updated_by: user.id,
+        dialogue_primary_scope: scopeTypes.join(','),
+        dialogue_primary_update_source: 'agent_scene_assets_ui',
+      };
+
+      const updated = await query(
+        `
+          update kazika_studio_agents.assets
+          set is_primary = (id = $1),
+              metadata = case
+                when id = $1 then coalesce(metadata, '{}'::jsonb) || $5::jsonb
+                else coalesce(metadata, '{}'::jsonb)
+              end,
+              updated_at = now()
+          where (agent_story_scene_id = $2 or story_scene_id = $2)
+            and script_line_id = $3
+            and asset_type = any($4::text[])
+          returning *
+        `,
+        [assetId, sceneId, asset.script_line_id, scopeTypes, JSON.stringify(metadataPatch)]
+      );
+
+      for (const row of updated.rows) {
+        const refreshed = await query(
+          `
+            select
+              a.*,
+              sl.line_index,
+              sl.speaker_name,
+              sh.shot_index,
+              gj.provider,
+              gj.model,
+              gj.status as generation_status
+            from kazika_studio_agents.assets a
+            left join kazika_studio_agents.script_lines sl on sl.id = a.script_line_id
+            left join kazika_studio_agents.shots sh on sh.id = a.shot_id
+            left join kazika_studio_agents.generation_jobs gj on gj.id = a.generation_job_id
+            where a.id = $1
+            limit 1
+          `,
+          [row.id]
+        );
+        primaryRows.push(refreshed.rows[0] || row);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: { assets: updatedRows, linkedAssets: linkedRows, primaryAssets: primaryRows } });
   } catch (error: unknown) {
     console.error('Failed to update scene image display settings:', error);
     const message = error instanceof Error ? error.message : 'Failed to update scene image display settings';

@@ -34,9 +34,11 @@ export default function AgentSceneDetailPage() {
   const [showAssetHistory, setShowAssetHistory] = useState(false);
   const [savingDisplayAssetId, setSavingDisplayAssetId] = useState('');
   const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
+  const [savingPrimaryAssetId, setSavingPrimaryAssetId] = useState('');
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
+  const [primaryError, setPrimaryError] = useState('');
   const [dialogueError, setDialogueError] = useState('');
 
   useEffect(() => {
@@ -174,6 +176,36 @@ export default function AgentSceneDetailPage() {
       setLinkError(err instanceof Error ? err.message : '素材の紐付け保存に失敗しました');
     } finally {
       setSavingLinkAssetId('');
+    }
+  };
+
+  const persistDialoguePrimaryAsset = async (asset: AnyRow) => {
+    if (!Number.isFinite(sceneId)) return;
+    const assetId = String(asset.id || '');
+    if (!assetId) return;
+    setSavingPrimaryAssetId(assetId);
+    setPrimaryError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/assets`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primaryUpdates: [{ asset_id: asset.id }],
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'primary変更に失敗しました');
+      }
+      const primaryById = new Map<string, AnyRow>((result.data?.primaryAssets || []).map((row: AnyRow) => [String(row.id), row]));
+      setData((current) => current ? {
+        ...current,
+        assets: current.assets.map((row) => primaryById.get(String(row.id)) || row),
+      } : current);
+    } catch (err) {
+      setPrimaryError(err instanceof Error ? err.message : 'primary変更に失敗しました');
+    } finally {
+      setSavingPrimaryAssetId('');
     }
   };
 
@@ -430,7 +462,9 @@ export default function AgentSceneDetailPage() {
                                 allAssets={relinkableAssets}
                                 allLines={scriptLines}
                                 savingLinkAssetId={savingLinkAssetId}
+                                savingPrimaryAssetId={savingPrimaryAssetId}
                                 onRelinkAsset={persistAssetLineLink}
+                                onSetPrimaryAsset={persistDialoguePrimaryAsset}
                               />
                             </div>
                           );
@@ -494,6 +528,7 @@ export default function AgentSceneDetailPage() {
                     </p>
                     {displayError && <p className="text-red-600 dark:text-red-300">{displayError}</p>}
                     {linkError && <p className="text-red-600 dark:text-red-300">{linkError}</p>}
+                    {primaryError && <p className="text-red-600 dark:text-red-300">{primaryError}</p>}
                     {dialogueError && <p className="text-red-600 dark:text-red-300">{dialogueError}</p>}
                   </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
@@ -971,14 +1006,18 @@ function LineAssetBundle({
   allAssets,
   allLines,
   savingLinkAssetId,
+  savingPrimaryAssetId,
   onRelinkAsset,
+  onSetPrimaryAsset,
 }: {
   line: AnyRow;
   assets: AnyRow[];
   allAssets: AnyRow[];
   allLines: AnyRow[];
   savingLinkAssetId: string;
+  savingPrimaryAssetId: string;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+  onSetPrimaryAsset: (asset: AnyRow) => void;
 }) {
   const imageAssets = assets.filter((asset) => isVisualAsset(asset));
   const audioAssets = assets.filter((asset) => asset.asset_type === 'audio');
@@ -1006,9 +1045,9 @@ function LineAssetBundle({
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-3">
-          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
-          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
-          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} onRelinkAsset={onRelinkAsset} />
+          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
         </div>
       )}
     </div>
@@ -1022,7 +1061,9 @@ function LineAssetColumn({
   empty,
   allLines,
   savingLinkAssetId,
+  savingPrimaryAssetId,
   onRelinkAsset,
+  onSetPrimaryAsset,
 }: {
   title: string;
   icon: ReactNode;
@@ -1030,7 +1071,9 @@ function LineAssetColumn({
   empty: string;
   allLines: AnyRow[];
   savingLinkAssetId: string;
+  savingPrimaryAssetId: string;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+  onSetPrimaryAsset: (asset: AnyRow) => void;
 }) {
   return (
     <div className="min-w-0 rounded-xl bg-slate-50 p-2 dark:bg-slate-950">
@@ -1047,7 +1090,9 @@ function LineAssetColumn({
               asset={asset}
               allLines={allLines}
               saving={savingLinkAssetId === String(asset.id)}
+              primarySaving={savingPrimaryAssetId === String(asset.id)}
               onRelinkAsset={onRelinkAsset}
+              onSetPrimaryAsset={onSetPrimaryAsset}
             />
           ))}
         </div>
@@ -1060,12 +1105,16 @@ function LinkedAssetCard({
   asset,
   allLines,
   saving,
+  primarySaving,
   onRelinkAsset,
+  onSetPrimaryAsset,
 }: {
   asset: AnyRow;
   allLines: AnyRow[];
   saving: boolean;
+  primarySaving: boolean;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
+  onSetPrimaryAsset: (asset: AnyRow) => void;
 }) {
   const src = assetUrl(asset);
   return (
@@ -1081,7 +1130,44 @@ function LinkedAssetCard({
         <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
         {asset.is_primary && <Badge>primary</Badge>}
       </div>
+      <DialoguePrimaryControl
+        asset={asset}
+        saving={primarySaving}
+        onSetPrimary={() => onSetPrimaryAsset(asset)}
+      />
       <AssetLineLinkControl asset={asset} allLines={allLines} saving={saving} compact onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)} />
+    </div>
+  );
+}
+
+function DialoguePrimaryControl({
+  asset,
+  saving,
+  onSetPrimary,
+}: {
+  asset: AnyRow;
+  saving: boolean;
+  onSetPrimary: () => void;
+}) {
+  const lineLinked = asset.script_line_id != null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {asset.is_primary ? (
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+          <Check size={12} /> この種別のprimary
+        </span>
+      ) : (
+        <button
+          type="button"
+          disabled={saving || !lineLinked}
+          onClick={onSetPrimary}
+          className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+          title="同じセリフ・同じ素材種別のprimaryをこの素材に変更"
+        >
+          <Check size={12} /> {saving ? 'primary変更中...' : 'primaryにする'}
+        </button>
+      )}
+      {!lineLinked && <span className="text-[11px] text-slate-400">セリフ未紐付け</span>}
     </div>
   );
 }
