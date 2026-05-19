@@ -25,7 +25,8 @@ export async function PATCH(
 
     const body = await request.json().catch(() => ({}));
     const checked = Boolean(body.checked);
-    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+    const bodyHasNote = Object.prototype.hasOwnProperty.call(body, 'note');
+    const requestedNote = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
 
     const assetResult = await query(
       `
@@ -60,10 +61,14 @@ export async function PATCH(
     }
 
     const isVideo = ['video', 'talking_video', 'synced_video', 'final_video'].includes(assetType);
+    const existingMetadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata as Record<string, unknown> : {};
+    const existingNote = remakeCheckNoteFromMetadata(existingMetadata);
+    const note = bodyHasNote ? requestedNote : existingNote;
     const metadataPatch: Record<string, unknown> = {
       remake_check: checked,
       remake_status: checked ? 'needs_remake' : 'ok',
       remake_check_note: note,
+      remake_instruction_note: note,
       remake_check_asset_type: assetType,
       remake_check_target: isVideo ? 'lipsync_video' : assetType,
       remake_check_updated_at: new Date().toISOString(),
@@ -87,4 +92,12 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : 'Failed to update remake check';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
+  for (const key of ['remake_check_note', 'remake_instruction_note', 'remake_reason']) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 500);
+  }
+  return '';
 }

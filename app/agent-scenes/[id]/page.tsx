@@ -1349,7 +1349,7 @@ function VideoPlayer({ asset }: { asset: AnyRow }) {
 
 function RemakeCheckControl({ asset }: { asset: AnyRow }) {
   const metadata: Record<string, unknown> = isRecord(asset.metadata) ? asset.metadata : {};
-  const initialNote = typeof metadata.remake_check_note === 'string' ? metadata.remake_check_note : '';
+  const initialNote = remakeCheckNoteFromMetadata(metadata);
   const [checked, setChecked] = useState(Boolean(metadata.remake_check));
   const [note, setNote] = useState(initialNote);
   const [savedNote, setSavedNote] = useState(initialNote);
@@ -1365,6 +1365,13 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
     : asset.asset_type === 'audio'
       ? '例: もっと可愛く、語尾を上げる、早口すぎるので少し落ち着かせる'
       : '例: みりあの髪留めを正しく、背景の人物を消す、表情をもっと焦らせる';
+
+  useEffect(() => {
+    const nextNote = remakeCheckNoteFromMetadata(metadata);
+    setChecked(Boolean(metadata.remake_check));
+    setNote(nextNote);
+    setSavedNote(nextNote);
+  }, [asset.id, metadata]);
 
   const save = async (nextChecked = checked) => {
     if (!assetId || saving) return;
@@ -1536,6 +1543,14 @@ function CopyPrefixedIdButton({ label, value, idleText, title }: { label: string
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
+  for (const key of ['remake_check_note', 'remake_instruction_note', 'remake_reason']) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return '';
 }
 
 function assetUrl(asset: AnyRow) {
