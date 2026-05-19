@@ -51,20 +51,24 @@ export async function PATCH(
     }
 
     const assetType = String(asset.asset_type || '');
-    if (!['image', 'thumbnail', 'storyboard', 'audio'].includes(assetType)) {
+    const supportedTypes = ['image', 'thumbnail', 'storyboard', 'audio', 'video', 'talking_video', 'synced_video', 'final_video'];
+    if (!supportedTypes.includes(assetType)) {
       return NextResponse.json(
-        { success: false, error: 'Remake check is supported only for image/audio assets' },
+        { success: false, error: 'Remake check is supported only for image/audio/video assets' },
         { status: 400 }
       );
     }
 
+    const isVideo = ['video', 'talking_video', 'synced_video', 'final_video'].includes(assetType);
     const metadataPatch: Record<string, unknown> = {
       remake_check: checked,
       remake_status: checked ? 'needs_remake' : 'ok',
+      remake_check_note: note,
+      remake_check_asset_type: assetType,
+      remake_check_target: isVideo ? 'lipsync_video' : assetType,
       remake_check_updated_at: new Date().toISOString(),
       remake_check_updated_by: user.id,
     };
-    if (note) metadataPatch.remake_check_note = note;
 
     const updatedResult = await query(
       `

@@ -753,7 +753,11 @@ function isVisualAsset(asset: AnyRow) {
 
 function isVideoAsset(asset: AnyRow) {
   const type = String(asset.asset_type || '');
-  return type === 'video' || String(asset.mime_type || '').includes('video');
+  return type === 'video' || type === 'talking_video' || type === 'synced_video' || type === 'final_video' || String(asset.mime_type || '').includes('video');
+}
+
+function canRemakeCheckAsset(asset: AnyRow) {
+  return isVisualAsset(asset) || asset.asset_type === 'audio' || isVideoAsset(asset);
 }
 
 function isRelinkableAsset(asset: AnyRow) {
@@ -828,9 +832,9 @@ type AssetRowProps = {
 
 function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage }: AssetRowProps) {
   const isAudio = asset.asset_type === 'audio';
-  const isVideo = asset.asset_type === 'video' || String(asset.mime_type || '').includes('video');
+  const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
-  const canRemakeCheck = isAudio || asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard';
+  const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
   return (
@@ -1136,6 +1140,7 @@ function LinkedAssetCard({
         onSetPrimary={() => onSetPrimaryAsset(asset)}
       />
       <AssetLineLinkControl asset={asset} allLines={allLines} saving={saving} compact onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)} />
+      {canRemakeCheckAsset(asset) && <RemakeCheckControl asset={asset} />}
     </div>
   );
 }
@@ -1352,6 +1357,14 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
   const [error, setError] = useState('');
   const assetId = String(asset.id ?? '');
   const noteDirty = note.trim() !== savedNote.trim();
+  const isVideo = isVideoAsset(asset);
+  const targetLabel = isVideo ? 'リップシンク動画' : asset.asset_type === 'audio' ? '音声' : '画像';
+  const noteLabel = `${targetLabel}の修正指示`;
+  const placeholder = isVideo
+    ? '例: 口の動きが遅い、しゃべるキャラが違う、表情をもっと焦らせる、頭が揺れすぎる'
+    : asset.asset_type === 'audio'
+      ? '例: もっと可愛く、語尾を上げる、早口すぎるので少し落ち着かせる'
+      : '例: みりあの髪留めを正しく、背景の人物を消す、表情をもっと焦らせる';
 
   const save = async (nextChecked = checked) => {
     if (!assetId || saving) return;
@@ -1391,16 +1404,16 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
           <span className={`flex h-4 w-4 items-center justify-center rounded border ${checked ? 'border-amber-600 bg-amber-500 text-white' : 'border-amber-300 bg-white dark:border-amber-800 dark:bg-slate-950'}`}>
             {checked && <Check size={12} />}
           </span>
-          作り直しチェック
+          {targetLabel} 作り直しチェック
         </span>
         <span className="text-[11px] text-amber-600 dark:text-amber-300">{saving ? '保存中...' : checked ? 'ON' : 'OFF'}</span>
       </button>
-      <label className="mt-2 block text-[11px] font-medium text-amber-800 dark:text-amber-200">画像/音声の修正指示</label>
+      <label className="mt-2 block text-[11px] font-medium text-amber-800 dark:text-amber-200">{noteLabel}</label>
       <textarea
         value={note}
         onChange={(event) => setNote(event.target.value)}
         rows={2}
-        placeholder="例: みりあの髪留めを正しく、背景の人物を消す、表情をもっと焦らせる"
+        placeholder={placeholder}
         className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-[12px] leading-5 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-2 focus:ring-amber-100 dark:border-amber-900 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-amber-950"
       />
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1412,7 +1425,7 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
         >
           {checked ? '修正指示を保存' : '修正指示を保存してON'}
         </button>
-        {checked && <span className="text-[11px] text-amber-700 dark:text-amber-300">エージェントが再生成対象として拾えます。</span>}
+        {checked && <span className="text-[11px] text-amber-700 dark:text-amber-300">エージェントが{targetLabel}の再生成対象として拾えます。</span>}
       </div>
       {error && <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p>}
     </div>
