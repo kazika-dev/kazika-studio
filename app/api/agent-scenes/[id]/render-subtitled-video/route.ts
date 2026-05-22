@@ -53,12 +53,27 @@ function assTime(ms: number) {
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
-function escapeAssText(value: string) {
-  return value
+function wrapSubtitleTextForAss(value: string, maxCharsPerLine = 18) {
+  const normalized = value
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/[{}]/g, '')
-    .replace(/\n/g, '\\N');
+    .trim();
+  const lines: string[] = [];
+
+  for (const rawLine of normalized.split('\n')) {
+    let current = '';
+    for (const char of Array.from(rawLine.trim())) {
+      current += char;
+      if ('、。！？!?'.includes(char) && current.length >= maxCharsPerLine) {
+        lines.push(current);
+        current = '';
+      }
+    }
+    if (current) lines.push(current);
+  }
+
+  return lines.join('\\N');
 }
 
 function buildAss(subtitles: SubtitleRow[], fallbackDurationMs: number) {
@@ -69,7 +84,7 @@ function buildAss(subtitles: SubtitleRow[], fallbackDurationMs: number) {
       if (!text) return '';
       const start = Number(clip.metadata?.local_start_ms ?? clip.source_start_ms ?? 0);
       const end = Number(clip.metadata?.local_end_ms ?? clip.source_end_ms ?? fallbackDurationMs);
-      return `Dialogue: 0,${assTime(start)},${assTime(Math.max(end, start + 300))},Default,,0,0,0,,${escapeAssText(text)}`;
+      return `Dialogue: 0,${assTime(start)},${assTime(Math.max(end, start + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(text)}`;
     })
     .filter(Boolean)
     .join('\n');
@@ -83,7 +98,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,0,0,0,0,100,100,0,0,1,4,1,2,70,70,120,1
+Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,70,70,230,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
