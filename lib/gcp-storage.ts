@@ -5,6 +5,26 @@ import { Storage } from '@google-cloud/storage';
  */
 let storageClient: Storage | null = null;
 
+const DEFAULT_STORAGE_BUCKET = 'based-us-images';
+
+export function getStorageBucketName(): string {
+  return process.env.GCP_STORAGE_BUCKET || process.env.GCP_STRAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+}
+
+export function getStorageBucketCandidates(): string[] {
+  return Array.from(new Set([
+    process.env.GCP_STORAGE_BUCKET,
+    process.env.GCP_STRAGE_BUCKET,
+    DEFAULT_STORAGE_BUCKET,
+  ].filter((bucket): bucket is string => Boolean(bucket))));
+}
+
+function isNotFoundError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
+  return code === '404' || message.includes('No such object') || message.includes('not found');
+}
+
 /**
  * GCP Storageクライアントを取得
  */
@@ -46,11 +66,7 @@ export async function uploadImageToStorage(
   customFolder?: string
 ): Promise<string> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
-
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
-  }
+  const bucketName = getStorageBucketName();
 
   const bucket = storage.bucket(bucketName);
 
@@ -112,23 +128,27 @@ export async function getSignedUrl(
   expiresInMinutes: number = 60
 ): Promise<string> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
+  let lastError: unknown;
 
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  for (const bucketName of getStorageBucketCandidates()) {
+    const file = storage.bucket(bucketName).file(filePath);
+
+    try {
+      await file.getMetadata();
+      const [signedUrl] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + expiresInMinutes * 60 * 1000,
+      });
+
+      return signedUrl;
+    } catch (error) {
+      lastError = error;
+      if (!isNotFoundError(error)) throw error;
+    }
   }
 
-  const bucket = storage.bucket(bucketName);
-  const file = bucket.file(filePath);
-
-  // 署名付きURLを生成
-  const [signedUrl] = await file.getSignedUrl({
-    version: 'v4',
-    action: 'read',
-    expires: Date.now() + expiresInMinutes * 60 * 1000,
-  });
-
-  return signedUrl;
+  throw lastError instanceof Error ? lastError : new Error(`File not found: ${filePath}`);
 }
 
 /**
@@ -141,25 +161,26 @@ export async function getFileFromStorage(filePath: string): Promise<{
   contentType: string;
 }> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
+  let lastError: unknown;
 
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
+  for (const bucketName of getStorageBucketCandidates()) {
+    const file = storage.bucket(bucketName).file(filePath);
+
+    try {
+      const [metadata] = await file.getMetadata();
+      const [data] = await file.download();
+
+      return {
+        data,
+        contentType: metadata.contentType || 'application/octet-stream',
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isNotFoundError(error)) throw error;
+    }
   }
 
-  const bucket = storage.bucket(bucketName);
-  const file = bucket.file(filePath);
-
-  // ファイルのメタデータを取得
-  const [metadata] = await file.getMetadata();
-
-  // ファイルデータをダウンロード
-  const [data] = await file.download();
-
-  return {
-    data,
-    contentType: metadata.contentType || 'application/octet-stream',
-  };
+  throw lastError instanceof Error ? lastError : new Error(`File not found: ${filePath}`);
 }
 
 /**
@@ -168,11 +189,7 @@ export async function getFileFromStorage(filePath: string): Promise<{
  */
 export async function deleteImageFromStorage(filePath: string): Promise<void> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
-
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
-  }
+  const bucketName = getStorageBucketName();
 
   // URLの場合はファイルパスを抽出
   let path = filePath;
@@ -205,11 +222,7 @@ export async function uploadImageMaterial(
   mimeType: string
 ): Promise<string> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
-
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
-  }
+  const bucketName = getStorageBucketName();
 
   const bucket = storage.bucket(bucketName);
 
@@ -284,11 +297,7 @@ export async function uploadTextTemplateMedia(
   templateId: number
 ): Promise<string> {
   const storage = getStorageClient();
-  const bucketName = process.env.GCP_STORAGE_BUCKET;
-
-  if (!bucketName) {
-    throw new Error('GCP_STORAGE_BUCKET environment variable is not set');
-  }
+  const bucketName = getStorageBucketName();
 
   const bucket = storage.bucket(bucketName);
 
