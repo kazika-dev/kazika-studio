@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Link2, Sparkles, Unlink, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Link2, Sparkles, Subtitles, Unlink, Users } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -40,6 +40,10 @@ export default function AgentSceneDetailPage() {
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
   const [dialogueError, setDialogueError] = useState('');
+  const [subtitleError, setSubtitleError] = useState('');
+  const [savingSubtitles, setSavingSubtitles] = useState(false);
+  const [savingSubtitleClipId, setSavingSubtitleClipId] = useState('');
+  const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -327,6 +331,91 @@ export default function AgentSceneDetailPage() {
     void persistSceneImageSettings(nextAssets, assetId);
   };
 
+  const syncSubtitleTrack = async () => {
+    if (!Number.isFinite(sceneId)) return;
+    setSavingSubtitles(true);
+    setSubtitleError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/subtitles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-script-lines' }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '字幕トラック作成に失敗しました');
+      }
+      setData((current) => current ? {
+        ...current,
+        timelineTracks: result.data?.timelineTracks || current.timelineTracks,
+        timelineClips: result.data?.timelineClips || current.timelineClips,
+      } : current);
+    } catch (err) {
+      setSubtitleError(err instanceof Error ? err.message : '字幕トラック作成に失敗しました');
+    } finally {
+      setSavingSubtitles(false);
+    }
+  };
+
+  const saveSubtitleClip = async (clip: AnyRow, nextText: string, nextEnabled: boolean) => {
+    if (!Number.isFinite(sceneId)) return;
+    const clipId = String(clip.id || '');
+    if (!clipId) return;
+    setSavingSubtitleClipId(clipId);
+    setSubtitleError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/subtitles`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: [{ clip_id: clip.id, text: nextText, enabled: nextEnabled }] }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '字幕保存に失敗しました');
+      }
+      setData((current) => current ? {
+        ...current,
+        timelineTracks: result.data?.timelineTracks || current.timelineTracks,
+        timelineClips: result.data?.timelineClips || current.timelineClips,
+      } : current);
+    } catch (err) {
+      setSubtitleError(err instanceof Error ? err.message : '字幕保存に失敗しました');
+    } finally {
+      setSavingSubtitleClipId('');
+    }
+  };
+
+  const renderSubtitledVideo = async (asset: AnyRow) => {
+    if (!Number.isFinite(sceneId)) return;
+    const assetId = String(asset.id || '');
+    if (!assetId) return;
+    setRenderingSubtitleAssetId(assetId);
+    setSubtitleError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/render-subtitled-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoAssetId: asset.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '字幕焼き込み書き出しに失敗しました');
+      }
+      const nextAsset = result.data?.asset;
+      const nextJob = result.data?.generationJob;
+      setData((current) => current ? {
+        ...current,
+        assets: nextAsset ? [nextAsset, ...current.assets] : current.assets,
+        generationJobs: nextJob ? [nextJob, ...current.generationJobs] : current.generationJobs,
+      } : current);
+    } catch (err) {
+      setSubtitleError(err instanceof Error ? err.message : '字幕焼き込み書き出しに失敗しました');
+    } finally {
+      setRenderingSubtitleAssetId('');
+    }
+  };
+
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -356,6 +445,7 @@ export default function AgentSceneDetailPage() {
 
   const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
+  const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -465,6 +555,11 @@ export default function AgentSceneDetailPage() {
                                 savingPrimaryAssetId={savingPrimaryAssetId}
                                 onRelinkAsset={persistAssetLineLink}
                                 onSetPrimaryAsset={persistDialoguePrimaryAsset}
+                                subtitleClips={subtitleClips}
+                                savingSubtitleClipId={savingSubtitleClipId}
+                                renderingSubtitleAssetId={renderingSubtitleAssetId}
+                                onSaveSubtitleClip={saveSubtitleClip}
+                                onRenderSubtitledVideo={renderSubtitledVideo}
                               />
                             </div>
                           );
@@ -530,6 +625,7 @@ export default function AgentSceneDetailPage() {
                     {linkError && <p className="text-red-600 dark:text-red-300">{linkError}</p>}
                     {primaryError && <p className="text-red-600 dark:text-red-300">{primaryError}</p>}
                     {dialogueError && <p className="text-red-600 dark:text-red-300">{dialogueError}</p>}
+                    {subtitleError && <p className="text-red-600 dark:text-red-300">{subtitleError}</p>}
                   </div>
                   {Object.entries(assetGroups).map(([type, rows]) => (
                     <div key={type}>
@@ -548,6 +644,11 @@ export default function AgentSceneDetailPage() {
                             onRelinkAsset={persistAssetLineLink}
                             onToggleSceneImage={toggleSceneImage}
                             onMoveSceneImage={moveSceneImage}
+                            subtitleClips={subtitleClips}
+                            savingSubtitleClipId={savingSubtitleClipId}
+                            renderingSubtitleAssetId={renderingSubtitleAssetId}
+                            onSaveSubtitleClip={saveSubtitleClip}
+                            onRenderSubtitledVideo={renderSubtitledVideo}
                           />
                         ))}
                       </div>
@@ -564,6 +665,12 @@ export default function AgentSceneDetailPage() {
                 <MiniCount label="Timeline clips" value={timelineClips.length} />
                 <MiniCount label="Generation jobs" value={generationJobs.length} />
               </div>
+              <SubtitleTools
+                subtitleClips={subtitleClips}
+                saving={savingSubtitles}
+                error={subtitleError}
+                onSync={syncSubtitleTrack}
+              />
               {timelineTracks.length > 0 && (
                 <div className="mt-4 space-y-3">
                   {timelineTracks.map((track) => {
@@ -788,6 +895,53 @@ function assetMetadata(asset: AnyRow): Record<string, unknown> {
   return isRecord(asset.metadata) ? asset.metadata : {};
 }
 
+function subtitleMetadata(clip: AnyRow): Record<string, unknown> {
+  return isRecord(clip.metadata) ? clip.metadata : {};
+}
+
+function subtitleText(clip: AnyRow) {
+  const metadata = subtitleMetadata(clip);
+  const raw = metadata.text ?? clip.text ?? clip.title ?? '';
+  return typeof raw === 'string' ? raw : String(raw ?? '');
+}
+
+function clipLocalStartMs(clip: AnyRow) {
+  const metadata = subtitleMetadata(clip);
+  const raw = metadata.local_start_ms ?? clip.source_start_ms ?? clip.start_time_ms ?? 0;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function clipLocalEndMs(clip: AnyRow) {
+  const metadata = subtitleMetadata(clip);
+  const raw = metadata.local_end_ms ?? clip.source_end_ms ?? clip.end_time_ms ?? 0;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function subtitleClipsForAsset(asset: AnyRow, subtitleClips: AnyRow[]) {
+  const lineId = asset.script_line_id == null ? '' : String(asset.script_line_id);
+  const sourceVideoAssetId = assetMetadata(asset).source_video_asset_id;
+  return subtitleClips
+    .filter((clip) => {
+      if (subtitleMetadata(clip).enabled === false) return false;
+      if (!subtitleText(clip).trim()) return false;
+      if (lineId && clip.script_line_id != null) return String(clip.script_line_id) === lineId;
+      if (sourceVideoAssetId && clip.asset_id != null) return String(clip.asset_id) === String(sourceVideoAssetId);
+      return !lineId;
+    })
+    .sort((a, b) => clipLocalStartMs(a) - clipLocalStartMs(b));
+}
+
+function activeSubtitleAt(subtitleClips: AnyRow[], currentMs: number) {
+  return subtitleClips.find((clip) => {
+    if (subtitleMetadata(clip).enabled === false || !subtitleText(clip).trim()) return false;
+    const start = clipLocalStartMs(clip);
+    const end = Math.max(clipLocalEndMs(clip), start + 300);
+    return currentMs >= start && currentMs <= end;
+  });
+}
+
 function hasSceneImageDisplayConfig(asset: AnyRow) {
   const metadata = assetMetadata(asset);
   return typeof metadata.scene_image_enabled === 'boolean' || metadata.scene_image_order != null;
@@ -825,18 +979,24 @@ type AssetRowProps = {
   savingDisplayAssetId?: string;
   allLines?: AnyRow[];
   savingLinkAssetId?: string;
+  subtitleClips?: AnyRow[];
+  savingSubtitleClipId?: string;
+  renderingSubtitleAssetId?: string;
   onRelinkAsset?: (asset: AnyRow, nextLineId: string) => void;
   onToggleSceneImage?: (asset: AnyRow) => void;
   onMoveSceneImage?: (asset: AnyRow, direction: -1 | 1) => void;
+  onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
+  onRenderSubtitledVideo?: (asset: AnyRow) => void;
 };
 
-function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage }: AssetRowProps) {
+function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo }: AssetRowProps) {
   const isAudio = asset.asset_type === 'audio';
   const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
+  const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
       {isImage && src && (
@@ -844,7 +1004,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
           <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] h-auto w-full max-w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
         </a>
       )}
-      {isVideo && src && <VideoPlayer asset={asset} />}
+      {isVideo && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} />}
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
         <div className="flex shrink-0 items-center gap-2">
@@ -874,6 +1034,16 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
           saving={savingDisplayAssetId === String(asset.id)}
           onToggle={() => onToggleSceneImage?.(asset)}
           onMove={(direction) => onMoveSceneImage?.(asset, direction)}
+        />
+      )}
+      {isVideo && (
+        <SubtitleVideoControls
+          asset={asset}
+          subtitleClips={assetSubtitleClips}
+          savingSubtitleClipId={savingSubtitleClipId}
+          rendering={renderingSubtitleAssetId === String(asset.id)}
+          onSaveSubtitleClip={onSaveSubtitleClip}
+          onRenderSubtitledVideo={onRenderSubtitledVideo}
         />
       )}
       {canRemakeCheck && <RemakeCheckControl asset={asset} />}
@@ -1011,8 +1181,13 @@ function LineAssetBundle({
   allLines,
   savingLinkAssetId,
   savingPrimaryAssetId,
+  subtitleClips = [],
+  savingSubtitleClipId = '',
+  renderingSubtitleAssetId = '',
   onRelinkAsset,
   onSetPrimaryAsset,
+  onSaveSubtitleClip,
+  onRenderSubtitledVideo,
 }: {
   line: AnyRow;
   assets: AnyRow[];
@@ -1020,8 +1195,13 @@ function LineAssetBundle({
   allLines: AnyRow[];
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
+  subtitleClips?: AnyRow[];
+  savingSubtitleClipId?: string;
+  renderingSubtitleAssetId?: string;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
   onSetPrimaryAsset: (asset: AnyRow) => void;
+  onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
+  onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
   const imageAssets = assets.filter((asset) => isVisualAsset(asset));
   const audioAssets = assets.filter((asset) => asset.asset_type === 'audio');
@@ -1051,7 +1231,7 @@ function LineAssetBundle({
         <div className="grid gap-3 lg:grid-cols-3">
           <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
           <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
-          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} />
         </div>
       )}
     </div>
@@ -1066,8 +1246,13 @@ function LineAssetColumn({
   allLines,
   savingLinkAssetId,
   savingPrimaryAssetId,
+  subtitleClips = [],
+  savingSubtitleClipId = '',
+  renderingSubtitleAssetId = '',
   onRelinkAsset,
   onSetPrimaryAsset,
+  onSaveSubtitleClip,
+  onRenderSubtitledVideo,
 }: {
   title: string;
   icon: ReactNode;
@@ -1076,8 +1261,13 @@ function LineAssetColumn({
   allLines: AnyRow[];
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
+  subtitleClips?: AnyRow[];
+  savingSubtitleClipId?: string;
+  renderingSubtitleAssetId?: string;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
   onSetPrimaryAsset: (asset: AnyRow) => void;
+  onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
+  onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
   return (
     <div className="min-w-0 rounded-xl bg-slate-50 p-2 dark:bg-slate-950">
@@ -1097,6 +1287,11 @@ function LineAssetColumn({
               primarySaving={savingPrimaryAssetId === String(asset.id)}
               onRelinkAsset={onRelinkAsset}
               onSetPrimaryAsset={onSetPrimaryAsset}
+              subtitleClips={subtitleClips}
+              savingSubtitleClipId={savingSubtitleClipId}
+              renderingSubtitleAssetId={renderingSubtitleAssetId}
+              onSaveSubtitleClip={onSaveSubtitleClip}
+              onRenderSubtitledVideo={onRenderSubtitledVideo}
             />
           ))}
         </div>
@@ -1110,17 +1305,28 @@ function LinkedAssetCard({
   allLines,
   saving,
   primarySaving,
+  subtitleClips = [],
+  savingSubtitleClipId = '',
+  renderingSubtitleAssetId = '',
   onRelinkAsset,
   onSetPrimaryAsset,
+  onSaveSubtitleClip,
+  onRenderSubtitledVideo,
 }: {
   asset: AnyRow;
   allLines: AnyRow[];
   saving: boolean;
   primarySaving: boolean;
+  subtitleClips?: AnyRow[];
+  savingSubtitleClipId?: string;
+  renderingSubtitleAssetId?: string;
   onRelinkAsset: (asset: AnyRow, nextLineId: string) => void;
   onSetPrimaryAsset: (asset: AnyRow) => void;
+  onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
+  onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
   const src = assetUrl(asset);
+  const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
   return (
     <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-800 dark:bg-slate-900">
       {isVisualAsset(asset) && src && (
@@ -1128,7 +1334,7 @@ function LinkedAssetCard({
           <img src={src} alt={`asset ${String(asset.id)}`} className="h-auto max-h-72 w-full object-contain" loading="lazy" />
         </a>
       )}
-      {isVideoAsset(asset) && src && <video controls preload="metadata" src={src} className="mb-2 max-h-44 w-full rounded-md bg-black" />}
+      {isVideoAsset(asset) && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} compact />}
       {asset.asset_type === 'audio' && <AudioPlayer asset={asset} compact />}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
@@ -1139,6 +1345,16 @@ function LinkedAssetCard({
         saving={primarySaving}
         onSetPrimary={() => onSetPrimaryAsset(asset)}
       />
+      {isVideoAsset(asset) && (
+        <SubtitleVideoControls
+          asset={asset}
+          subtitleClips={assetSubtitleClips}
+          savingSubtitleClipId={savingSubtitleClipId}
+          rendering={renderingSubtitleAssetId === String(asset.id)}
+          onSaveSubtitleClip={onSaveSubtitleClip}
+          onRenderSubtitledVideo={onRenderSubtitledVideo}
+        />
+      )}
       <AssetLineLinkControl asset={asset} allLines={allLines} saving={saving} compact onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)} />
       {canRemakeCheckAsset(asset) && <RemakeCheckControl asset={asset} />}
     </div>
@@ -1337,12 +1553,152 @@ function SceneImageDisplayControl({
   );
 }
 
-function VideoPlayer({ asset }: { asset: AnyRow }) {
+function SubtitleTools({
+  subtitleClips,
+  saving,
+  error,
+  onSync,
+}: {
+  subtitleClips: AnyRow[];
+  saving: boolean;
+  error: string;
+  onSync: () => void;
+}) {
+  const enabledCount = subtitleClips.filter((clip) => subtitleMetadata(clip).enabled !== false && subtitleText(clip)).length;
+  return (
+    <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs dark:border-indigo-950 dark:bg-indigo-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-indigo-800 dark:text-indigo-200">
+          <Subtitles size={15} />
+          <span className="font-semibold">字幕プレビュー / 焼き込み</span>
+          <Badge>{enabledCount}/{subtitleClips.length} clips</Badge>
+        </div>
+        <button
+          type="button"
+          onClick={onSync}
+          disabled={saving}
+          className="rounded-full border border-indigo-200 bg-white px-3 py-1 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-950 dark:text-indigo-200 dark:hover:bg-indigo-950"
+        >
+          {saving ? '字幕作成中...' : subtitleClips.length ? '台本から字幕を再同期' : '台本から字幕を作成'}
+        </button>
+      </div>
+      <p className="mt-2 leading-5 text-slate-600 dark:text-slate-300">
+        text timeline clip を字幕として使います。動画カード上で字幕DOMプレビュー、必要な動画ごとに ffmpeg で焼き込みMP4を書き出せます。
+      </p>
+      {error && <p className="mt-2 text-red-600 dark:text-red-300">{error}</p>}
+    </div>
+  );
+}
+
+function SubtitleVideoControls({
+  asset,
+  subtitleClips,
+  savingSubtitleClipId,
+  rendering,
+  onSaveSubtitleClip,
+  onRenderSubtitledVideo,
+}: {
+  asset: AnyRow;
+  subtitleClips: AnyRow[];
+  savingSubtitleClipId: string;
+  rendering: boolean;
+  onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
+  onRenderSubtitledVideo?: (asset: AnyRow) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 dark:border-indigo-950 dark:bg-indigo-950/30">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-200">
+          <Subtitles size={13} /> 字幕
+        </div>
+        <button
+          type="button"
+          disabled={rendering || subtitleClips.length === 0 || !onRenderSubtitledVideo}
+          onClick={() => onRenderSubtitledVideo?.(asset)}
+          className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-950 dark:text-indigo-200"
+          title="現在の字幕を焼き込んだ新しいMP4を生成"
+        >
+          {rendering ? '書き出し中...' : '字幕焼き込みMP4を書き出し'}
+        </button>
+      </div>
+      {subtitleClips.length === 0 ? (
+        <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">まだ字幕clipがありません。タイムライン欄の「台本から字幕を作成」を押してね。</p>
+      ) : (
+        <div className="space-y-2">
+          {subtitleClips.map((clip) => (
+            <SubtitleClipEditor
+              key={String(clip.id)}
+              clip={clip}
+              saving={savingSubtitleClipId === String(clip.id)}
+              onSave={onSaveSubtitleClip}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubtitleClipEditor({ clip, saving, onSave }: { clip: AnyRow; saving: boolean; onSave?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void }) {
+  const metadata = subtitleMetadata(clip);
+  const [text, setText] = useState(subtitleText(clip));
+  const [enabled, setEnabled] = useState(metadata.enabled !== false);
+  const savedText = subtitleText(clip);
+  const savedEnabled = metadata.enabled !== false;
+  const dirty = text !== savedText || enabled !== savedEnabled;
+
+
+  return (
+    <div className="rounded-lg bg-white p-2 dark:bg-slate-950">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <span>clip #{clip.id} / {formatMs(clipLocalStartMs(clip))} → {formatMs(clipLocalEndMs(clip))}</span>
+        <label className="inline-flex items-center gap-1">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          表示
+        </label>
+      </div>
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={2}
+        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] leading-5 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+      />
+      <button
+        type="button"
+        disabled={!dirty || saving || !onSave}
+        onClick={() => onSave?.(clip, text, enabled)}
+        className="mt-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+      >
+        {saving ? '保存中...' : '字幕を保存'}
+      </button>
+    </div>
+  );
+}
+
+function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: AnyRow; subtitleClips?: AnyRow[]; compact?: boolean }) {
   const src = assetUrl(asset);
+  const [currentMs, setCurrentMs] = useState(0);
+  const activeSubtitle = activeSubtitleAt(subtitleClips, currentMs);
+  const text = activeSubtitle ? subtitleText(activeSubtitle) : '';
   if (!src) return null;
   return (
-    <div className="mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
-      <video controls preload="metadata" src={src} className="max-h-[420px] w-full max-w-full bg-black" />
+    <div className={compact ? 'mb-2 min-w-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950' : 'mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950'}>
+      <div className="relative">
+        <video
+          controls
+          preload="metadata"
+          src={src}
+          onTimeUpdate={(event) => setCurrentMs(Math.round(event.currentTarget.currentTime * 1000))}
+          className={compact ? 'max-h-44 w-full bg-black' : 'max-h-[420px] w-full max-w-full bg-black'}
+        />
+        {text && (
+          <div className="pointer-events-none absolute inset-x-3 bottom-8 flex justify-center text-center">
+            <span className="max-w-[92%] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-base">
+              {text}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
