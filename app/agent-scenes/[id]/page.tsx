@@ -91,6 +91,7 @@ export default function AgentSceneDetailPage() {
           ? isSceneImageEnabled(asset)
           : latestImageCreatedAt ? String(asset.created_at) === latestImageCreatedAt : Boolean(asset.is_primary);
       }
+      if (isRenderedFinalVideoAsset(asset)) return true;
       return Boolean(asset.is_primary);
     }).sort(sortSceneAssets);
   }, [data?.assets, data?.sceneLayouts]);
@@ -895,9 +896,15 @@ function isVideoAsset(asset: AnyRow) {
   return type === 'video' || type === 'talking_video' || type === 'synced_video' || type === 'final_video' || String(asset.mime_type || '').includes('video');
 }
 
+function isRenderedFinalVideoAsset(asset: AnyRow) {
+  if (!isVideoAsset(asset)) return false;
+  const metadata = assetMetadata(asset);
+  return String(asset.asset_type || '') === 'final_video' || metadata.final_concat === true || metadata.final_concat === 'true';
+}
+
 function isFinalRenderSourceVideo(asset: AnyRow) {
   if (!isVideoAsset(asset)) return false;
-  if (String(asset.asset_type || '') === 'final_video') return false;
+  if (isRenderedFinalVideoAsset(asset)) return false;
   if (asset.script_line_id == null) return false;
   const burnedIn = assetMetadata(asset).burned_in_subtitles;
   return burnedIn !== true && burnedIn !== 'true';
