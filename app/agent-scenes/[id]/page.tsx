@@ -1928,9 +1928,9 @@ function storageUrl(raw: string) {
     const parsed = new URL(clean);
     if (parsed.hostname === 'storage.googleapis.com') {
       const parts = parsed.pathname.split('/').filter(Boolean);
-      // Route known GCS bucket objects through the authenticated storage API
-      // instead of exposing public Google Storage URLs directly in players.
-      if (parts[0] === 'based-us-images' && parts.length > 1) {
+      // Route GCS object URLs through the authenticated storage API. The server
+      // resolves the object from GCP_STORAGE_BUCKET.
+      if (parts.length > 1) {
         clean = parts.slice(1).join('/');
       } else {
         return clean;

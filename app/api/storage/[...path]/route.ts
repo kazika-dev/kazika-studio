@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
-import { getFileFromStorage, getStorageBucketCandidates, getStorageClient } from '@/lib/gcp-storage';
+import { getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
 
 function parseRange(rangeHeader: string, size: number): { start: number; end: number } | null {
   const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
@@ -115,49 +115,37 @@ export async function GET(
     // Safari/iOS and some Chromium cases fail to start playback from this proxy.
     if (rangeHeader) {
       const storage = getStorageClient();
-      let lastRangeError: unknown;
+      const bucketName = getStorageBucketName();
+      const file = storage.bucket(bucketName).file(filePath);
+      const [metadata] = await file.getMetadata();
+      const size = Number(metadata.size || 0);
+      const contentType = metadata.contentType || 'application/octet-stream';
+      const parsedRange = parseRange(rangeHeader, size);
 
-      for (const bucketName of getStorageBucketCandidates()) {
-        try {
-          const file = storage.bucket(bucketName).file(filePath);
-          const [metadata] = await file.getMetadata();
-          const size = Number(metadata.size || 0);
-          const contentType = metadata.contentType || 'application/octet-stream';
-          const parsedRange = parseRange(rangeHeader, size);
-
-          if (!parsedRange) {
-            return new NextResponse(null, {
-              status: 416,
-              headers: {
-                'Content-Range': `bytes */${size}`,
-                'Accept-Ranges': 'bytes',
-              },
-            });
-          }
-
-          const { start, end } = parsedRange;
-          const { data } = await getFileRangeFromStorage(bucketName, filePath, start, end);
-          console.log('Storage proxy: Range retrieved successfully, bucket:', bucketName, 'content-type:', contentType, 'range:', `${start}-${end}/${size}`, 'size:', data.length);
-
-          return new NextResponse(new Uint8Array(data), {
-            status: 206,
-            headers: {
-              'Content-Type': contentType,
-              'Cache-Control': 'private, max-age=3600',
-              'Accept-Ranges': 'bytes',
-              'Content-Range': `bytes ${start}-${end}/${size}`,
-              'Content-Length': data.length.toString(),
-            },
-          });
-        } catch (error) {
-          lastRangeError = error;
-          const message = error instanceof Error ? error.message : String(error ?? '');
-          const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
-          if (!(code === '404' || message.includes('No such object') || message.includes('not found'))) throw error;
-        }
+      if (!parsedRange) {
+        return new NextResponse(null, {
+          status: 416,
+          headers: {
+            'Content-Range': `bytes */${size}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
       }
 
-      throw lastRangeError instanceof Error ? lastRangeError : new Error(`File not found: ${filePath}`);
+      const { start, end } = parsedRange;
+      const { data } = await getFileRangeFromStorage(bucketName, filePath, start, end);
+      console.log('Storage proxy: Range retrieved successfully, bucket:', bucketName, 'content-type:', contentType, 'range:', `${start}-${end}/${size}`, 'size:', data.length);
+
+      return new NextResponse(new Uint8Array(data), {
+        status: 206,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'private, max-age=3600',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${size}`,
+          'Content-Length': data.length.toString(),
+        },
+      });
     }
 
     // GCPストレージからファイルを取得
