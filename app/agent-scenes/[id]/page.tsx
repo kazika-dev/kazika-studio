@@ -44,6 +44,7 @@ export default function AgentSceneDetailPage() {
   const [savingSubtitles, setSavingSubtitles] = useState(false);
   const [savingSubtitleClipId, setSavingSubtitleClipId] = useState('');
   const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
+  const [renderingFinalSubtitledVideo, setRenderingFinalSubtitledVideo] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(sceneId)) {
@@ -415,6 +416,33 @@ export default function AgentSceneDetailPage() {
     }
   };
 
+  const renderFinalSubtitledVideo = async () => {
+    if (!Number.isFinite(sceneId)) return;
+    setRenderingFinalSubtitledVideo(true);
+    setSubtitleError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/render-final-subtitled-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '動画結合＋字幕焼き込みに失敗しました');
+      }
+      const nextAsset = result.data?.asset;
+      const nextJob = result.data?.generationJob;
+      setData((current) => current ? {
+        ...current,
+        assets: nextAsset ? [nextAsset, ...current.assets] : current.assets,
+        generationJobs: nextJob ? [nextJob, ...current.generationJobs] : current.generationJobs,
+      } : current);
+    } catch (err) {
+      setSubtitleError(err instanceof Error ? err.message : '動画結合＋字幕焼き込みに失敗しました');
+    } finally {
+      setRenderingFinalSubtitledVideo(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -446,6 +474,7 @@ export default function AgentSceneDetailPage() {
   const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
   const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
+  const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -667,9 +696,12 @@ export default function AgentSceneDetailPage() {
               </div>
               <SubtitleTools
                 subtitleClips={subtitleClips}
+                sourceVideoCount={finalSourceVideoCount}
                 saving={savingSubtitles}
+                renderingFinal={renderingFinalSubtitledVideo}
                 error={subtitleError}
                 onSync={syncSubtitleTrack}
+                onRenderFinal={renderFinalSubtitledVideo}
               />
               {timelineTracks.length > 0 && (
                 <div className="mt-4 space-y-3">
@@ -861,6 +893,14 @@ function isVisualAsset(asset: AnyRow) {
 function isVideoAsset(asset: AnyRow) {
   const type = String(asset.asset_type || '');
   return type === 'video' || type === 'talking_video' || type === 'synced_video' || type === 'final_video' || String(asset.mime_type || '').includes('video');
+}
+
+function isFinalRenderSourceVideo(asset: AnyRow) {
+  if (!isVideoAsset(asset)) return false;
+  if (String(asset.asset_type || '') === 'final_video') return false;
+  if (asset.script_line_id == null) return false;
+  const burnedIn = assetMetadata(asset).burned_in_subtitles;
+  return burnedIn !== true && burnedIn !== 'true';
 }
 
 function canRemakeCheckAsset(asset: AnyRow) {
@@ -1555,14 +1595,20 @@ function SceneImageDisplayControl({
 
 function SubtitleTools({
   subtitleClips,
+  sourceVideoCount,
   saving,
+  renderingFinal,
   error,
   onSync,
+  onRenderFinal,
 }: {
   subtitleClips: AnyRow[];
+  sourceVideoCount: number;
   saving: boolean;
+  renderingFinal: boolean;
   error: string;
   onSync: () => void;
+  onRenderFinal: () => void;
 }) {
   const enabledCount = subtitleClips.filter((clip) => subtitleMetadata(clip).enabled !== false && subtitleText(clip)).length;
   return (
@@ -1573,17 +1619,28 @@ function SubtitleTools({
           <span className="font-semibold">字幕プレビュー / 焼き込み</span>
           <Badge>{enabledCount}/{subtitleClips.length} clips</Badge>
         </div>
-        <button
-          type="button"
-          onClick={onSync}
-          disabled={saving}
-          className="rounded-full border border-indigo-200 bg-white px-3 py-1 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-950 dark:text-indigo-200 dark:hover:bg-indigo-950"
-        >
-          {saving ? '字幕作成中...' : subtitleClips.length ? '台本から字幕を再同期' : '台本から字幕を作成'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onRenderFinal}
+            disabled={renderingFinal || sourceVideoCount === 0 || enabledCount === 0}
+            className="rounded-full border border-indigo-200 bg-indigo-600 px-3 py-1 font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            title="セリフ順に動画をつなげて、現在の字幕スタイルで焼き込みます"
+          >
+            {renderingFinal ? '結合書き出し中...' : `動画結合＋字幕焼き込み (${sourceVideoCount}本)`}
+          </button>
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={saving}
+            className="rounded-full border border-indigo-200 bg-white px-3 py-1 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-950 dark:text-indigo-200 dark:hover:bg-indigo-950"
+          >
+            {saving ? '字幕作成中...' : subtitleClips.length ? '台本から字幕を再同期' : '台本から字幕を作成'}
+          </button>
+        </div>
       </div>
       <p className="mt-2 leading-5 text-slate-600 dark:text-slate-300">
-        text timeline clip を字幕として使います。動画カード上で字幕DOMプレビュー、必要な動画ごとに ffmpeg で焼き込みMP4を書き出せます。
+        text timeline clip を字幕として使います。単体動画の焼き込みに加えて、セリフ順の動画を1本につなげてから同じ字幕スタイルで final_video を書き出せます。
       </p>
       {error && <p className="mt-2 text-red-600 dark:text-red-300">{error}</p>}
     </div>
