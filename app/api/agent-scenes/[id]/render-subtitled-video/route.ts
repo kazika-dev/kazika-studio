@@ -98,14 +98,19 @@ function wrapSubtitleTextForAss(value: string) {
 function buildAss(subtitles: SubtitleRow[], fallbackDurationMs: number) {
   const events = subtitles
     .filter((clip) => clip.metadata?.enabled !== false)
-    .map((clip) => {
+    .flatMap((clip) => {
       const text = String(clip.metadata?.text || '').trim();
-      if (!text) return '';
+      if (!text) return [];
       const start = Number(clip.metadata?.local_start_ms ?? clip.source_start_ms ?? 0);
       const end = Number(clip.metadata?.local_end_ms ?? clip.source_end_ms ?? fallbackDurationMs);
-      return `Dialogue: 0,${assTime(start)},${assTime(Math.max(end, start + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(text)}`;
+      const wrappedText = wrapSubtitleTextForAss(text);
+      const startTime = assTime(start);
+      const endTime = assTime(Math.max(end, start + 300));
+      return [
+        `Dialogue: 0,${startTime},${endTime},SubtitleShadow,,0,0,0,,{\blur6\bord2}${wrappedText}`,
+        `Dialogue: 1,${startTime},${endTime},SubtitleMain,,0,0,0,,${wrappedText}`,
+      ];
     })
-    .filter(Boolean)
     .join('\n');
 
   return `[Script Info]
@@ -117,7 +122,8 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H88000000,&HAA000000,0,0,0,0,100,100,0,0,1,1,4,2,70,70,230,1
+Style: SubtitleShadow,Noto Sans CJK JP,58,&H66000000,&H000000FF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,70,70,230,1
+Style: SubtitleMain,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&HFF000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,70,70,230,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
