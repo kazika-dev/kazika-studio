@@ -49,6 +49,12 @@ type SubtitleRow = {
   metadata: Record<string, unknown>;
 };
 
+type ScriptLineRow = {
+  id: number;
+  text: string | null;
+  tts_text: string | null;
+};
+
 type SubtitleEvent = {
   id: number;
   startMs: number;
@@ -280,6 +286,22 @@ async function loadSubtitles(sceneId: number, lineIds: number[]) {
   return result.rows as SubtitleRow[];
 }
 
+async function loadScriptLines(lineIds: number[]) {
+  const result = await query(
+    `
+      select id, text, tts_text
+      from kazika_studio_agents.script_lines
+      where id = any($1::bigint[])
+    `,
+    [lineIds]
+  );
+  return new Map((result.rows as ScriptLineRow[]).map((line) => [String(line.id), line]));
+}
+
+function fallbackSubtitleTextForLine(line: ScriptLineRow | undefined) {
+  return String(line?.text || line?.tts_text || '').trim();
+}
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -299,10 +321,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'No source videos found for this scene.' }, { status: 400 });
     }
 
-    const subtitles = await loadSubtitles(sceneId, sourceVideos.map((asset) => asset.script_line_id));
-    if (!subtitles.some((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())) {
-      return NextResponse.json({ success: false, error: 'No enabled subtitle clips found. Create subtitles first.' }, { status: 400 });
-    }
+    const sourceLineIds = sourceVideos.map((asset) => asset.script_line_id);
+    const subtitles = await loadSubtitles(sceneId, sourceLineIds);
+    const scriptLinesById = await loadScriptLines(sourceLineIds);
 
     const ffmpegPath = resolveFfmpegPath();
     workDir = await mkdtemp(path.join(tmpdir(), 'kazika-final-subtitle-render-'));
@@ -395,17 +416,33 @@ export async function POST(
         .filter((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())
         .sort((a, b) => clipLocalStartMs(a) - clipLocalStartMs(b));
 
-      for (const clip of lineSubtitles) {
-        const localStart = Math.min(Math.max(clipLocalStartMs(clip), 0), durationMs);
-        const localEnd = Math.min(Math.max(clipLocalEndMs(clip, durationMs), localStart + 300), durationMs);
-        subtitleEvents.push({
-          id: clip.id,
-          startMs: offsetMs + localStart,
-          endMs: offsetMs + localEnd,
-          text: subtitleText(clip).trim(),
-        });
+      if (lineSubtitles.length > 0) {
+        for (const clip of lineSubtitles) {
+          const localStart = Math.min(Math.max(clipLocalStartMs(clip), 0), durationMs);
+          const localEnd = Math.min(Math.max(clipLocalEndMs(clip, durationMs), localStart + 300), durationMs);
+          subtitleEvents.push({
+            id: clip.id,
+            startMs: offsetMs + localStart,
+            endMs: offsetMs + localEnd,
+            text: subtitleText(clip).trim(),
+          });
+        }
+      } else {
+        const fallbackText = fallbackSubtitleTextForLine(scriptLinesById.get(String(asset.script_line_id)));
+        if (fallbackText) {
+          subtitleEvents.push({
+            id: 0,
+            startMs: offsetMs,
+            endMs: offsetMs + Math.max(durationMs, 300),
+            text: fallbackText,
+          });
+        }
       }
       offsetMs += durationMs;
+    }
+
+    if (subtitleEvents.length === 0) {
+      return NextResponse.json({ success: false, error: 'No subtitle text found for the selected videos.' }, { status: 400 });
     }
 
     await writeFile(assPath, buildAss(subtitleEvents, targetWidth, targetHeight), 'utf8');
@@ -444,7 +481,7 @@ export async function POST(
       [
         auth.user.id,
         sceneId,
-        JSON.stringify({ source_video_asset_ids: sourceVideos.map((asset) => asset.id), subtitle_clip_ids: subtitleEvents.map((event) => event.id) }),
+        JSON.stringify({ source_video_asset_ids: sourceVideos.map((asset) => asset.id), subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean) }),
         JSON.stringify({ storage_path: storagePath }),
         JSON.stringify({ renderer: 'ffmpeg', subtitle_format: 'ass', concat: true, burned_in_subtitles: true }),
       ]
@@ -470,7 +507,7 @@ export async function POST(
           source_video_asset_ids: sourceVideos.map((asset) => asset.id),
           burned_in_subtitles: true,
           final_concat: true,
-          subtitle_clip_ids: subtitleEvents.map((event) => event.id),
+          subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean),
           output_size_source: 'first_video',
           output_size: { width: targetWidth, height: targetHeight },
           subtitle_style: { vertical_position: 'bottom_12_percent', background: 'none', punctuation_wrap: true },
