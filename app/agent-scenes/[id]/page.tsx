@@ -1678,8 +1678,10 @@ function SubtitleClipEditor({ clip, saving, onSave }: { clip: AnyRow; saving: bo
 function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: AnyRow; subtitleClips?: AnyRow[]; compact?: boolean }) {
   const src = assetUrl(asset);
   const [currentMs, setCurrentMs] = useState(0);
+  const [showSubtitles, setShowSubtitles] = useState(true);
   const activeSubtitle = activeSubtitleAt(subtitleClips, currentMs);
-  const text = activeSubtitle ? subtitleText(activeSubtitle) : '';
+  const text = showSubtitles && activeSubtitle ? subtitleText(activeSubtitle) : '';
+  const hasSubtitles = subtitleClips.some((clip) => subtitleMetadata(clip).enabled !== false && subtitleText(clip).trim());
   if (!src) return null;
   return (
     <div className={compact ? 'mb-2 min-w-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950' : 'mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950'}>
@@ -1691,6 +1693,16 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
           onTimeUpdate={(event) => setCurrentMs(Math.round(event.currentTarget.currentTime * 1000))}
           className={compact ? 'max-h-44 w-full bg-black' : 'max-h-[420px] w-full max-w-full bg-black'}
         />
+        {hasSubtitles && (
+          <button
+            type="button"
+            onClick={() => setShowSubtitles((value) => !value)}
+            className="absolute right-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur transition hover:bg-black/75"
+            title={showSubtitles ? '字幕を非表示' : '字幕を表示'}
+          >
+            字幕 {showSubtitles ? 'ON' : 'OFF'}
+          </button>
+        )}
         {text && (
           <div className="pointer-events-none absolute inset-x-3 bottom-8 flex justify-center text-center">
             <span className="max-w-[92%] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-base">
