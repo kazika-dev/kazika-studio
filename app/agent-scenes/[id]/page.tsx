@@ -1675,6 +1675,17 @@ function SubtitleClipEditor({ clip, saving, onSave }: { clip: AnyRow; saving: bo
   );
 }
 
+function renderSubtitleTextWithBreaks(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  for (const [index, char] of Array.from(text).entries()) {
+    nodes.push(char);
+    if ('、。！？!?'.includes(char)) {
+      nodes.push(<wbr key={`subtitle-break-${index}`} />);
+    }
+  }
+  return nodes;
+}
+
 function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: AnyRow; subtitleClips?: AnyRow[]; compact?: boolean }) {
   const src = assetUrl(asset);
   const [currentMs, setCurrentMs] = useState(0);
@@ -1735,7 +1746,7 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
         {showInlineSubtitle && (
           <div className="pointer-events-none absolute inset-x-3 bottom-8 flex justify-center text-center">
             <span className="max-w-[92%] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-base">
-              {text}
+              {renderSubtitleTextWithBreaks(text)}
             </span>
           </div>
         )}
@@ -1775,7 +1786,7 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
               {text && (
                 <div className="pointer-events-none absolute inset-x-5 bottom-[12%] flex justify-center text-center">
                   <span className="max-w-[92%] px-4 py-2 text-base font-semibold leading-relaxed text-white [text-shadow:0_1px_2px_rgba(0,0,0,.95),0_0_6px_rgba(0,0,0,.75)] sm:text-lg">
-                    {text}
+                    {renderSubtitleTextWithBreaks(text)}
                   </span>
                 </div>
               )}
