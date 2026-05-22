@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    '/*': ['./node_modules/ffmpeg-static/ffmpeg'],
+    '/*': ['./node_modules/ffmpeg-static/ffmpeg', './public/fonts/NotoSansCJKjp-Regular.otf'],
   },
 
   // サーバーコンポーネントでのみ使用される外部パッケージ

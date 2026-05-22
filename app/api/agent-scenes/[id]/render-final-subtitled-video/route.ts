@@ -143,6 +143,7 @@ function buildAss(events: SubtitleEvent[], width: number, height: number) {
   const marginV = Math.max(24, Math.round(height * 0.12));
   const marginH = Math.max(24, Math.round(width * 0.065));
   const fontSize = Math.max(24, Math.round(height * (58 / 1920)));
+  const outline = Math.max(2, Math.round(height * (3 / 1920)));
   const shadow = Math.max(1, Math.round(height * (2 / 1920)));
   const dialogue = events
     .map((event) => `Dialogue: 0,${assTime(event.startMs)},${assTime(Math.max(event.endMs, event.startMs + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(event.text)}`)
@@ -157,7 +158,7 @@ PlayResY: ${height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,${shadow},2,${marginH},${marginH},${marginV},1
+Style: Default,Noto Sans CJK JP,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,${outline},${shadow},2,${marginH},${marginH},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -165,8 +166,13 @@ ${dialogue}
 `;
 }
 
-function ffmpegPathForAss(filePath: string) {
-  return filePath.replace(/\\/g, '\\\\').replace(/:/g, '\\:');
+function ffmpegFilterPath(filePath: string) {
+  return filePath.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+function subtitleAssFilter(assPath: string) {
+  const fontsDir = path.join(process.cwd(), 'public', 'fonts');
+  return `ass=${ffmpegFilterPath(assPath)}:fontsdir=${ffmpegFilterPath(fontsDir)}`;
 }
 
 function concatFileLine(filePath: string) {
@@ -450,7 +456,7 @@ export async function POST(
     await runFfmpeg(ffmpegPath, [
       '-y',
       '-i', combinedPath,
-      '-vf', `ass=${ffmpegPathForAss(assPath)}`,
+      '-vf', subtitleAssFilter(assPath),
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '20',

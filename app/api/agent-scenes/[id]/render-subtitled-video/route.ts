@@ -117,12 +117,21 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,70,70,230,1
+Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,2,2,70,70,230,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 ${events}
 `;
+}
+
+function ffmpegFilterPath(filePath: string) {
+  return filePath.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+function subtitleAssFilter(assPath: string) {
+  const fontsDir = path.join(process.cwd(), 'public', 'fonts');
+  return `ass=${ffmpegFilterPath(assPath)}:fontsdir=${ffmpegFilterPath(fontsDir)}`;
 }
 
 function runFfmpeg(ffmpegPath: string, args: string[]) {
@@ -222,7 +231,7 @@ export async function POST(
     await runFfmpeg(ffmpegPath, [
       '-y',
       '-i', inputPath,
-      '-vf', `ass=${assPath.replace(/\\/g, '\\\\').replace(/:/g, '\\:')}`,
+      '-vf', subtitleAssFilter(assPath),
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '20',
