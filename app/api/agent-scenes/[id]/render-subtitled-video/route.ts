@@ -8,6 +8,7 @@ import { createRequire } from 'module';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getFileFromStorage, getSignedUrl, uploadImageToStorage } from '@/lib/gcp-storage';
 import { query } from '@/lib/db';
+import { syncKazikaAgentIdSequence } from '@/lib/db-sequences';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -241,6 +242,7 @@ export async function POST(
     );
     const signedUrl = await getSignedUrl(storagePath, 24 * 60);
 
+    await syncKazikaAgentIdSequence('generation_jobs');
     const jobResult = await query(
       `
         insert into kazika_studio_agents.generation_jobs
@@ -259,6 +261,7 @@ export async function POST(
     );
     const job = jobResult.rows[0];
 
+    await syncKazikaAgentIdSequence('assets');
     const renderedAssetResult = await query(
       `
         insert into kazika_studio_agents.assets
