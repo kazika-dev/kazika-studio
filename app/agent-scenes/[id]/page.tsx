@@ -1910,14 +1910,40 @@ function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
 }
 
 function assetUrl(asset: AnyRow) {
-  const raw = typeof asset.url === 'string' && asset.url ? asset.url : typeof asset.storage_path === 'string' ? asset.storage_path : '';
+  const metadata = assetMetadata(asset);
+  const publicPreviewUrl = typeof metadata.public_preview_url === 'string' ? metadata.public_preview_url : '';
+  const raw = isVideoAsset(asset) && publicPreviewUrl
+    ? publicPreviewUrl
+    : typeof asset.url === 'string' && asset.url ? asset.url : typeof asset.storage_path === 'string' ? asset.storage_path : '';
+
   return storageUrl(raw);
 }
 
 function storageUrl(raw: string) {
   if (!raw) return '';
-  if (/^https?:\/\//.test(raw) || raw.startsWith('/api/storage/')) return raw;
-  const clean = raw.replace(/^\/+/, '').replace(/^api\/storage\//, '');
+
+  let clean = raw.trim();
+
+  try {
+    const parsed = new URL(clean);
+    if (parsed.hostname === 'storage.googleapis.com') {
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      // Route known GCS bucket objects through the authenticated storage API
+      // instead of exposing public Google Storage URLs directly in players.
+      if (parts[0] === 'based-us-images' && parts.length > 1) {
+        clean = parts.slice(1).join('/');
+      } else {
+        return clean;
+      }
+    } else {
+      return clean;
+    }
+  } catch {
+    // Not a URL; treat it as a storage object path below.
+  }
+
+  if (clean.startsWith('/api/storage/')) return clean;
+  clean = clean.replace(/^\/+/, '').replace(/^api\/storage\//, '');
   return `/api/storage/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }
 

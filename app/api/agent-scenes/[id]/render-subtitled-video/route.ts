@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { createRequire } from 'module';
 import { createKazikaClient } from '@/lib/kazika-db-client';
-import { getFileFromStorage, uploadImageToStorage } from '@/lib/gcp-storage';
+import { getFileFromStorage, getSignedUrl, uploadImageToStorage } from '@/lib/gcp-storage';
 import { query } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -206,7 +206,7 @@ export async function POST(
       filename,
       `scenes/scene-${sceneId}/subtitled-renders`
     );
-    const publicUrl = `https://storage.googleapis.com/${process.env.GCP_STORAGE_BUCKET}/${storagePath}`;
+    const signedUrl = await getSignedUrl(storagePath, 24 * 60);
 
     const jobResult = await query(
       `
@@ -220,7 +220,7 @@ export async function POST(
         sceneId,
         asset.script_line_id,
         JSON.stringify({ source_video_asset_id: videoAssetId, subtitle_clip_ids: subtitles.map((clip) => clip.id) }),
-        JSON.stringify({ storage_path: storagePath, public_url: publicUrl }),
+        JSON.stringify({ storage_path: storagePath }),
         JSON.stringify({ renderer: 'ffmpeg', subtitle_format: 'ass', burned_in_subtitles: true }),
       ]
     );
@@ -255,7 +255,8 @@ export async function POST(
       data: {
         asset: renderedAssetResult.rows[0],
         generationJob: job,
-        publicUrl,
+        signedUrl,
+        previewUrl: signedUrl,
       },
     });
   } catch (error: unknown) {
