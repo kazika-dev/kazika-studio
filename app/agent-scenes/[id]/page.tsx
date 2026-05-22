@@ -1045,6 +1045,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
   const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
+  const downloadSrc = storageDownloadUrl(src);
   const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
@@ -1098,9 +1099,16 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
       {canRemakeCheck && <RemakeCheckControl asset={asset} />}
       {isAudio && <AudioPlayer asset={asset} />}
       {!isAudio && src && (
-        <a href={src} target="_blank" rel="noreferrer" className="mt-2 block truncate text-indigo-600 hover:underline dark:text-indigo-300">
-          {String(asset.storage_path || asset.url || src)}
-        </a>
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+          <a href={src} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-indigo-600 hover:underline dark:text-indigo-300">
+            {String(asset.storage_path || asset.url || src)}
+          </a>
+          {isVideo && (
+            <a href={downloadSrc} className="shrink-0 rounded-full border border-indigo-200 px-3 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-200 dark:hover:bg-indigo-950">
+              DL
+            </a>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1755,6 +1763,7 @@ function renderSubtitleTextWithBreaks(text: string): ReactNode[] {
 
 function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: AnyRow; subtitleClips?: AnyRow[]; compact?: boolean }) {
   const src = assetUrl(asset);
+  const downloadSrc = storageDownloadUrl(src);
   const [currentMs, setCurrentMs] = useState(0);
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -1792,14 +1801,23 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
           onTimeUpdate={(event) => setCurrentMs(Math.round(event.currentTarget.currentTime * 1000))}
           className={compact ? 'max-h-44 w-full bg-black' : 'max-h-[420px] w-full max-w-full bg-black'}
         />
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="absolute left-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur transition hover:bg-black/75"
-          title="実サイズに近い表示で確認"
-        >
-          拡大
-        </button>
+        <div className="absolute left-2 top-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur transition hover:bg-black/75"
+            title="実サイズに近い表示で確認"
+          >
+            拡大
+          </button>
+          <a
+            href={downloadSrc}
+            className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur transition hover:bg-black/75"
+            title="動画をダウンロード"
+          >
+            DL
+          </a>
+        </div>
         {hasSubtitles && (
           <button
             type="button"
@@ -1835,9 +1853,14 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
               <div className="min-w-0 text-xs text-white/75">
                 asset #{String(asset.id)}{naturalSize ? ` · ${naturalSize.width}×${naturalSize.height}` : ''}
               </div>
-              <button type="button" onClick={() => setExpanded(false)} className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold transition hover:bg-white/25">
-                閉じる
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <a href={downloadSrc} className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold transition hover:bg-white/25">
+                  DL
+                </a>
+                <button type="button" onClick={() => setExpanded(false)} className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold transition hover:bg-white/25">
+                  閉じる
+                </button>
+              </div>
             </div>
             <div className="relative overflow-hidden rounded-lg bg-black shadow-2xl">
               <video
@@ -2079,6 +2102,17 @@ function assetUrl(asset: AnyRow) {
     : typeof asset.url === 'string' && asset.url ? asset.url : typeof asset.storage_path === 'string' ? asset.storage_path : '';
 
   return storageUrl(raw);
+}
+
+function storageDownloadUrl(url: string) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
+    parsed.searchParams.set('download', '1');
+    return parsed.pathname.startsWith('/api/storage/') ? `${parsed.pathname}${parsed.search}` : url;
+  } catch {
+    return url;
+  }
 }
 
 function storageUrl(raw: string) {

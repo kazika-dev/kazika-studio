@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import { getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
 
+function contentDispositionFilename(filePath: string) {
+  const rawName = filePath.split('/').filter(Boolean).pop() || 'download';
+  const safeName = rawName.replace(/[\r\n"]/g, '_');
+  return `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(rawName)}`;
+}
+
 function parseRange(rangeHeader: string, size: number): { start: number; end: number } | null {
   const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
   if (!match || size <= 0) return null;
@@ -109,6 +115,7 @@ export async function GET(
     //   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     // }
 
+    const download = request.nextUrl.searchParams.get('download') === '1';
     const rangeHeader = request.headers.get('range');
 
     // Video/audio elements commonly request byte ranges. Without 206 responses,
@@ -144,6 +151,7 @@ export async function GET(
           'Accept-Ranges': 'bytes',
           'Content-Range': `bytes ${start}-${end}/${size}`,
           'Content-Length': data.length.toString(),
+          ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
         },
       });
     }
@@ -159,6 +167,7 @@ export async function GET(
         'Cache-Control': 'private, max-age=3600', // 1時間キャッシュ
         'Accept-Ranges': 'bytes',
         'Content-Length': data.length.toString(),
+        ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
       },
     });
   } catch (error: unknown) {
