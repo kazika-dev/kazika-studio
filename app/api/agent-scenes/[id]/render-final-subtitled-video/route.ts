@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
+import { existsSync } from 'fs';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -13,6 +14,22 @@ export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
 const ffmpegStaticPath = require('ffmpeg-static') as string | null;
+
+function resolveFfmpegPath() {
+  const candidates = [
+    process.env.FFMPEG_PATH,
+    process.env.FFMPEG_BIN,
+    ffmpegStaticPath,
+    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'),
+    'ffmpeg',
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    if (candidate === 'ffmpeg' || existsSync(candidate)) return candidate;
+  }
+
+  return candidates[candidates.length - 1] || 'ffmpeg';
+}
 
 type VideoAssetRow = {
   id: number;
@@ -285,7 +302,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'No enabled subtitle clips found. Create subtitles first.' }, { status: 400 });
     }
 
-    const ffmpegPath = process.env.FFMPEG_PATH || ffmpegStaticPath || 'ffmpeg';
+    const ffmpegPath = resolveFfmpegPath();
     workDir = await mkdtemp(path.join(tmpdir(), 'kazika-final-subtitle-render-'));
     const normalizedPaths: string[] = [];
     const normalizedDurationsMs: number[] = [];

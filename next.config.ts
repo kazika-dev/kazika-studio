@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/*': ['./node_modules/ffmpeg-static/ffmpeg'],
+  },
+
   // サーバーコンポーネントでのみ使用される外部パッケージ
   serverExternalPackages: [
     '@google-cloud/storage',
