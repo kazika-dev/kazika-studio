@@ -1679,9 +1679,29 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
   const src = assetUrl(asset);
   const [currentMs, setCurrentMs] = useState(0);
   const [showSubtitles, setShowSubtitles] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const activeSubtitle = activeSubtitleAt(subtitleClips, currentMs);
   const text = showSubtitles && activeSubtitle ? subtitleText(activeSubtitle) : '';
   const hasSubtitles = subtitleClips.some((clip) => subtitleMetadata(clip).enabled !== false && subtitleText(clip).trim());
+  const showInlineSubtitle = Boolean(text && !compact);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [expanded]);
+
+  const handleLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    if (video.videoWidth && video.videoHeight) {
+      setNaturalSize({ width: video.videoWidth, height: video.videoHeight });
+    }
+  };
+
   if (!src) return null;
   return (
     <div className={compact ? 'mb-2 min-w-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950' : 'mb-3 min-w-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950'}>
@@ -1690,9 +1710,18 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
           controls
           preload="metadata"
           src={src}
+          onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={(event) => setCurrentMs(Math.round(event.currentTarget.currentTime * 1000))}
           className={compact ? 'max-h-44 w-full bg-black' : 'max-h-[420px] w-full max-w-full bg-black'}
         />
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="absolute left-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur transition hover:bg-black/75"
+          title="実サイズに近い表示で確認"
+        >
+          拡大
+        </button>
         {hasSubtitles && (
           <button
             type="button"
@@ -1703,14 +1732,57 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
             字幕 {showSubtitles ? 'ON' : 'OFF'}
           </button>
         )}
-        {text && (
+        {showInlineSubtitle && (
           <div className="pointer-events-none absolute inset-x-3 bottom-8 flex justify-center text-center">
             <span className="max-w-[92%] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-base">
               {text}
             </span>
           </div>
         )}
+        {compact && hasSubtitles && (
+          <div className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-center text-center">
+            <span className="rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white shadow">字幕は拡大で表示</span>
+          </div>
+        )}
       </div>
+      {expanded && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setExpanded(false)}
+        >
+          <div className="w-full max-w-[calc(100vw-2rem)]" style={{ maxWidth: naturalSize?.width ? `${naturalSize.width}px` : undefined }} onClick={(event) => event.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between gap-3 text-white">
+              <div className="min-w-0 text-xs text-white/75">
+                asset #{String(asset.id)}{naturalSize ? ` · ${naturalSize.width}×${naturalSize.height}` : ''}
+              </div>
+              <button type="button" onClick={() => setExpanded(false)} className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold transition hover:bg-white/25">
+                閉じる
+              </button>
+            </div>
+            <div className="relative overflow-hidden rounded-lg bg-black shadow-2xl">
+              <video
+                controls
+                autoPlay
+                preload="metadata"
+                src={src}
+                onLoadedMetadata={handleLoadedMetadata}
+                onTimeUpdate={(event) => setCurrentMs(Math.round(event.currentTarget.currentTime * 1000))}
+                className="max-h-[calc(100vh-7rem)] w-full bg-black object-contain"
+                style={{ maxHeight: naturalSize?.height ? `min(${naturalSize.height}px, calc(100vh - 7rem))` : undefined }}
+              />
+              {text && (
+                <div className="pointer-events-none absolute inset-x-5 bottom-10 flex justify-center text-center">
+                  <span className="max-w-[92%] rounded-lg bg-black/60 px-4 py-2 text-base font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-lg">
+                    {text}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
