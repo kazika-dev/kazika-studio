@@ -1773,8 +1773,8 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
                 style={{ maxHeight: naturalSize?.height ? `min(${naturalSize.height}px, calc(100vh - 7rem))` : undefined }}
               />
               {text && (
-                <div className="pointer-events-none absolute inset-x-5 bottom-10 flex justify-center text-center">
-                  <span className="max-w-[92%] rounded-lg bg-black/60 px-4 py-2 text-base font-semibold leading-relaxed text-white shadow [text-shadow:0_1px_2px_rgba(0,0,0,.9)] sm:text-lg">
+                <div className="pointer-events-none absolute inset-x-5 bottom-[12%] flex justify-center text-center">
+                  <span className="max-w-[92%] px-4 py-2 text-base font-semibold leading-relaxed text-white [text-shadow:0_1px_2px_rgba(0,0,0,.95),0_0_6px_rgba(0,0,0,.75)] sm:text-lg">
                     {text}
                   </span>
                 </div>
