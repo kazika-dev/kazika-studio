@@ -70,7 +70,7 @@ function assTime(ms: number) {
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
-function wrapSubtitleTextForAss(value: string, maxCharsPerLine = 18) {
+function wrapSubtitleTextForAss(value: string) {
   const normalized = value
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -80,13 +80,14 @@ function wrapSubtitleTextForAss(value: string, maxCharsPerLine = 18) {
 
   for (const rawLine of normalized.split('\n')) {
     let current = '';
-    for (const char of Array.from(rawLine.trim())) {
+    const chars = Array.from(rawLine.trim());
+    chars.forEach((char, index) => {
       current += char;
-      if ('、。！？!?'.includes(char) && current.length >= maxCharsPerLine) {
+      if ('、。！？!?'.includes(char) && index < chars.length - 1) {
         lines.push(current);
         current = '';
       }
-    }
+    });
     if (current) lines.push(current);
   }
 

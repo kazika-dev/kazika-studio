@@ -1733,13 +1733,14 @@ function SubtitleClipEditor({ clip, saving, onSave }: { clip: AnyRow; saving: bo
 }
 
 function renderSubtitleTextWithBreaks(text: string): ReactNode[] {
+  const chars = Array.from(text);
   const nodes: ReactNode[] = [];
-  for (const [index, char] of Array.from(text).entries()) {
+  chars.forEach((char, index) => {
     nodes.push(char);
-    if ('、。！？!?'.includes(char)) {
-      nodes.push(<wbr key={`subtitle-break-${index}`} />);
+    if ('、。！？!?'.includes(char) && index < chars.length - 1) {
+      nodes.push(<br key={`subtitle-break-${index}`} />);
     }
-  }
+  });
   return nodes;
 }
 
