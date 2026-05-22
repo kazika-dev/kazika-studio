@@ -143,8 +143,8 @@ function buildAss(events: SubtitleEvent[], width: number, height: number) {
   const marginV = Math.max(24, Math.round(height * 0.12));
   const marginH = Math.max(24, Math.round(width * 0.065));
   const fontSize = 58;
-  const outline = 3;
-  const shadow = 2;
+  const outline = 1;
+  const shadow = 4;
   const dialogue = events
     .map((event) => `Dialogue: 0,${assTime(event.startMs)},${assTime(Math.max(event.endMs, event.startMs + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(event.text)}`)
     .join('\n');
@@ -158,7 +158,7 @@ PlayResY: ${height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,${outline},${shadow},2,${marginH},${marginH},${marginV},1
+Style: Default,Noto Sans CJK JP,${fontSize},&H00FFFFFF,&H000000FF,&H88000000,&HAA000000,0,0,0,0,100,100,0,0,1,${outline},${shadow},2,${marginH},${marginH},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
