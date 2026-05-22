@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
+import { syncConversationMessageSceneArtifacts } from '@/lib/agent-scene-artifact-sync';
 import type { UpdateMessageRequest, UpdateMessageResponse } from '@/types/conversation';
-
-import { createClient } from '@/lib/supabase/server';
 /**
  * PATCH /api/conversations/messages/:id
  * Update a specific message
@@ -23,8 +22,6 @@ export async function PATCH(
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     const body: UpdateMessageRequest = await request.json();
 
@@ -70,7 +67,7 @@ export async function PATCH(
     }
 
     // Update message
-    const updates: any = {};
+    const updates: Record<string, unknown> = {};
     if (body.messageText !== undefined) {
       updates.message_text = body.messageText;
     }
@@ -120,15 +117,24 @@ export async function PATCH(
       .update({ updated_at: new Date().toISOString() })
       .eq('id', message.conversation.id);
 
+    let artifactSync = null;
+    let artifactSyncWarning = null;
+    try {
+      artifactSync = await syncConversationMessageSceneArtifacts(updated.id);
+    } catch (syncError) {
+      console.error('[Update Message] Failed to sync script/subtitle artifacts:', syncError);
+      artifactSyncWarning = syncError instanceof Error ? syncError.message : 'Failed to sync script/subtitle artifacts';
+    }
+
     return NextResponse.json({
       success: true,
-      data: { message: updated }
+      data: { message: updated, artifactSync, artifactSyncWarning }
     } as UpdateMessageResponse);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update message error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }
@@ -154,8 +160,6 @@ export async function DELETE(
         { status: 401 }
       );
     }
-
-    const supabase = await createClient();
 
     // Fetch message and verify ownership
     const { data: message, error: msgError } = await db
@@ -223,10 +227,10 @@ export async function DELETE(
       data: { id }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete message error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

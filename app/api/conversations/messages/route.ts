@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/auth/apiAuth';
+import { syncConversationMessageSceneArtifacts } from '@/lib/agent-scene-artifact-sync';
 import type { CreateMessageRequest, CreateMessageResponse } from '@/types/conversation';
 
 /**
@@ -212,10 +213,21 @@ export async function POST(request: NextRequest) {
 
     console.log(`Successfully created message ${newMessage.id} in conversation ${body.conversationId}`);
 
+    let artifactSync = null;
+    let artifactSyncWarning = null;
+    try {
+      artifactSync = await syncConversationMessageSceneArtifacts(newMessage.id);
+    } catch (syncError) {
+      console.error('[Create Message] Failed to sync script/subtitle artifacts:', syncError);
+      artifactSyncWarning = syncError instanceof Error ? syncError.message : 'Failed to sync script/subtitle artifacts';
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        message: newMessage
+        message: newMessage,
+        artifactSync,
+        artifactSyncWarning,
       }
     } as CreateMessageResponse);
 
