@@ -41,6 +41,8 @@ type SubtitleEvent = {
 type ProbeResult = {
   hasAudio: boolean;
   durationSeconds: number | null;
+  width: number | null;
+  height: number | null;
 };
 
 function normalizeStoragePath(input: string) {
@@ -112,7 +114,11 @@ function clipLocalEndMs(clip: SubtitleRow, fallbackDurationMs: number) {
   return Number.isFinite(value) ? value : fallbackDurationMs;
 }
 
-function buildAss(events: SubtitleEvent[]) {
+function buildAss(events: SubtitleEvent[], width: number, height: number) {
+  const marginV = Math.max(24, Math.round(height * 0.12));
+  const marginH = Math.max(24, Math.round(width * 0.065));
+  const fontSize = Math.max(24, Math.round(height * (58 / 1920)));
+  const shadow = Math.max(1, Math.round(height * (2 / 1920)));
   const dialogue = events
     .map((event) => `Dialogue: 0,${assTime(event.startMs)},${assTime(Math.max(event.endMs, event.startMs + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(event.text)}`)
     .join('\n');
@@ -121,12 +127,12 @@ function buildAss(events: SubtitleEvent[]) {
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: ${width}
+PlayResY: ${height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,58,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,70,70,230,1
+Style: Default,Noto Sans CJK JP,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,${shadow},2,${marginH},${marginH},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -161,9 +167,15 @@ function probeMedia(ffmpegPath: string, inputPath: string) {
       const durationSeconds = durationMatch
         ? Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])
         : null;
+      const videoLine = stderr.split('\n').find((line) => /Video:/i.test(line)) || '';
+      const sizeMatch = videoLine.match(/(\d{2,5})x(\d{2,5})/);
+      const width = sizeMatch ? Number(sizeMatch[1]) : null;
+      const height = sizeMatch ? Number(sizeMatch[2]) : null;
       resolve({
         hasAudio: /Stream #\d+:\d+[^\n]*Audio:/i.test(stderr),
         durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+        width: width && Number.isFinite(width) ? width : null,
+        height: height && Number.isFinite(height) ? height : null,
       });
     });
   });
@@ -277,6 +289,8 @@ export async function POST(
     workDir = await mkdtemp(path.join(tmpdir(), 'kazika-final-subtitle-render-'));
     const normalizedPaths: string[] = [];
     const normalizedDurationsMs: number[] = [];
+    let targetWidth = 1080;
+    let targetHeight = 1920;
 
     for (const [index, asset] of sourceVideos.entries()) {
       const videoPath = normalizeStoragePath(String(asset.storage_path || asset.url || ''));
@@ -288,11 +302,15 @@ export async function POST(
       await writeFile(inputPath, video.data);
 
       const probe = await probeMedia(ffmpegPath, inputPath);
+      if (index === 0 && probe.width && probe.height) {
+        targetWidth = probe.width % 2 === 0 ? probe.width : probe.width - 1;
+        targetHeight = probe.height % 2 === 0 ? probe.height : probe.height - 1;
+      }
       const assetDurationSeconds = Number(asset.duration_seconds || 0);
       const durationSeconds = assetDurationSeconds > 0 ? assetDurationSeconds : (probe.durationSeconds || 6);
       normalizedDurationsMs.push(Math.round(durationSeconds * 1000));
 
-      const videoFilter = 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p';
+      const videoFilter = `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p`;
       const args = probe.hasAudio
         ? [
             '-y',
@@ -371,7 +389,7 @@ export async function POST(
       offsetMs += durationMs;
     }
 
-    await writeFile(assPath, buildAss(subtitleEvents), 'utf8');
+    await writeFile(assPath, buildAss(subtitleEvents, targetWidth, targetHeight), 'utf8');
 
     await runFfmpeg(ffmpegPath, [
       '-y',
@@ -432,6 +450,8 @@ export async function POST(
           burned_in_subtitles: true,
           final_concat: true,
           subtitle_clip_ids: subtitleEvents.map((event) => event.id),
+          output_size_source: 'first_video',
+          output_size: { width: targetWidth, height: targetHeight },
           subtitle_style: { vertical_position: 'bottom_12_percent', background: 'none', punctuation_wrap: true },
         }),
       ]
