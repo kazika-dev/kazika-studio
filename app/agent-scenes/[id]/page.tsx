@@ -967,8 +967,10 @@ function clipLocalEndMs(clip: AnyRow) {
 }
 
 function subtitleClipsForAsset(asset: AnyRow, subtitleClips: AnyRow[]) {
+  const metadata = assetMetadata(asset);
+  if (metadata.burned_in_subtitles === true || metadata.burned_in_subtitles === 'true') return [];
   const lineId = asset.script_line_id == null ? '' : String(asset.script_line_id);
-  const sourceVideoAssetId = assetMetadata(asset).source_video_asset_id;
+  const sourceVideoAssetId = metadata.source_video_asset_id;
   return subtitleClips
     .filter((clip) => {
       if (subtitleMetadata(clip).enabled === false) return false;
