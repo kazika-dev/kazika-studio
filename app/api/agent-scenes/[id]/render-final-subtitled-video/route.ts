@@ -142,9 +142,9 @@ function clipLocalEndMs(clip: SubtitleRow, fallbackDurationMs: number) {
 function buildAss(events: SubtitleEvent[], width: number, height: number) {
   const marginV = Math.max(24, Math.round(height * 0.12));
   const marginH = Math.max(24, Math.round(width * 0.065));
-  const fontSize = Math.max(24, Math.round(height * (58 / 1920)));
-  const outline = Math.max(2, Math.round(height * (3 / 1920)));
-  const shadow = Math.max(1, Math.round(height * (2 / 1920)));
+  const fontSize = 58;
+  const outline = 3;
+  const shadow = 2;
   const dialogue = events
     .map((event) => `Dialogue: 0,${assTime(event.startMs)},${assTime(Math.max(event.endMs, event.startMs + 300))},Default,,0,0,0,,${wrapSubtitleTextForAss(event.text)}`)
     .join('\n');
