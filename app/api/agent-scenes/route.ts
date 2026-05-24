@@ -17,6 +17,30 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 200);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
+    const projectKey = searchParams.get('project_key')?.trim() || '';
+    const genreMode = searchParams.get('genre_mode')?.trim() || '';
+    const productionStatus = searchParams.get('production_status')?.trim() || '';
+
+    const values: Array<string | number> = [user.id];
+    const filters: string[] = ['st.user_id = $1'];
+
+    if (projectKey) {
+      values.push(projectKey);
+      filters.push(`coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key', '') = $${values.length}`);
+    }
+    if (genreMode) {
+      values.push(genreMode);
+      filters.push(`coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode', '') = $${values.length}`);
+    }
+    if (productionStatus) {
+      values.push(productionStatus);
+      filters.push(`coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status', '') = $${values.length}`);
+    }
+
+    values.push(limit, offset);
+    const limitParam = values.length - 1;
+    const offsetParam = values.length;
+    const whereClause = filters.join('\n          and ');
 
     const result = await query(
       `
@@ -41,6 +65,11 @@ export async function GET(request: NextRequest) {
           ssd.*,
           st.title as story_title,
           st.user_id,
+          st.metadata as story_metadata,
+          coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key') as project_key,
+          coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode') as genre_mode,
+          coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status') as production_status,
+          coalesce(ssd.metadata->>'episode_no', st.metadata->>'episode_no') as episode_no,
           coalesce(sc.script_count, 0)::integer as script_count,
           coalesce(sc.line_count, 0)::integer as line_count,
           coalesce(sc.shot_count, 0)::integer as shot_count,
@@ -51,21 +80,22 @@ export async function GET(request: NextRequest) {
         from kazika_studio_agents.story_scenes_domain ssd
         join kazika_studio_agents.stories st on st.id = ssd.story_id
         left join scene_counts sc on sc.id = ssd.id
-        where st.user_id = $1
+        where ${whereClause}
         order by st.updated_at desc nulls last, st.id desc, ssd.sequence_order asc, ssd.id asc
-        limit $2 offset $3
+        limit $${limitParam} offset $${offsetParam}
       `,
-      [user.id, limit, offset]
+      values
     );
 
+    const countValues = values.slice(0, -2);
     const countResult = await query(
       `
         select count(*)::integer as total
         from kazika_studio_agents.story_scenes_domain ssd
         join kazika_studio_agents.stories st on st.id = ssd.story_id
-        where st.user_id = $1
+        where ${whereClause}
       `,
-      [user.id]
+      countValues
     );
 
     return NextResponse.json({

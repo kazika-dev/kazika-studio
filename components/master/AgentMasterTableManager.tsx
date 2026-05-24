@@ -27,9 +27,23 @@ export default function AgentMasterTableManager({ tableKey, displayName, descrip
   const [selected, setSelected] = useState<AgentRecord | null>(null);
   const [form, setForm] = useState<Record<string, RecordValue>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [projectKeyFilter, setProjectKeyFilter] = useState('');
+  const [genreModeFilter, setGenreModeFilter] = useState('');
+  const [productionStatusFilter, setProductionStatusFilter] = useState('');
 
   const fieldNames = useMemo(() => Object.keys(fields), [fields]);
   const visibleColumns = useMemo(() => ['id', ...fieldNames.slice(0, 6), 'updated_at'].filter((v, i, a) => a.indexOf(v) === i), [fieldNames]);
+  const showProjectFilters = tableKey === 'stories' || tableKey === 'story_scenes';
+  const filteredRecords = useMemo(() => {
+    if (!showProjectFilters) return records;
+    return records.filter((record) => {
+      const metadata = normalizeMetadata(record.metadata);
+      if (projectKeyFilter.trim() && String(metadata.project_key ?? '').toLowerCase() !== projectKeyFilter.trim().toLowerCase()) return false;
+      if (genreModeFilter.trim() && String(metadata.genre_mode ?? '').toLowerCase() !== genreModeFilter.trim().toLowerCase()) return false;
+      if (productionStatusFilter.trim() && String(metadata.production_status ?? '').toLowerCase() !== productionStatusFilter.trim().toLowerCase()) return false;
+      return true;
+    });
+  }, [genreModeFilter, productionStatusFilter, projectKeyFilter, records, showProjectFilters]);
 
   useEffect(() => { void load(); }, [tableKey]);
 
@@ -152,12 +166,28 @@ export default function AgentMasterTableManager({ tableKey, displayName, descrip
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>新規追加</Button>
       </Box>
+      {showProjectFilters && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" gap={2} mb={2} flexWrap="wrap">
+            <Box>
+              <Typography variant="subtitle2">作品フィルタ</Typography>
+              <Typography variant="caption" color="text.secondary">metadata.project_key / genre_mode / production_status で絞り込み</Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">表示 {filteredRecords.length} / {records.length}</Typography>
+          </Box>
+          <Box display="grid" gridTemplateColumns={{ xs: '1fr', md: 'repeat(3, 1fr)' }} gap={2}>
+            <TextField size="small" label="project_key" value={projectKeyFilter} onChange={(e) => setProjectKeyFilter(e.target.value)} placeholder="例: romcom01" />
+            <TextField size="small" label="genre_mode" value={genreModeFilter} onChange={(e) => setGenreModeFilter(e.target.value)} placeholder="romcom / narou" />
+            <TextField size="small" label="production_status" value={productionStatusFilter} onChange={(e) => setProductionStatusFilter(e.target.value)} placeholder="idea / outline / script" />
+          </Box>
+        </Paper>
+      )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       <TableContainer component={Paper}>
         <Table size="small">
           <TableHead><TableRow>{visibleColumns.map((col) => <TableCell key={col}>{col}</TableCell>)}<TableCell align="right">操作</TableCell></TableRow></TableHead>
           <TableBody>
-            {loading ? <TableRow><TableCell colSpan={visibleColumns.length + 1}>読み込み中...</TableCell></TableRow> : records.map((record) => (
+            {loading ? <TableRow><TableCell colSpan={visibleColumns.length + 1}>読み込み中...</TableCell></TableRow> : filteredRecords.map((record) => (
               <TableRow key={record.id} hover>
                 {visibleColumns.map((col) => <TableCell key={col} sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatCell(record[col])}</TableCell>)}
                 <TableCell align="right">
@@ -188,6 +218,20 @@ export default function AgentMasterTableManager({ tableKey, displayName, descrip
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}><DialogTitle>削除確認</DialogTitle><DialogContent>#{selected?.id} を削除しますか？</DialogContent><DialogActions><Button onClick={() => setDeleteOpen(false)}>キャンセル</Button><Button color="error" variant="contained" onClick={remove} disabled={submitting}>削除</Button></DialogActions></Dialog>
     </Container>
   );
+}
+
+function normalizeMetadata(value: RecordValue): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  return {};
 }
 
 function formatCell(value: RecordValue) {
