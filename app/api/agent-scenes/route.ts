@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const projectKey = searchParams.get('project_key')?.trim() || '';
     const genreMode = searchParams.get('genre_mode')?.trim() || '';
     const productionStatus = searchParams.get('production_status')?.trim() || '';
+    const storyId = Number.parseInt(searchParams.get('story_id') || '', 10);
 
     const values: Array<string | number> = [user.id];
     const filters: string[] = ['st.user_id = $1'];
@@ -36,6 +37,16 @@ export async function GET(request: NextRequest) {
       values.push(productionStatus);
       filters.push(`coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status', '') = $${values.length}`);
     }
+
+    const storyValues = [...values];
+    const storyWhereClause = filters.join('\n          and ');
+
+    if (Number.isFinite(storyId) && storyId > 0) {
+      values.push(storyId);
+      filters.push(`st.id = $${values.length}`);
+    }
+
+    const sceneValues = [...values];
 
     values.push(limit, offset);
     const limitParam = values.length - 1;
@@ -87,7 +98,54 @@ export async function GET(request: NextRequest) {
       values
     );
 
-    const countValues = values.slice(0, -2);
+    const storiesResult = await query(
+      `
+        with scene_counts as (
+          select
+            ssd.id,
+            count(distinct sc.id) as script_count,
+            count(distinct sl.id) as line_count,
+            count(distinct sh.id) as shot_count,
+            count(distinct a.id) as asset_count,
+            count(distinct a.id) filter (where a.asset_type = 'audio') as audio_count,
+            count(distinct a.id) filter (where a.asset_type in ('image', 'thumbnail')) as image_count,
+            count(distinct a.id) filter (where a.asset_type in ('video', 'talking_video', 'synced_video', 'final_video')) as video_count
+          from kazika_studio_agents.story_scenes_domain ssd
+          left join kazika_studio_agents.scripts sc on sc.agent_story_scene_id = ssd.id
+          left join kazika_studio_agents.script_lines sl on sl.script_id = sc.id
+          left join kazika_studio_agents.shots sh on sh.agent_story_scene_id = ssd.id or sh.script_id = sc.id
+          left join kazika_studio_agents.assets a on a.agent_story_scene_id = ssd.id or a.script_id = sc.id or a.shot_id = sh.id or a.script_line_id = sl.id
+          group by ssd.id
+        )
+        select
+          st.id,
+          st.title,
+          st.description,
+          st.thumbnail_url,
+          st.updated_at,
+          st.metadata,
+          coalesce(st.metadata->>'project_key', max(ssd.metadata->>'project_key')) as project_key,
+          coalesce(st.metadata->>'genre_mode', max(ssd.metadata->>'genre_mode')) as genre_mode,
+          coalesce(st.metadata->>'production_status', max(ssd.metadata->>'production_status')) as production_status,
+          count(distinct ssd.id)::integer as scene_count,
+          (array_agg(ssd.id order by ssd.sequence_order asc, ssd.id asc))[1] as first_scene_id,
+          coalesce(sum(sc.script_count), 0)::integer as script_count,
+          coalesce(sum(sc.line_count), 0)::integer as line_count,
+          coalesce(sum(sc.shot_count), 0)::integer as shot_count,
+          coalesce(sum(sc.asset_count), 0)::integer as asset_count,
+          coalesce(sum(sc.audio_count), 0)::integer as audio_count,
+          coalesce(sum(sc.image_count), 0)::integer as image_count,
+          coalesce(sum(sc.video_count), 0)::integer as video_count
+        from kazika_studio_agents.stories st
+        join kazika_studio_agents.story_scenes_domain ssd on ssd.story_id = st.id
+        left join scene_counts sc on sc.id = ssd.id
+        where ${storyWhereClause}
+        group by st.id
+        order by st.updated_at desc nulls last, st.id desc
+      `,
+      storyValues
+    );
+
     const countResult = await query(
       `
         select count(*)::integer as total
@@ -95,12 +153,13 @@ export async function GET(request: NextRequest) {
         join kazika_studio_agents.stories st on st.id = ssd.story_id
         where ${whereClause}
       `,
-      countValues
+      sceneValues
     );
 
     return NextResponse.json({
       success: true,
       data: {
+        stories: storiesResult.rows,
         scenes: result.rows,
         total: countResult.rows[0]?.total || 0,
       },

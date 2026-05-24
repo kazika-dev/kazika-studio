@@ -3,7 +3,27 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { AlertCircle, Clapperboard, Film, Mic2, ScrollText } from 'lucide-react';
+import { AlertCircle, BookOpen, Clapperboard, Film, Mic2, ScrollText } from 'lucide-react';
+
+type AgentStory = {
+  id: number;
+  title: string;
+  description?: string | null;
+  thumbnail_url?: string | null;
+  updated_at?: string | null;
+  project_key?: string | null;
+  genre_mode?: string | null;
+  production_status?: string | null;
+  scene_count: number;
+  first_scene_id?: number | null;
+  script_count: number;
+  line_count: number;
+  shot_count: number;
+  asset_count: number;
+  audio_count: number;
+  image_count: number;
+  video_count: number;
+};
 
 type AgentScene = {
   id: number;
@@ -29,6 +49,7 @@ type AgentScene = {
 };
 
 export default function AgentScenesPage() {
+  const [stories, setStories] = useState<AgentStory[]>([]);
   const [scenes, setScenes] = useState<AgentScene[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -36,6 +57,7 @@ export default function AgentScenesPage() {
   const [projectKey, setProjectKey] = useState('');
   const [genreMode, setGenreMode] = useState('');
   const [productionStatus, setProductionStatus] = useState('');
+  const [selectedStoryId, setSelectedStoryId] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -46,11 +68,13 @@ export default function AgentScenesPage() {
         if (projectKey.trim()) params.set('project_key', projectKey.trim());
         if (genreMode) params.set('genre_mode', genreMode);
         if (productionStatus) params.set('production_status', productionStatus);
+        if (selectedStoryId) params.set('story_id', selectedStoryId);
         const response = await fetch(`/api/agent-scenes?${params.toString()}`);
         const result = await response.json();
         if (!response.ok || !result.success) {
           throw new Error(result.error || 'シーン一覧の取得に失敗しました');
         }
+        setStories(result.data?.stories || []);
         setScenes(result.data?.scenes || []);
         setTotal(result.data?.total || 0);
       } catch (err) {
@@ -61,9 +85,10 @@ export default function AgentScenesPage() {
     };
 
     void load();
-  }, [projectKey, genreMode, productionStatus]);
+  }, [projectKey, genreMode, productionStatus, selectedStoryId]);
 
-  const hasFilters = Boolean(projectKey.trim() || genreMode || productionStatus);
+  const selectedStory = stories.find((story) => String(story.id) === selectedStoryId);
+  const hasFilters = Boolean(projectKey.trim() || genreMode || productionStatus || selectedStoryId);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -92,7 +117,7 @@ export default function AgentScenesPage() {
             {hasFilters && (
               <button
                 type="button"
-                onClick={() => { setProjectKey(''); setGenreMode(''); setProductionStatus(''); }}
+                onClick={() => { setProjectKey(''); setGenreMode(''); setProductionStatus(''); setSelectedStoryId(''); }}
                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
               >
                 クリア
@@ -144,12 +169,96 @@ export default function AgentScenesPage() {
           </div>
         </section>
 
+
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
+                <BookOpen size={19} /> ストーリー
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                ストーリーを選ぶと、下のシーン一覧がそのストーリーだけに切り替わります。
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {stories.length} ストーリー
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="h-44 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+              ))}
+            </div>
+          ) : stories.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              表示できるストーリーがまだありません。
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {stories.map((story) => (
+                <button
+                  key={story.id}
+                  type="button"
+                  onClick={() => setSelectedStoryId(String(story.id))}
+                  className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-sm dark:hover:border-indigo-700 dark:hover:bg-slate-900 ${String(story.id) === selectedStoryId ? 'border-indigo-300 bg-indigo-50 shadow-sm dark:border-indigo-700 dark:bg-indigo-950/40' : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950'}`}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-indigo-600 dark:text-indigo-300">Story #{story.id}</p>
+                      <h3 className="mt-1 line-clamp-2 text-lg font-semibold text-slate-900 group-hover:text-indigo-700 dark:text-white dark:group-hover:text-indigo-300">
+                        {story.title}
+                      </h3>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                      {story.scene_count} scenes
+                    </span>
+                  </div>
+                  <p className="mb-3 line-clamp-2 min-h-[2.75rem] text-sm leading-5 text-slate-600 dark:text-slate-300">
+                    {story.description || 'ストーリー説明は未設定です。'}
+                  </p>
+                  <div className="mb-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    {story.project_key && <span className="rounded-full bg-indigo-50 px-2 py-1 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{story.project_key}</span>}
+                    {story.genre_mode && <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700 dark:bg-violet-950 dark:text-violet-200">{story.genre_mode}</span>}
+                    {story.production_status && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">{story.production_status}</span>}
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    <Metric icon={<ScrollText size={15} />} label="台本" value={story.script_count} />
+                    <Metric icon={<Clapperboard size={15} />} label="ショット" value={story.shot_count} />
+                    <Metric icon={<Mic2 size={15} />} label="音声" value={story.audio_count} />
+                    <Metric icon={<Film size={15} />} label="画像/動画" value={story.video_count || story.image_count} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
         {error && (
           <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
             <AlertCircle className="mt-0.5 shrink-0" size={18} />
             <p>{error}</p>
           </div>
         )}
+
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">シーン一覧</h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {selectedStory ? `選択中: ${selectedStory.title}` : '全ストーリーのシーンを表示中'}
+            </p>
+          </div>
+          {selectedStoryId && (
+            <button
+              type="button"
+              onClick={() => setSelectedStoryId('')}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
+            >
+              全シーンに戻す
+            </button>
+          )}
+        </div>
 
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
