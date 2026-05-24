@@ -99,7 +99,7 @@ export default function AgentSceneDetailPage() {
   const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
 
   const materialAssets = useMemo(
-    () => visibleAssets.filter((asset) => !(asset.asset_type === 'audio' && asset.script_line_id)).sort(sortSceneAssets),
+    () => visibleAssets.filter((asset) => !(asset.asset_type === 'audio' && asset.script_line_id) && !isStoryboardAsset(asset)).sort(sortSceneAssets),
     [visibleAssets]
   );
 
@@ -474,6 +474,7 @@ export default function AgentSceneDetailPage() {
 
   const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
+  const storyboardAssets = assets.filter(isStoryboardAsset).sort(sortSceneAssets);
   const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
   const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
 
@@ -537,6 +538,21 @@ export default function AgentSceneDetailPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="絵コンテ" icon={<Clapperboard size={18} />}>
+              {storyboardAssets.length === 0 ? (
+                <Empty>まだ絵コンテがありません。storyboard asset として登録するとここに表示されます。</Empty>
+              ) : (
+                <div className="space-y-3">
+                  <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                    配置図の次に確認する連続絵コンテ。カメラ・芝居・シーンの流れを優先し、最終画は各ショット画像で詰めます。
+                  </p>
+                  {storyboardAssets.map((asset) => (
+                    <AssetRow key={String(asset.id)} asset={asset} />
+                  ))}
                 </div>
               )}
             </Panel>
@@ -883,7 +899,11 @@ function compactJson(value: unknown) {
 
 function isSceneImageAsset(asset: AnyRow) {
   const type = String(asset.asset_type || '');
-  return type === 'image' || type === 'thumbnail' || type === 'storyboard';
+  return type === 'image' || type === 'thumbnail';
+}
+
+function isStoryboardAsset(asset: AnyRow) {
+  return String(asset.asset_type || '') === 'storyboard';
 }
 
 function isVisualAsset(asset: AnyRow) {
@@ -1042,6 +1062,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
   const isAudio = asset.asset_type === 'audio';
   const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
+  const shouldContainImage = asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
@@ -1051,7 +1072,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
       {isImage && src && (
         <a href={src} target="_blank" rel="noreferrer" className="mb-3 block max-w-full overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
-          <img src={src} alt={`asset ${String(asset.id)}`} className="aspect-[3/4] h-auto w-full max-w-full object-cover transition hover:scale-[1.01]" loading="lazy" />
+          <img src={src} alt={`asset ${String(asset.id)}`} className={`${shouldContainImage ? 'aspect-square object-contain' : 'aspect-[3/4] object-cover'} h-auto w-full max-w-full transition hover:scale-[1.01]`} loading="lazy" />
         </a>
       )}
       {isVideo && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} />}
