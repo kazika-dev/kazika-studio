@@ -76,9 +76,6 @@ export default function AgentSceneDetailPage() {
   const currentAssets = useMemo(() => {
     const allAssets = data?.assets || [];
     const activeLayoutAssetIds = new Set((data?.sceneLayouts || []).map((layout) => String(layout.asset_id || '')));
-    const imageAssets = allAssets.filter((asset) => isSceneImageAsset(asset));
-    const latestImageCreatedAt = imageAssets[0]?.created_at ? String(imageAssets[0].created_at) : '';
-    const imageDisplayConfigured = imageAssets.some((asset) => hasSceneImageDisplayConfig(asset));
 
     return allAssets.filter((asset) => {
       const type = String(asset.asset_type || 'unknown');
@@ -86,11 +83,7 @@ export default function AgentSceneDetailPage() {
         return Boolean(asset.is_primary) || activeLayoutAssetIds.has(String(asset.id));
       }
       if (type === 'audio') return Boolean(asset.is_primary);
-      if (isSceneImageAsset(asset)) {
-        return imageDisplayConfigured
-          ? isSceneImageEnabled(asset)
-          : latestImageCreatedAt ? String(asset.created_at) === latestImageCreatedAt : Boolean(asset.is_primary);
-      }
+      if (isSceneImageAsset(asset)) return Boolean(asset.is_primary);
       if (isRenderedFinalVideoAsset(asset)) return true;
       return Boolean(asset.is_primary);
     }).sort(sortSceneAssets);
