@@ -236,7 +236,8 @@ export async function GET(
           ch.personality,
           ch.looks,
           ch.video_character_tag,
-          ch.is_favorite
+          ch.is_favorite,
+          ch.metadata
         from kazika_studio_agents.characters ch
         where ch.id in (select id from metadata_character_ids union select id from line_character_ids)
            or ch.name in (select name from layout_character_names where name is not null)

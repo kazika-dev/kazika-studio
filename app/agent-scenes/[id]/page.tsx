@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Mic2, ScrollText, Link2, Sparkles, Subtitles, Unlink, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -817,26 +817,144 @@ function MiniCount({ label, value }: { label: string; value: number }) {
 
 function CharacterCard({ character }: { character: AnyRow }) {
   const imageUrl = typeof character.image_url === 'string' ? storageUrl(character.image_url) : '';
+  const metadata = character.metadata && typeof character.metadata === 'object' ? character.metadata : {};
+  const illustrationUrl = typeof metadata.illustration_only_path === 'string' ? storageUrl(metadata.illustration_only_path) : '';
+  const settingsUrl = typeof metadata.image_with_settings_path === 'string' ? storageUrl(metadata.image_with_settings_path) : imageUrl;
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'settings' | 'illustration'>('settings');
+  const activePreviewUrl = previewMode === 'illustration' && illustrationUrl ? illustrationUrl : settingsUrl;
+  const characterName = String(character.name || 'character');
+
+  useEffect(() => {
+    if (!isPreviewOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsPreviewOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isPreviewOpen]);
+
+  const openPreview = () => {
+    if (!imageUrl) return;
+    setPreviewMode('settings');
+    setIsPreviewOpen(true);
+  };
+
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-950">
-      <div className="flex items-start gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-900">
+    <>
+      <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex items-start gap-3">
           {imageUrl ? (
-            <img src={imageUrl} alt={String(character.name || 'character')} className="h-full w-full object-cover" loading="lazy" />
+            <button
+              type="button"
+              onClick={openPreview}
+              className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-offset-2 transition hover:ring-2 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900 dark:ring-offset-slate-950"
+              aria-label={`${characterName}のキャラシを拡大`}
+            >
+              <img src={imageUrl} alt={characterName} className="h-full w-full object-cover" loading="lazy" />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition group-hover:opacity-100 group-focus:opacity-100">
+                <Maximize2 size={16} className="text-white" />
+              </span>
+            </button>
           ) : (
-            <Users size={20} />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-900">
+              <Users size={20} />
+            </div>
           )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="truncate font-semibold text-slate-900 dark:text-white">{character.name}</h3>
-            {character.is_favorite && <Badge>fav</Badge>}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className="truncate font-semibold text-slate-900 dark:text-white">{character.name}</h3>
+              {character.is_favorite && <Badge>fav</Badge>}
+            </div>
+            {character.video_character_tag && <p className="mt-1 truncate text-[11px] text-indigo-600 dark:text-indigo-300">{String(character.video_character_tag)}</p>}
+            {character.looks && <p className="mt-1 line-clamp-2 leading-5 text-slate-500 dark:text-slate-400">{String(character.looks)}</p>}
+            {imageUrl && (
+              <button
+                type="button"
+                onClick={openPreview}
+                className="mt-2 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-200 dark:hover:bg-indigo-900/70"
+              >
+                <Maximize2 size={12} />
+                キャラシ拡大
+              </button>
+            )}
           </div>
-          {character.video_character_tag && <p className="mt-1 truncate text-[11px] text-indigo-600 dark:text-indigo-300">{String(character.video_character_tag)}</p>}
-          {character.looks && <p className="mt-1 line-clamp-2 leading-5 text-slate-500 dark:text-slate-400">{String(character.looks)}</p>}
         </div>
       </div>
-    </div>
+
+      {isPreviewOpen && imageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${characterName}のキャラクターシート`}
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <div
+            className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl dark:bg-slate-950"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Character sheet</p>
+                <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">{characterName}</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {illustrationUrl && (
+                  <div className="flex rounded-full bg-slate-100 p-1 text-xs dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('settings')}
+                      className={`rounded-full px-3 py-1 font-medium transition ${previewMode === 'settings' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
+                    >
+                      設定付き
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('illustration')}
+                      className={`rounded-full px-3 py-1 font-medium transition ${previewMode === 'illustration' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
+                    >
+                      イラストのみ
+                    </button>
+                  </div>
+                )}
+                <a
+                  href={activePreviewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  別タブ
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                  aria-label="閉じる"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-100 p-4 dark:bg-slate-900/70">
+              <img src={activePreviewUrl} alt={`${characterName} character sheet`} className="max-h-[76vh] max-w-full rounded-xl object-contain shadow-lg" />
+            </div>
+            {(character.description || character.personality || character.looks) && (
+              <div className="grid gap-2 border-t border-slate-200 p-4 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300 md:grid-cols-3">
+                {character.description && <PromptBox label="説明" text={String(character.description)} />}
+                {character.personality && <PromptBox label="性格" text={String(character.personality)} />}
+                {character.looks && <PromptBox label="外見" text={String(character.looks)} />}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
