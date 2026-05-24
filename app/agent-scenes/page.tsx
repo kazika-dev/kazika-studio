@@ -185,7 +185,7 @@ export default function AgentScenesPage() {
                 <BookOpen size={19} /> ストーリー
               </h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                ストーリーを選ぶと、下のシーン一覧がそのストーリーだけに切り替わります。
+                {selectedStoryId ? '選択中のストーリーだけを表示しています。他のストーリーを選ぶ時は一覧へ戻ってください。' : 'ストーリーを選ぶと、下のシーン一覧がそのストーリーだけに切り替わります。'}
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -258,13 +258,12 @@ export default function AgentScenesPage() {
             </p>
           </div>
           {selectedStoryId && (
-            <button
-              type="button"
-              onClick={() => setSelectedStoryId('')}
+            <Link
+              href="/agent-scenes"
               className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
             >
-              全シーンに戻す
-            </button>
+              ストーリー一覧へ戻る
+            </Link>
           )}
         </div>
 

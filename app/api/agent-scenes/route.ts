@@ -39,13 +39,17 @@ export async function GET(request: NextRequest) {
     }
 
     const storyValues = [...values];
-    const storyWhereClause = filters.join('\n          and ');
+    const storyFilters = [...filters];
 
     if (Number.isFinite(storyId) && storyId > 0) {
       values.push(storyId);
       filters.push(`st.id = $${values.length}`);
+
+      storyValues.push(storyId);
+      storyFilters.push(`st.id = $${storyValues.length}`);
     }
 
+    const storyWhereClause = storyFilters.join('\n          and ');
     const sceneValues = [...values];
 
     values.push(limit, offset);
