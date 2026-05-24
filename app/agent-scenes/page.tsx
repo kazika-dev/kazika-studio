@@ -57,12 +57,17 @@ export default function AgentScenesPage() {
   const [projectKey, setProjectKey] = useState('');
   const [genreMode, setGenreMode] = useState('');
   const [productionStatus, setProductionStatus] = useState('');
-  const [selectedStoryId, setSelectedStoryId] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return new URLSearchParams(window.location.search).get('story_id') || '';
-  });
+  const [selectedStoryId, setSelectedStoryId] = useState('');
+  const [urlInitialized, setUrlInitialized] = useState(false);
 
   useEffect(() => {
+    setSelectedStoryId(new URLSearchParams(window.location.search).get('story_id') || '');
+    setUrlInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    if (!urlInitialized) return;
+
     const load = async () => {
       setLoading(true);
       setError('');
@@ -88,7 +93,7 @@ export default function AgentScenesPage() {
     };
 
     void load();
-  }, [projectKey, genreMode, productionStatus, selectedStoryId]);
+  }, [projectKey, genreMode, productionStatus, selectedStoryId, urlInitialized]);
 
   const selectedStory = stories.find((story) => String(story.id) === selectedStoryId);
   const hasFilters = Boolean(projectKey.trim() || genreMode || productionStatus || selectedStoryId);
