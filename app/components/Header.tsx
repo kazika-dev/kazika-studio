@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, User, Workflow, Home, ImageIcon, Video, Users, MessageCircle, Database, KeyRound, ChevronDown, Menu, X, Clapperboard } from 'lucide-react';
+import { LogOut, User, Workflow, Home, ImageIcon, Video, Users, MessageCircle, Database, KeyRound, ChevronDown, Menu, X, BookOpen, Clapperboard } from 'lucide-react';
 import Link from 'next/link';
 
 const navItems = [
   { href: '/', label: 'ホーム', icon: Home, active: (pathname: string) => pathname === '/' },
   { href: '/outputs', label: 'アウトプット', icon: ImageIcon, active: (pathname: string) => pathname === '/outputs' },
   { href: '/studios', label: 'スタジオ', icon: Video, active: (pathname: string) => pathname.startsWith('/studios') },
+  { href: '/agent-stories', label: 'ストーリー', icon: BookOpen, active: (pathname: string) => pathname.startsWith('/agent-stories') },
   { href: '/agent-scenes', label: '新シーン', icon: Clapperboard, active: (pathname: string) => pathname.startsWith('/agent-scenes') },
   { href: '/character-sheets', label: 'キャラクターシート', icon: Users, active: (pathname: string) => pathname.startsWith('/character-sheets') },
   { href: '/conversations', label: '会話', icon: MessageCircle, active: (pathname: string) => pathname.startsWith('/conversations') },

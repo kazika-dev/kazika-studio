@@ -57,7 +57,10 @@ export default function AgentScenesPage() {
   const [projectKey, setProjectKey] = useState('');
   const [genreMode, setGenreMode] = useState('');
   const [productionStatus, setProductionStatus] = useState('');
-  const [selectedStoryId, setSelectedStoryId] = useState('');
+  const [selectedStoryId, setSelectedStoryId] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('story_id') || '';
+  });
 
   useEffect(() => {
     const load = async () => {
