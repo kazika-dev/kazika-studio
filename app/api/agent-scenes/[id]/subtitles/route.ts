@@ -125,9 +125,10 @@ export async function POST(
 
     const linesResult = await query(
       `
-        select sl.id, sl.line_index, sl.speaker_name, sl.text, sl.tts_text
+        select sl.id, sl.line_index, sl.line_type, sl.speaker_name, sl.text, sl.tts_text
         from kazika_studio_agents.script_lines sl
         where sl.script_id = $1
+          and coalesce(sl.line_type, 'dialogue') = 'dialogue'
         order by sl.line_index asc, sl.id asc
       `,
       [scriptId]

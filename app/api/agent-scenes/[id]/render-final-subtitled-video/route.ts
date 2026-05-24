@@ -39,6 +39,7 @@ type VideoAssetRow = {
   url: string | null;
   duration_seconds: number | string | null;
   line_index: number | null;
+  line_type: string | null;
 };
 
 type SubtitleRow = {
@@ -51,6 +52,7 @@ type SubtitleRow = {
 
 type ScriptLineRow = {
   id: number;
+  line_type: string | null;
   text: string | null;
   tts_text: string | null;
 };
@@ -256,6 +258,7 @@ async function loadSourceVideos(sceneId: number) {
           a.url,
           a.duration_seconds,
           sl.line_index,
+          sl.line_type,
           row_number() over (
             partition by a.script_line_id
             order by a.is_primary desc, a.created_at desc, a.id desc
@@ -273,7 +276,7 @@ async function loadSourceVideos(sceneId: number) {
           and coalesce(a.metadata->>'burned_in_subtitles', 'false') <> 'true'
           and (sc.agent_story_scene_id = $1 or sc.story_scene_id = (select source_story_scene_id from kazika_studio_agents.story_scenes_domain where id = $1))
       )
-      select id, script_line_id, storage_path, url, duration_seconds, line_index
+      select id, script_line_id, storage_path, url, duration_seconds, line_index, line_type
       from ranked
       where rn = 1
       order by line_index asc, id asc
@@ -289,9 +292,11 @@ async function loadSubtitles(sceneId: number, lineIds: number[]) {
       select tc.*
       from kazika_studio_agents.timeline_clips tc
       join kazika_studio_agents.timeline_tracks tt on tt.id = tc.track_id
+      join kazika_studio_agents.script_lines sl on sl.id = tc.script_line_id
       where tt.agent_story_scene_id = $1
         and tt.track_type = 'text'
         and tc.script_line_id = any($2::bigint[])
+        and coalesce(sl.line_type, 'dialogue') = 'dialogue'
       order by tc.script_line_id asc, tc.start_time_ms asc, tc.id asc
     `,
     [sceneId, lineIds]
@@ -302,7 +307,7 @@ async function loadSubtitles(sceneId: number, lineIds: number[]) {
 async function loadScriptLines(lineIds: number[]) {
   const result = await query(
     `
-      select id, text, tts_text
+      select id, line_type, text, tts_text
       from kazika_studio_agents.script_lines
       where id = any($1::bigint[])
     `,
@@ -311,7 +316,12 @@ async function loadScriptLines(lineIds: number[]) {
   return new Map((result.rows as ScriptLineRow[]).map((line) => [String(line.id), line]));
 }
 
+function isDialogueLineType(lineType: string | null | undefined) {
+  return String(lineType || 'dialogue') === 'dialogue';
+}
+
 function fallbackSubtitleTextForLine(line: ScriptLineRow | undefined) {
+  if (!isDialogueLineType(line?.line_type)) return '';
   return String(line?.text || line?.tts_text || '').trim();
 }
 
@@ -424,10 +434,14 @@ export async function POST(
     let offsetMs = 0;
     for (const [index, asset] of sourceVideos.entries()) {
       const durationMs = normalizedDurationsMs[index] || 6000;
-      const lineSubtitles = subtitles
-        .filter((clip) => clip.script_line_id != null && String(clip.script_line_id) === String(asset.script_line_id))
-        .filter((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())
-        .sort((a, b) => clipLocalStartMs(a) - clipLocalStartMs(b));
+      const scriptLine = scriptLinesById.get(String(asset.script_line_id));
+      const isDialogue = isDialogueLineType(asset.line_type ?? scriptLine?.line_type);
+      const lineSubtitles = isDialogue
+        ? subtitles
+            .filter((clip) => clip.script_line_id != null && String(clip.script_line_id) === String(asset.script_line_id))
+            .filter((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())
+            .sort((a, b) => clipLocalStartMs(a) - clipLocalStartMs(b))
+        : [];
 
       if (lineSubtitles.length > 0) {
         for (const clip of lineSubtitles) {
@@ -441,7 +455,7 @@ export async function POST(
           });
         }
       } else {
-        const fallbackText = fallbackSubtitleTextForLine(scriptLinesById.get(String(asset.script_line_id)));
+        const fallbackText = fallbackSubtitleTextForLine(scriptLine);
         if (fallbackText) {
           subtitleEvents.push({
             id: 0,

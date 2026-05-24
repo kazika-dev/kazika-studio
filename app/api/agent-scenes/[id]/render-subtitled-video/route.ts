@@ -206,6 +206,17 @@ export async function POST(
     const asset = assetResult.rows[0];
     if (!asset) return NextResponse.json({ success: false, error: 'Video asset not found' }, { status: 404 });
 
+    if (asset.script_line_id != null) {
+      const lineResult = await query(
+        `select line_type from kazika_studio_agents.script_lines where id = $1 limit 1`,
+        [asset.script_line_id]
+      );
+      const lineType = String(lineResult.rows[0]?.line_type || 'dialogue');
+      if (lineType !== 'dialogue') {
+        return NextResponse.json({ success: false, error: 'Scene-only/action videos are excluded from subtitle burn-in.' }, { status: 400 });
+      }
+    }
+
     const videoPath = normalizeStoragePath(String(asset.storage_path || asset.url || ''));
     if (!videoPath) return NextResponse.json({ success: false, error: 'Video storage path not found' }, { status: 400 });
 
