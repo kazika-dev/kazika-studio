@@ -13,6 +13,7 @@ type ScenePayload = {
   scene: AnyRow;
   scripts: AnyRow[];
   scriptLines: AnyRow[];
+  scriptLineTimingCues: AnyRow[];
   characters: AnyRow[];
   conversations: AnyRow[];
   shots: AnyRow[];
@@ -21,6 +22,17 @@ type ScenePayload = {
   timelineClips: AnyRow[];
   generationJobs: AnyRow[];
   sceneLayouts: AnyRow[];
+  soundEffects: AnyRow[];
+};
+
+type TimingCueInput = {
+  local_id: string;
+  cue_type: string;
+  start_seconds: string;
+  end_seconds: string;
+  prompt: string;
+  sfx_sound_effect_id: string;
+  sfx_asset_id: string;
 };
 
 export default function AgentSceneDetailPage() {
@@ -208,7 +220,7 @@ export default function AgentSceneDetailPage() {
     }
   };
 
-  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string) => {
+  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[]) => {
     if (!Number.isFinite(sceneId)) return;
     const lineId = String(line.id || '');
     if (!lineId) return;
@@ -221,6 +233,23 @@ export default function AgentSceneDetailPage() {
         body: JSON.stringify({
           text: nextText,
           tts_text: nextTtsText,
+          timing_cues: timingCues.map((cue) => ({
+            cue_type: cue.cue_type,
+            start_seconds: cue.start_seconds || null,
+            end_seconds: cue.end_seconds || null,
+            prompt: cue.prompt,
+            sfx_sound_effect_id: cue.sfx_sound_effect_id || null,
+            sfx_asset_id: cue.sfx_asset_id || null,
+          })),
+          // Legacy summary columns: keep the first cue mirrored for older scripts/tools.
+          video_prompt_timing_note: timingCues[0]?.cue_type !== 'sfx' ? timingCues[0]?.prompt || '' : '',
+          video_event_start_seconds: timingCues[0]?.cue_type !== 'sfx' ? timingCues[0]?.start_seconds || null : null,
+          video_event_end_seconds: timingCues[0]?.cue_type !== 'sfx' ? timingCues[0]?.end_seconds || null : null,
+          sfx_prompt: timingCues.find((cue) => cue.cue_type === 'sfx')?.prompt || '',
+          sfx_start_seconds: timingCues.find((cue) => cue.cue_type === 'sfx')?.start_seconds || null,
+          sfx_duration_seconds: durationFromCue(timingCues.find((cue) => cue.cue_type === 'sfx')),
+          sfx_sound_effect_id: timingCues.find((cue) => cue.cue_type === 'sfx')?.sfx_sound_effect_id || null,
+          sfx_asset_id: timingCues.find((cue) => cue.cue_type === 'sfx')?.sfx_asset_id || null,
         }),
       });
       const result = await response.json();
@@ -229,6 +258,7 @@ export default function AgentSceneDetailPage() {
       }
       const updatedLine = result.data?.scriptLine;
       const updatedScript = result.data?.script;
+      const updatedTimingCues = result.data?.timingCues;
       setData((current) => current ? {
         ...current,
         scripts: updatedScript
@@ -237,6 +267,12 @@ export default function AgentSceneDetailPage() {
         scriptLines: updatedLine
           ? current.scriptLines.map((row) => String(row.id) === String(updatedLine.id) ? { ...row, ...updatedLine } : row)
           : current.scriptLines,
+        scriptLineTimingCues: Array.isArray(updatedTimingCues)
+          ? [
+              ...current.scriptLineTimingCues.filter((cue) => String(cue.script_line_id) !== lineId),
+              ...updatedTimingCues,
+            ]
+          : current.scriptLineTimingCues,
       } : current);
     } catch (err) {
       setDialogueError(err instanceof Error ? err.message : '会話の保存に失敗しました');
@@ -465,8 +501,17 @@ export default function AgentSceneDetailPage() {
     );
   }
 
-  const { scene, scripts, scriptLines, characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts } = data;
+  const { scene, scripts, scriptLines, scriptLineTimingCues = [], characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts, soundEffects = [] } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
+  const sceneAudioAssets = assets.filter((asset) => asset.asset_type === 'audio');
+  const timingCuesByLineId = new Map<string, AnyRow[]>();
+  for (const cue of scriptLineTimingCues) {
+    const key = String(cue.script_line_id || '');
+    if (!key) continue;
+    const list = timingCuesByLineId.get(key) || [];
+    list.push(cue);
+    timingCuesByLineId.set(key, list);
+  }
   const storyboardAssets = assets.filter(isStoryboardAsset).sort(sortSceneAssets);
   const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
   const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
@@ -569,6 +614,7 @@ export default function AgentSceneDetailPage() {
                           const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
                           const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio');
                           const lineVideoAssets = lineAssets.filter((asset) => isVideoAsset(asset));
+                          const lineTimingCues = timingCuesByLineId.get(String(line.id)) || [];
                           return (
                             <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
                               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -583,6 +629,9 @@ export default function AgentSceneDetailPage() {
                               <EditableDialogueLine
                                 line={line}
                                 saving={savingDialogueLineId === String(line.id)}
+                                soundEffects={soundEffects}
+                                lineTimingCues={lineTimingCues}
+                                lineAudioAssets={sceneAudioAssets}
                                 onSave={persistDialogueLine}
                               />
                               <LineAssetBundle
@@ -1295,11 +1344,17 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 function EditableDialogueLine({
   line,
   saving,
+  soundEffects,
+  lineTimingCues,
+  lineAudioAssets,
   onSave,
 }: {
   line: AnyRow;
   saving: boolean;
-  onSave: (line: AnyRow, nextText: string, nextTtsText: string) => void;
+  soundEffects: AnyRow[];
+  lineTimingCues: AnyRow[];
+  lineAudioAssets: AnyRow[];
+  onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[]) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(line.text || ''));
@@ -1308,8 +1363,20 @@ function EditableDialogueLine({
   const savedText = String(line.text || '');
   const savedTtsText = String(line.tts_text || line.text || '');
   const hasCustomTts = Boolean(savedTtsText && savedTtsText !== savedText);
+  const savedCueInputs = buildTimingCueInputs(line, lineTimingCues);
+  const [timingCues, setTimingCues] = useState<TimingCueInput[]>(savedCueInputs);
   const effectiveTtsText = customTts ? (ttsText.trim() || text.trim()) : text.trim();
-  const dirty = text !== savedText || effectiveTtsText !== savedTtsText;
+  const normalizedTimingCues = normalizeCueInputs(timingCues);
+  const dirty = text !== savedText
+    || effectiveTtsText !== savedTtsText
+    || JSON.stringify(normalizedTimingCues) !== JSON.stringify(normalizeCueInputs(savedCueInputs));
+
+  const resetFields = () => {
+    setText(savedText);
+    setTtsText(savedTtsText);
+    setCustomTts(hasCustomTts);
+    setTimingCues(savedCueInputs);
+  };
 
   if (!editing) {
     return (
@@ -1319,9 +1386,7 @@ function EditableDialogueLine({
           <button
             type="button"
             onClick={() => {
-              setText(savedText);
-              setTtsText(savedTtsText);
-              setCustomTts(hasCustomTts);
+              resetFields();
               setEditing(true);
             }}
             className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
@@ -1332,9 +1397,32 @@ function EditableDialogueLine({
         {hasCustomTts && (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
         )}
+        {savedCueInputs.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {savedCueInputs.map((cue, index) => (
+              <p key={cue.local_id} className="rounded-lg bg-sky-50 px-2 py-1 text-xs leading-5 text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                cue{index + 1} / {cueTypeLabel(cue.cue_type)}: {formatCueRange(cue.start_seconds, cue.end_seconds)}{cue.prompt ? ` / ${cue.prompt}` : ''}
+                {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
+
+  const updateCue = (index: number, patch: Partial<TimingCueInput>) => {
+    setTimingCues((current) => current.map((cue, cueIndex) => cueIndex === index ? { ...cue, ...patch } : cue));
+  };
+  const addCue = () => {
+    setTimingCues((current) => [
+      ...current,
+      { local_id: `new-${Date.now()}-${current.length}`, cue_type: 'motion', start_seconds: '', end_seconds: '', prompt: '', sfx_sound_effect_id: '', sfx_asset_id: '' },
+    ]);
+  };
+  const removeCue = (index: number) => {
+    setTimingCues((current) => current.filter((_, cueIndex) => cueIndex !== index));
+  };
 
   return (
     <div className="mt-2 rounded-xl border border-indigo-100 bg-white p-3 dark:border-indigo-950 dark:bg-slate-900">
@@ -1377,11 +1465,97 @@ function EditableDialogueLine({
           </div>
         )}
       </div>
+
+      <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 dark:border-sky-950 dark:bg-sky-950/40">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold text-sky-800 dark:text-sky-200">動画/SEタイムコードキュー</div>
+            <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">1カット内に複数の動作・カメラ・SEを順番に登録できます。</p>
+          </div>
+          <button
+            type="button"
+            onClick={addCue}
+            className="rounded-full border border-sky-200 bg-white px-3 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:bg-slate-950 dark:text-sky-200"
+          >
+            キュー追加
+          </button>
+        </div>
+        {timingCues.length === 0 ? (
+          <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-500 dark:bg-slate-950 dark:text-slate-400">まだキューなし。必要な時だけ追加。</p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {timingCues.map((cue, index) => (
+              <div key={cue.local_id} className="rounded-xl border border-sky-200 bg-white p-3 dark:border-sky-900 dark:bg-slate-950">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">cue {index + 1}</span>
+                  <button type="button" onClick={() => removeCue(index)} className="text-[11px] text-red-500 hover:underline">削除</button>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_1fr]">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    種類
+                    <select
+                      value={cue.cue_type}
+                      onChange={(event) => updateCue(index, { cue_type: event.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    >
+                      {['motion', 'camera', 'sfx', 'dialogue', 'transition', 'hold', 'other'].map((type) => <option key={type} value={type}>{cueTypeLabel(type)}</option>)}
+                    </select>
+                  </label>
+                  <NumberInput label="開始秒" value={cue.start_seconds} onChange={(value) => updateCue(index, { start_seconds: value })} placeholder="例: 1.2" />
+                  <NumberInput label="終了秒" value={cue.end_seconds} onChange={(value) => updateCue(index, { end_seconds: value })} placeholder="例: 3.2" />
+                </div>
+                <textarea
+                  value={cue.prompt}
+                  onChange={(event) => updateCue(index, { prompt: event.target.value })}
+                  rows={2}
+                  placeholder={cue.cue_type === 'sfx' ? '例: 2秒の電車ドア閉まりSE。柔らかいモーター音、最後に密着音。声/BGMなし' : '例: ドアが左右から滑らかに閉まり、キャラはガラス越しに見える'}
+                  className="mt-2 w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs leading-5 text-slate-800 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-sky-900 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-sky-800 dark:focus:ring-sky-950"
+                />
+                {cue.cue_type === 'sfx' && (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      SEマスター
+                      <select
+                        value={cue.sfx_sound_effect_id}
+                        onChange={(event) => updateCue(index, { sfx_sound_effect_id: event.target.value })}
+                        className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-emerald-900 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="">未指定</option>
+                        {soundEffects.map((effect) => (
+                          <option key={String(effect.id)} value={String(effect.id)}>
+                            #{effect.id} {effect.name}{effect.duration_seconds ? ` (${Number(effect.duration_seconds).toFixed(1)}s)` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      SE asset_id
+                      <select
+                        value={cue.sfx_asset_id}
+                        onChange={(event) => updateCue(index, { sfx_asset_id: event.target.value })}
+                        className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-emerald-900 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="">未指定</option>
+                        {lineAudioAssets.map((asset) => (
+                          <option key={String(asset.id)} value={String(asset.id)}>
+                            #{asset.id} {asset.duration_seconds ? `(${Number(asset.duration_seconds).toFixed(2)}s)` : ''} {String(asset.storage_path || '').split('/').pop()}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           disabled={saving || !text.trim() || !dirty}
-          onClick={() => onSave(line, text.trim(), effectiveTtsText)}
+          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues)}
           className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
         >
           {saving ? '保存中...' : '保存'}
@@ -1390,9 +1564,7 @@ function EditableDialogueLine({
           type="button"
           disabled={saving}
           onClick={() => {
-            setText(savedText);
-            setTtsText(savedTtsText);
-            setCustomTts(hasCustomTts);
+            resetFields();
             setEditing(false);
           }}
           className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
@@ -1402,6 +1574,112 @@ function EditableDialogueLine({
       </div>
     </div>
   );
+}
+
+function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCueInput[] {
+  if (lineTimingCues.length > 0) {
+    return lineTimingCues.map((cue) => ({
+      local_id: String(cue.id || `${cue.script_line_id}-${cue.cue_index}`),
+      cue_type: String(cue.cue_type || 'motion'),
+      start_seconds: formatSecondsInput(cue.start_seconds),
+      end_seconds: formatSecondsInput(cue.end_seconds),
+      prompt: String(cue.prompt || ''),
+      sfx_sound_effect_id: cue.sfx_sound_effect_id == null ? '' : String(cue.sfx_sound_effect_id),
+      sfx_asset_id: cue.sfx_asset_id == null ? '' : String(cue.sfx_asset_id),
+    }));
+  }
+  const legacy: TimingCueInput[] = [];
+  if (line.video_prompt_timing_note || line.video_event_start_seconds != null || line.video_event_end_seconds != null) {
+    legacy.push({
+      local_id: `legacy-video-${line.id}`,
+      cue_type: 'motion',
+      start_seconds: formatSecondsInput(line.video_event_start_seconds),
+      end_seconds: formatSecondsInput(line.video_event_end_seconds),
+      prompt: String(line.video_prompt_timing_note || ''),
+      sfx_sound_effect_id: '',
+      sfx_asset_id: '',
+    });
+  }
+  if (line.sfx_prompt || line.sfx_start_seconds != null || line.sfx_duration_seconds != null || line.sfx_sound_effect_id != null || line.sfx_asset_id != null) {
+    const start = Number(line.sfx_start_seconds);
+    const duration = Number(line.sfx_duration_seconds);
+    legacy.push({
+      local_id: `legacy-sfx-${line.id}`,
+      cue_type: 'sfx',
+      start_seconds: formatSecondsInput(line.sfx_start_seconds),
+      end_seconds: Number.isFinite(start) && Number.isFinite(duration) ? formatSecondsInput(start + duration) : '',
+      prompt: String(line.sfx_prompt || ''),
+      sfx_sound_effect_id: line.sfx_sound_effect_id == null ? '' : String(line.sfx_sound_effect_id),
+      sfx_asset_id: line.sfx_asset_id == null ? '' : String(line.sfx_asset_id),
+    });
+  }
+  return legacy;
+}
+
+function normalizeCueInputs(cues: TimingCueInput[]) {
+  return cues
+    .map((cue, index) => ({
+      ...cue,
+      local_id: cue.local_id || `cue-${index}`,
+      cue_type: cue.cue_type || 'motion',
+      start_seconds: cue.start_seconds.trim(),
+      end_seconds: cue.end_seconds.trim(),
+      prompt: cue.prompt.trim(),
+      sfx_sound_effect_id: cue.cue_type === 'sfx' ? cue.sfx_sound_effect_id : '',
+      sfx_asset_id: cue.cue_type === 'sfx' ? cue.sfx_asset_id : '',
+    }))
+    .filter((cue) => cue.prompt || cue.start_seconds || cue.end_seconds || cue.sfx_sound_effect_id || cue.sfx_asset_id);
+}
+
+function durationFromCue(cue: TimingCueInput | undefined) {
+  if (!cue?.start_seconds || !cue.end_seconds) return null;
+  const start = Number(cue.start_seconds);
+  const end = Number(cue.end_seconds);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return String(Number((end - start).toFixed(3)));
+}
+
+function cueTypeLabel(type: string) {
+  switch (type) {
+    case 'motion': return '動作';
+    case 'camera': return 'カメラ';
+    case 'sfx': return 'SE';
+    case 'dialogue': return '会話';
+    case 'transition': return '遷移';
+    case 'hold': return '保持';
+    default: return 'その他';
+  }
+}
+
+function NumberInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
+  return (
+    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+      {label}
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+      />
+    </label>
+  );
+}
+
+function formatSecondsInput(value: unknown) {
+  if (value == null || value === '') return '';
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return '';
+  return Number.isInteger(numberValue) ? String(numberValue) : String(Number(numberValue.toFixed(3)));
+}
+
+function formatCueRange(start: string, end: string) {
+  if (start && end) return `${start}s–${end}s`;
+  if (start) return `${start}s〜`;
+  if (end) return `〜${end}s`;
+  return '秒数未指定';
 }
 
 function LinkedAssetCount({ icon, count }: { icon: ReactNode; count: number }) {

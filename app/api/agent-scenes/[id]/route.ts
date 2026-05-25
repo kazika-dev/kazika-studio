@@ -43,7 +43,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
     }
 
-    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, clipsResult, jobsResult, layoutsResult] = await Promise.all([
+    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, clipsResult, jobsResult, layoutsResult, soundEffectsResult] = await Promise.all([
       query(
         `
           select
@@ -173,6 +173,14 @@ export async function GET(
         `,
         [scene.id]
       ),
+      query(
+        `
+          select id, name, description, file_name, duration_seconds, category, tags
+          from kazikastudio.m_sound_effects
+          order by category asc nulls last, name asc, id asc
+          limit 500
+        `
+      ),
     ]);
 
     const scriptIds = scriptsResult.rows.map((script) => script.id);
@@ -199,6 +207,28 @@ export async function GET(
             where sl.script_id = any($1::bigint[])
             group by sl.id, ch.name, ch.image_url
             order by sl.script_id asc, sl.line_index asc
+          `,
+          [scriptIds]
+        )
+      : { rows: [] };
+
+    const timingCuesResult = scriptIds.length
+      ? await query(
+          `
+            select
+              cue.*,
+              se.name as sfx_sound_effect_name,
+              se.file_name as sfx_sound_effect_file_name,
+              se.duration_seconds as sfx_sound_effect_duration_seconds,
+              a.storage_path as sfx_asset_storage_path,
+              a.url as sfx_asset_url,
+              a.duration_seconds as sfx_asset_duration_seconds
+            from kazika_studio_agents.script_line_timing_cues cue
+            join kazika_studio_agents.script_lines sl on sl.id = cue.script_line_id
+            left join kazikastudio.m_sound_effects se on se.id = cue.sfx_sound_effect_id
+            left join kazika_studio_agents.assets a on a.id = cue.sfx_asset_id
+            where sl.script_id = any($1::bigint[])
+            order by cue.script_line_id asc, cue.cue_index asc, cue.id asc
           `,
           [scriptIds]
         )
@@ -252,6 +282,7 @@ export async function GET(
         scene,
         scripts: scriptsResult.rows,
         scriptLines: linesResult.rows,
+        scriptLineTimingCues: timingCuesResult.rows,
         characters: charactersResult.rows,
         conversations: conversationsResult.rows,
         shots: shotsResult.rows,
@@ -260,6 +291,7 @@ export async function GET(
         timelineClips: clipsResult.rows,
         generationJobs: jobsResult.rows,
         sceneLayouts: layoutsResult.rows,
+        soundEffects: soundEffectsResult.rows,
       },
     });
   } catch (error: unknown) {
