@@ -128,6 +128,8 @@ export async function GET(request: NextRequest) {
           st.thumbnail_url,
           st.updated_at,
           st.metadata,
+          st.default_image_aspect_ratio,
+          st.default_video_aspect_ratio,
           coalesce(st.metadata->>'project_key', max(ssd.metadata->>'project_key')) as project_key,
           coalesce(st.metadata->>'genre_mode', max(ssd.metadata->>'genre_mode')) as genre_mode,
           coalesce(st.metadata->>'production_status', max(ssd.metadata->>'production_status')) as production_status,
