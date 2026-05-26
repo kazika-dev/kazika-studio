@@ -222,7 +222,9 @@ export async function GET(
               se.duration_seconds as sfx_sound_effect_duration_seconds,
               a.storage_path as sfx_asset_storage_path,
               a.url as sfx_asset_url,
-              a.duration_seconds as sfx_asset_duration_seconds
+              a.mime_type as sfx_asset_mime_type,
+              a.duration_seconds as sfx_asset_duration_seconds,
+              a.metadata as sfx_asset_metadata
             from kazika_studio_agents.script_line_timing_cues cue
             join kazika_studio_agents.script_lines sl on sl.id = cue.script_line_id
             left join kazikastudio.m_sound_effects se on se.id = cue.sfx_sound_effect_id

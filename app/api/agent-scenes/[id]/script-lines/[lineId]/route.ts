@@ -152,8 +152,19 @@ export async function PATCH(
       }
       const cuesResult = await query(
         `
-          select cue.*
+          select
+            cue.*,
+            se.name as sfx_sound_effect_name,
+            se.file_name as sfx_sound_effect_file_name,
+            se.duration_seconds as sfx_sound_effect_duration_seconds,
+            a.storage_path as sfx_asset_storage_path,
+            a.url as sfx_asset_url,
+            a.mime_type as sfx_asset_mime_type,
+            a.duration_seconds as sfx_asset_duration_seconds,
+            a.metadata as sfx_asset_metadata
           from kazika_studio_agents.script_line_timing_cues cue
+          left join kazikastudio.m_sound_effects se on se.id = cue.sfx_sound_effect_id
+          left join kazika_studio_agents.assets a on a.id = cue.sfx_asset_id
           where cue.script_line_id = $1
           order by cue.cue_index asc, cue.id asc
         `,

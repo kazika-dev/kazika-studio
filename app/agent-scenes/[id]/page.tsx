@@ -33,6 +33,11 @@ type TimingCueInput = {
   prompt: string;
   sfx_sound_effect_id: string;
   sfx_asset_id: string;
+  sfx_asset_url?: string;
+  sfx_asset_storage_path?: string;
+  sfx_asset_mime_type?: string;
+  sfx_asset_duration_seconds?: string;
+  sfx_asset_metadata?: AnyRow;
 };
 
 export default function AgentSceneDetailPage() {
@@ -1398,13 +1403,19 @@ function EditableDialogueLine({
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
         )}
         {savedCueInputs.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {savedCueInputs.map((cue, index) => (
-              <p key={cue.local_id} className="rounded-lg bg-sky-50 px-2 py-1 text-xs leading-5 text-sky-800 dark:bg-sky-950 dark:text-sky-200">
-                cue{index + 1} / {cueTypeLabel(cue.cue_type)}: {formatCueRange(cue.start_seconds, cue.end_seconds)}{cue.prompt ? ` / ${cue.prompt}` : ''}
-                {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}
-              </p>
-            ))}
+          <div className="mt-2 space-y-2">
+            {savedCueInputs.map((cue, index) => {
+              const sfxAsset = sfxCueAudioAsset(cue);
+              return (
+                <div key={cue.local_id} className="rounded-lg bg-sky-50 px-2 py-1 text-xs leading-5 text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                  <p>
+                    cue{index + 1} / {cueTypeLabel(cue.cue_type)}: {formatCueRange(cue.start_seconds, cue.end_seconds)}{cue.prompt ? ` / ${cue.prompt}` : ''}
+                    {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}
+                  </p>
+                  {sfxAsset && <div className="mt-2"><AudioPlayer asset={sfxAsset} compact /></div>}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1586,6 +1597,11 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(cue.prompt || ''),
       sfx_sound_effect_id: cue.sfx_sound_effect_id == null ? '' : String(cue.sfx_sound_effect_id),
       sfx_asset_id: cue.sfx_asset_id == null ? '' : String(cue.sfx_asset_id),
+      sfx_asset_url: typeof cue.sfx_asset_url === 'string' ? cue.sfx_asset_url : '',
+      sfx_asset_storage_path: typeof cue.sfx_asset_storage_path === 'string' ? cue.sfx_asset_storage_path : '',
+      sfx_asset_mime_type: typeof cue.sfx_asset_mime_type === 'string' ? cue.sfx_asset_mime_type : '',
+      sfx_asset_duration_seconds: cue.sfx_asset_duration_seconds == null ? '' : String(cue.sfx_asset_duration_seconds),
+      sfx_asset_metadata: cue.sfx_asset_metadata && typeof cue.sfx_asset_metadata === 'object' ? cue.sfx_asset_metadata : undefined,
     }));
   }
   const legacy: TimingCueInput[] = [];
@@ -1637,6 +1653,21 @@ function durationFromCue(cue: TimingCueInput | undefined) {
   const end = Number(cue.end_seconds);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   return String(Number((end - start).toFixed(3)));
+}
+
+function sfxCueAudioAsset(cue: TimingCueInput): AnyRow | null {
+  if (cue.cue_type !== 'sfx' || !cue.sfx_asset_id) return null;
+  const storagePath = cue.sfx_asset_storage_path || cue.sfx_asset_url || '';
+  if (!storagePath) return null;
+  return {
+    id: cue.sfx_asset_id,
+    asset_type: 'audio',
+    url: cue.sfx_asset_url || storagePath,
+    storage_path: cue.sfx_asset_storage_path || storagePath,
+    mime_type: cue.sfx_asset_mime_type || 'audio/mpeg',
+    duration_seconds: cue.sfx_asset_duration_seconds,
+    metadata: cue.sfx_asset_metadata || {},
+  };
 }
 
 function cueTypeLabel(type: string) {
