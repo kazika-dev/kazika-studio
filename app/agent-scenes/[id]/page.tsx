@@ -33,6 +33,7 @@ type TimingCueInput = {
   prompt: string;
   sfx_sound_effect_id: string;
   sfx_asset_id: string;
+  volume: string;
   sfx_asset_url?: string;
   sfx_asset_storage_path?: string;
   sfx_asset_mime_type?: string;
@@ -245,6 +246,7 @@ export default function AgentSceneDetailPage() {
             prompt: cue.prompt,
             sfx_sound_effect_id: cue.sfx_sound_effect_id || null,
             sfx_asset_id: cue.sfx_asset_id || null,
+            volume: cue.volume || null,
           })),
           // Legacy summary columns: keep the first cue mirrored for older scripts/tools.
           video_prompt_timing_note: timingCues[0]?.cue_type !== 'sfx' ? timingCues[0]?.prompt || '' : '',
@@ -1429,7 +1431,7 @@ function EditableDialogueLine({
                 <div key={cue.local_id} className="rounded-lg bg-sky-50 px-2 py-1 text-xs leading-5 text-sky-800 dark:bg-sky-950 dark:text-sky-200">
                   <p>
                     cue{index + 1} / {cueTypeLabel(cue.cue_type)}: {formatCueRange(cue.start_seconds, cue.end_seconds)}{cue.prompt ? ` / ${cue.prompt}` : ''}
-                    {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}
+                    {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}{cue.volume ? ` / vol ${Number(cue.volume).toFixed(2)}` : ''}
                   </p>
                   {sfxAsset && <div className="mt-2"><AudioPlayer asset={sfxAsset} compact /></div>}
                 </div>
@@ -1447,7 +1449,7 @@ function EditableDialogueLine({
   const addCue = () => {
     setTimingCues((current) => [
       ...current,
-      { local_id: `new-${Date.now()}-${current.length}`, cue_type: 'motion', start_seconds: '', end_seconds: '', prompt: '', sfx_sound_effect_id: '', sfx_asset_id: '' },
+      { local_id: `new-${Date.now()}-${current.length}`, cue_type: 'motion', start_seconds: '', end_seconds: '', prompt: '', sfx_sound_effect_id: '', sfx_asset_id: '', volume: '' },
     ]);
   };
   const removeCue = (index: number) => {
@@ -1542,7 +1544,7 @@ function EditableDialogueLine({
                   className="mt-2 w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs leading-5 text-slate-800 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-sky-900 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-sky-800 dark:focus:ring-sky-950"
                 />
                 {cue.cue_type === 'sfx' && (
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
                       SEマスター
                       <select
@@ -1573,6 +1575,8 @@ function EditableDialogueLine({
                         ))}
                       </select>
                     </label>
+                    <NumberInput label="SE音量" value={cue.volume} onChange={(value) => updateCue(index, { volume: value })} placeholder="例: 0.7 / 1.0" />
+
                   </div>
                 )}
               </div>
@@ -1616,6 +1620,7 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(cue.prompt || ''),
       sfx_sound_effect_id: cue.sfx_sound_effect_id == null ? '' : String(cue.sfx_sound_effect_id),
       sfx_asset_id: cue.sfx_asset_id == null ? '' : String(cue.sfx_asset_id),
+      volume: formatVolumeInput(cue.metadata?.volume),
       sfx_asset_url: typeof cue.sfx_asset_url === 'string' ? cue.sfx_asset_url : '',
       sfx_asset_storage_path: typeof cue.sfx_asset_storage_path === 'string' ? cue.sfx_asset_storage_path : '',
       sfx_asset_mime_type: typeof cue.sfx_asset_mime_type === 'string' ? cue.sfx_asset_mime_type : '',
@@ -1633,6 +1638,7 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(line.video_prompt_timing_note || ''),
       sfx_sound_effect_id: '',
       sfx_asset_id: '',
+      volume: '',
     });
   }
   if (line.sfx_prompt || line.sfx_start_seconds != null || line.sfx_duration_seconds != null || line.sfx_sound_effect_id != null || line.sfx_asset_id != null) {
@@ -1646,6 +1652,7 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(line.sfx_prompt || ''),
       sfx_sound_effect_id: line.sfx_sound_effect_id == null ? '' : String(line.sfx_sound_effect_id),
       sfx_asset_id: line.sfx_asset_id == null ? '' : String(line.sfx_asset_id),
+      volume: '',
     });
   }
   return legacy;
@@ -1662,8 +1669,15 @@ function normalizeCueInputs(cues: TimingCueInput[]) {
       prompt: cue.prompt.trim(),
       sfx_sound_effect_id: cue.cue_type === 'sfx' ? cue.sfx_sound_effect_id : '',
       sfx_asset_id: cue.cue_type === 'sfx' ? cue.sfx_asset_id : '',
+      volume: cue.cue_type === 'sfx' ? cue.volume.trim() : '',
     }))
-    .filter((cue) => cue.prompt || cue.start_seconds || cue.end_seconds || cue.sfx_sound_effect_id || cue.sfx_asset_id);
+    .filter((cue) => cue.prompt || cue.start_seconds || cue.end_seconds || cue.sfx_sound_effect_id || cue.sfx_asset_id || cue.volume);
+}
+
+function formatVolumeInput(value: unknown) {
+  if (value == null || value === '') return '';
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? String(Number(numeric.toFixed(3))) : '';
 }
 
 function durationFromCue(cue: TimingCueInput | undefined) {

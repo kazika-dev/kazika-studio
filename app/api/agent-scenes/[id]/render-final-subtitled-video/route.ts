@@ -75,6 +75,7 @@ type SfxCueRow = {
   sfx_asset_storage_path: string | null;
   sfx_asset_url: string | null;
   sfx_asset_duration_seconds: number | string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 type SfxMixEvent = {
@@ -85,6 +86,7 @@ type SfxMixEvent = {
   localStartMs: number;
   globalStartMs: number;
   trimSeconds: number | null;
+  volume: number;
   prompt: string;
   inputPath: string;
 };
@@ -353,6 +355,7 @@ async function loadSfxCues(sceneId: number, lineIds: number[]) {
         cue.end_seconds,
         cue.prompt,
         cue.sfx_asset_id,
+        cue.metadata,
         a.storage_path as sfx_asset_storage_path,
         a.url as sfx_asset_url,
         a.duration_seconds as sfx_asset_duration_seconds
@@ -413,7 +416,8 @@ function buildSubtitleAndSfxArgs(combinedPath: string, assPath: string, outputPa
     const label = `sfx${ffmpegAudioFilterLabel(String(event.cueId))}_${index}`;
     const delay = Math.max(0, Math.round(event.globalStartMs));
     const trimFilter = event.trimSeconds && event.trimSeconds > 0 ? `atrim=0:${event.trimSeconds.toFixed(3)},` : '';
-    filterParts.push(`[${index + 1}:a]${trimFilter}asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,adelay=${delay}|${delay}[${label}]`);
+    const volumeFilter = `volume=${event.volume.toFixed(3)},`;
+    filterParts.push(`[${index + 1}:a]${trimFilter}asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,${volumeFilter}adelay=${delay}|${delay}[${label}]`);
     audioLabels.push(`[${label}]`);
   });
   filterParts.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=first:dropout_transition=0[aout]`);
@@ -572,6 +576,8 @@ export async function POST(
         const trimSeconds = cueEndSeconds != null && cueEndSeconds > cueStartSeconds
           ? cueEndSeconds - cueStartSeconds
           : assetDurationSeconds;
+        const rawVolume = cue.metadata && typeof cue.metadata === 'object' ? Number(cue.metadata.volume) : NaN;
+        const volume = Number.isFinite(rawVolume) ? Math.min(Math.max(rawVolume, 0), 4) : 1;
         sfxMixEvents.push({
           cueId: cue.id,
           scriptLineId: cue.script_line_id,
@@ -580,6 +586,7 @@ export async function POST(
           localStartMs,
           globalStartMs: offsetMs + localStartMs,
           trimSeconds: trimSeconds && trimSeconds > 0 ? trimSeconds : null,
+          volume,
           prompt: String(cue.prompt || ''),
           inputPath: '',
         });
@@ -689,6 +696,7 @@ export async function POST(
             start_ms: event.globalStartMs,
             local_start_ms: event.localStartMs,
             trim_seconds: event.trimSeconds,
+            volume: event.volume,
             prompt: event.prompt,
           })),
           mixed_sfx: sfxMixEvents.length > 0,

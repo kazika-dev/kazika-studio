@@ -128,7 +128,7 @@ export async function PATCH(
       if (timingCues.length > 0) {
         const values: unknown[] = [];
         const placeholders = timingCues.map((cue, index) => {
-          const base = index * 8;
+          const base = index * 9;
           values.push(
             scriptLineId,
             index + 1,
@@ -137,14 +137,15 @@ export async function PATCH(
             cue.end_seconds,
             cue.prompt,
             cue.sfx_sound_effect_id,
-            cue.sfx_asset_id
+            cue.sfx_asset_id,
+            JSON.stringify(cue.volume == null ? {} : { volume: cue.volume })
           );
-          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`;
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}::jsonb)`;
         }).join(', ');
         await query(
           `
             insert into kazika_studio_agents.script_line_timing_cues
-              (script_line_id, cue_index, cue_type, start_seconds, end_seconds, prompt, sfx_sound_effect_id, sfx_asset_id)
+              (script_line_id, cue_index, cue_type, start_seconds, end_seconds, prompt, sfx_sound_effect_id, sfx_asset_id, metadata)
             values ${placeholders}
           `,
           values
@@ -252,6 +253,7 @@ type ParsedTimingCue = {
   prompt: string;
   sfx_sound_effect_id: number | null;
   sfx_asset_id: number | null;
+  volume: number | null;
 };
 
 const VALID_CUE_TYPES = new Set(['motion', 'camera', 'sfx', 'dialogue', 'transition', 'hold', 'other']);
@@ -278,8 +280,18 @@ function parseTimingCues(value: unknown): ParsedTimingCue[] | null {
       prompt,
       sfx_sound_effect_id: parseOptionalBigInt(record.sfx_sound_effect_id),
       sfx_asset_id: parseOptionalBigInt(record.sfx_asset_id),
+      volume: parseOptionalVolume(record.volume),
     };
-  }).filter((cue) => cue.prompt || cue.start_seconds != null || cue.end_seconds != null || cue.sfx_sound_effect_id != null || cue.sfx_asset_id != null);
+  }).filter((cue) => cue.prompt || cue.start_seconds != null || cue.end_seconds != null || cue.sfx_sound_effect_id != null || cue.sfx_asset_id != null || cue.volume != null);
+}
+
+function parseOptionalVolume(value: unknown) {
+  if (value == null || value === '') return null;
+  const numberValue = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(numberValue) || numberValue < 0 || numberValue > 4) {
+    throw new Error('SE音量は0〜4の数値で入力してください');
+  }
+  return Math.round(numberValue * 1000) / 1000;
 }
 
 function parseOptionalSeconds(value: unknown) {
