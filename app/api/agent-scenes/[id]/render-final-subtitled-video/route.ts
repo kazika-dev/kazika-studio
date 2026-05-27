@@ -64,6 +64,31 @@ type SubtitleEvent = {
   text: string;
 };
 
+type SfxCueRow = {
+  id: number;
+  script_line_id: number;
+  cue_index: number | null;
+  start_seconds: number | string | null;
+  end_seconds: number | string | null;
+  prompt: string | null;
+  sfx_asset_id: number;
+  sfx_asset_storage_path: string | null;
+  sfx_asset_url: string | null;
+  sfx_asset_duration_seconds: number | string | null;
+};
+
+type SfxMixEvent = {
+  cueId: number;
+  scriptLineId: number;
+  assetId: number;
+  storagePath: string;
+  localStartMs: number;
+  globalStartMs: number;
+  trimSeconds: number | null;
+  prompt: string;
+  inputPath: string;
+};
+
 type ProbeResult = {
   hasAudio: boolean;
   durationSeconds: number | null;
@@ -316,6 +341,35 @@ async function loadScriptLines(lineIds: number[]) {
   return new Map((result.rows as ScriptLineRow[]).map((line) => [String(line.id), line]));
 }
 
+async function loadSfxCues(sceneId: number, lineIds: number[]) {
+  if (lineIds.length === 0) return [] as SfxCueRow[];
+  const result = await query(
+    `
+      select
+        cue.id,
+        cue.script_line_id,
+        cue.cue_index,
+        cue.start_seconds,
+        cue.end_seconds,
+        cue.prompt,
+        cue.sfx_asset_id,
+        a.storage_path as sfx_asset_storage_path,
+        a.url as sfx_asset_url,
+        a.duration_seconds as sfx_asset_duration_seconds
+      from kazika_studio_agents.script_line_timing_cues cue
+      join kazika_studio_agents.assets a on a.id = cue.sfx_asset_id
+      where cue.script_line_id = any($2::bigint[])
+        and cue.cue_type = 'sfx'
+        and cue.sfx_asset_id is not null
+        and (a.agent_story_scene_id = $1 or a.story_scene_id = $1 or a.script_line_id = cue.script_line_id)
+        and coalesce(a.mime_type, '') like 'audio/%'
+      order by cue.script_line_id asc, cue.cue_index asc, cue.id asc
+    `,
+    [sceneId, lineIds]
+  );
+  return result.rows as SfxCueRow[];
+}
+
 function isDialogueLineType(lineType: string | null | undefined) {
   return String(lineType || 'dialogue') === 'dialogue';
 }
@@ -323,6 +377,61 @@ function isDialogueLineType(lineType: string | null | undefined) {
 function fallbackSubtitleTextForLine(line: ScriptLineRow | undefined) {
   if (!isDialogueLineType(line?.line_type)) return '';
   return String(line?.text || line?.tts_text || '').trim();
+}
+
+function numberOrNull(value: number | string | null | undefined) {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function ffmpegAudioFilterLabel(value: string) {
+  return value.replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+function buildSubtitleAndSfxArgs(combinedPath: string, assPath: string, outputPath: string, sfxEvents: SfxMixEvent[]) {
+  if (sfxEvents.length === 0) {
+    return [
+      '-y',
+      '-i', combinedPath,
+      '-vf', subtitleAssFilter(assPath),
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '20',
+      '-c:a', 'copy',
+      '-movflags', '+faststart',
+      outputPath,
+    ];
+  }
+
+  const args = ['-y', '-i', combinedPath];
+  for (const event of sfxEvents) args.push('-i', event.inputPath);
+
+  const filterParts = [`[0:v]${subtitleAssFilter(assPath)}[v]`, '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[basea]'];
+  const audioLabels = ['[basea]'];
+  sfxEvents.forEach((event, index) => {
+    const label = `sfx${ffmpegAudioFilterLabel(String(event.cueId))}_${index}`;
+    const delay = Math.max(0, Math.round(event.globalStartMs));
+    const trimFilter = event.trimSeconds && event.trimSeconds > 0 ? `atrim=0:${event.trimSeconds.toFixed(3)},` : '';
+    filterParts.push(`[${index + 1}:a]${trimFilter}asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,adelay=${delay}|${delay}[${label}]`);
+    audioLabels.push(`[${label}]`);
+  });
+  filterParts.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=first:dropout_transition=0[aout]`);
+
+  args.push(
+    '-filter_complex', filterParts.join(';'),
+    '-map', '[v]',
+    '-map', '[aout]',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-c:a', 'aac',
+    '-ar', '48000',
+    '-ac', '2',
+    '-movflags', '+faststart',
+    outputPath
+  );
+  return args;
 }
 
 export async function POST(
@@ -347,6 +456,14 @@ export async function POST(
     const sourceLineIds = sourceVideos.map((asset) => asset.script_line_id);
     const subtitles = await loadSubtitles(sceneId, sourceLineIds);
     const scriptLinesById = await loadScriptLines(sourceLineIds);
+    const sfxCues = await loadSfxCues(sceneId, sourceLineIds);
+    const sfxCuesByLineId = new Map<string, SfxCueRow[]>();
+    for (const cue of sfxCues) {
+      const key = String(cue.script_line_id);
+      const rows = sfxCuesByLineId.get(key) || [];
+      rows.push(cue);
+      sfxCuesByLineId.set(key, rows);
+    }
 
     const ffmpegPath = resolveFfmpegPath();
     workDir = await mkdtemp(path.join(tmpdir(), 'kazika-final-subtitle-render-'));
@@ -431,6 +548,7 @@ export async function POST(
     ]);
 
     const subtitleEvents: SubtitleEvent[] = [];
+    const sfxMixEvents: SfxMixEvent[] = [];
     let offsetMs = 0;
     for (const [index, asset] of sourceVideos.entries()) {
       const durationMs = normalizedDurationsMs[index] || 6000;
@@ -442,6 +560,30 @@ export async function POST(
             .filter((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())
             .sort((a, b) => clipLocalStartMs(a) - clipLocalStartMs(b))
         : [];
+
+      const lineSfxCues = sfxCuesByLineId.get(String(asset.script_line_id)) || [];
+      for (const cue of lineSfxCues) {
+        const storagePath = normalizeStoragePath(String(cue.sfx_asset_storage_path || cue.sfx_asset_url || ''));
+        if (!storagePath) continue;
+        const cueStartSeconds = numberOrNull(cue.start_seconds) ?? 0;
+        const cueEndSeconds = numberOrNull(cue.end_seconds);
+        const assetDurationSeconds = numberOrNull(cue.sfx_asset_duration_seconds);
+        const localStartMs = Math.min(Math.max(Math.round(cueStartSeconds * 1000), 0), durationMs);
+        const trimSeconds = cueEndSeconds != null && cueEndSeconds > cueStartSeconds
+          ? cueEndSeconds - cueStartSeconds
+          : assetDurationSeconds;
+        sfxMixEvents.push({
+          cueId: cue.id,
+          scriptLineId: cue.script_line_id,
+          assetId: cue.sfx_asset_id,
+          storagePath,
+          localStartMs,
+          globalStartMs: offsetMs + localStartMs,
+          trimSeconds: trimSeconds && trimSeconds > 0 ? trimSeconds : null,
+          prompt: String(cue.prompt || ''),
+          inputPath: '',
+        });
+      }
 
       if (lineSubtitles.length > 0) {
         for (const clip of lineSubtitles) {
@@ -474,17 +616,15 @@ export async function POST(
 
     await writeFile(assPath, buildAss(subtitleEvents, targetWidth, targetHeight), 'utf8');
 
-    await runFfmpeg(ffmpegPath, [
-      '-y',
-      '-i', combinedPath,
-      '-vf', subtitleAssFilter(assPath),
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '20',
-      '-c:a', 'copy',
-      '-movflags', '+faststart',
-      outputPath,
-    ]);
+    for (const [index, event] of sfxMixEvents.entries()) {
+      const sfxFile = await getFileFromStorage(event.storagePath);
+      const extension = path.extname(event.storagePath) || '.mp3';
+      const inputPath = path.join(workDir, `sfx-${index}-${event.assetId}${extension}`);
+      await writeFile(inputPath, sfxFile.data);
+      event.inputPath = inputPath;
+    }
+
+    await runFfmpeg(ffmpegPath, buildSubtitleAndSfxArgs(combinedPath, assPath, outputPath, sfxMixEvents));
 
     const outputBuffer = await readFile(outputPath);
     const timestamp = Date.now();
@@ -508,9 +648,14 @@ export async function POST(
       [
         auth.user.id,
         sceneId,
-        JSON.stringify({ source_video_asset_ids: sourceVideos.map((asset) => asset.id), subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean) }),
+        JSON.stringify({
+          source_video_asset_ids: sourceVideos.map((asset) => asset.id),
+          subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean),
+          sfx_asset_ids: sfxMixEvents.map((event) => event.assetId),
+          sfx_cue_ids: sfxMixEvents.map((event) => event.cueId),
+        }),
         JSON.stringify({ storage_path: storagePath }),
-        JSON.stringify({ renderer: 'ffmpeg', subtitle_format: 'ass', concat: true, burned_in_subtitles: true }),
+        JSON.stringify({ renderer: 'ffmpeg', subtitle_format: 'ass', concat: true, burned_in_subtitles: true, mixed_sfx: sfxMixEvents.length > 0 }),
       ]
     );
     const job = jobResult.rows[0];
@@ -535,6 +680,18 @@ export async function POST(
           burned_in_subtitles: true,
           final_concat: true,
           subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean),
+          sfx_asset_ids: sfxMixEvents.map((event) => event.assetId),
+          sfx_cue_ids: sfxMixEvents.map((event) => event.cueId),
+          sfx_mix_events: sfxMixEvents.map((event) => ({
+            cue_id: event.cueId,
+            script_line_id: event.scriptLineId,
+            asset_id: event.assetId,
+            start_ms: event.globalStartMs,
+            local_start_ms: event.localStartMs,
+            trim_seconds: event.trimSeconds,
+            prompt: event.prompt,
+          })),
+          mixed_sfx: sfxMixEvents.length > 0,
           output_size_source: 'first_video',
           output_size: { width: targetWidth, height: targetHeight },
           subtitle_style: { vertical_position: 'bottom_12_percent', background: 'none', punctuation_wrap: true },
@@ -549,6 +706,7 @@ export async function POST(
         generationJob: job,
         sourceVideoCount: sourceVideos.length,
         subtitleCount: subtitleEvents.length,
+        sfxCount: sfxMixEvents.length,
         signedUrl,
         previewUrl: signedUrl,
       },
