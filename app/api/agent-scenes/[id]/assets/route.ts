@@ -138,7 +138,7 @@ export async function PATCH(
           from kazika_studio_agents.assets
           where id = $1
             and (agent_story_scene_id = $2 or story_scene_id = $2)
-            and asset_type in ('image', 'thumbnail', 'storyboard', 'audio', 'video')
+            and asset_type in ('image', 'thumbnail', 'storyboard', 'audio', 'sfx', 'video')
           limit 1
         `,
         [assetId, sceneId]

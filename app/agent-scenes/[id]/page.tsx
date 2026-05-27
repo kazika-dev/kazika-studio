@@ -109,7 +109,7 @@ export default function AgentSceneDetailPage() {
   const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
 
   const materialAssets = useMemo(
-    () => visibleAssets.filter((asset) => !(asset.asset_type === 'audio' && asset.script_line_id) && !isStoryboardAsset(asset)).sort(sortSceneAssets),
+    () => visibleAssets.filter((asset) => !((asset.asset_type === 'audio' || isSfxAsset(asset)) && asset.script_line_id) && !isStoryboardAsset(asset)).sort(sortSceneAssets),
     [visibleAssets]
   );
 
@@ -508,7 +508,7 @@ export default function AgentSceneDetailPage() {
 
   const { scene, scripts, scriptLines, scriptLineTimingCues = [], characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts, soundEffects = [] } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
-  const sceneAudioAssets = assets.filter((asset) => asset.asset_type === 'audio');
+  const sceneSfxAssets = assets.filter(isSfxAsset);
   const timingCuesByLineId = new Map<string, AnyRow[]>();
   for (const cue of scriptLineTimingCues) {
     const key = String(cue.script_line_id || '');
@@ -617,7 +617,8 @@ export default function AgentSceneDetailPage() {
                         {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
                           const lineAssets = assetsByLineId.get(String(line.id)) || [];
                           const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
-                          const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio');
+                          const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+                          const lineSfxAssets = lineAssets.filter(isSfxAsset);
                           const lineVideoAssets = lineAssets.filter((asset) => isVideoAsset(asset));
                           const lineTimingCues = timingCuesByLineId.get(String(line.id)) || [];
                           return (
@@ -629,6 +630,7 @@ export default function AgentSceneDetailPage() {
                                 {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
                                 <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
                                 <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
+                                <LinkedAssetCount icon={<Sparkles size={13} />} count={lineSfxAssets.length} />
                                 <LinkedAssetCount icon={<Film size={13} />} count={lineVideoAssets.length} />
                               </div>
                               <EditableDialogueLine
@@ -636,7 +638,7 @@ export default function AgentSceneDetailPage() {
                                 saving={savingDialogueLineId === String(line.id)}
                                 soundEffects={soundEffects}
                                 lineTimingCues={lineTimingCues}
-                                lineAudioAssets={sceneAudioAssets}
+                                sfxAssets={sceneSfxAssets}
                                 onSave={persistDialogueLine}
                               />
                               <LineAssetBundle
@@ -1088,15 +1090,31 @@ function isFinalRenderSourceVideo(asset: AnyRow) {
   return burnedIn !== true && burnedIn !== 'true';
 }
 
+function isSfxAsset(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return asset.asset_type === 'sfx'
+    || metadata.intended_use === 'scene_sfx_audio'
+    || typeof metadata.sfx_kind === 'string';
+}
+
+function isAudioAsset(asset: AnyRow) {
+  return asset.asset_type === 'audio' || isSfxAsset(asset);
+}
+
 function canRemakeCheckAsset(asset: AnyRow) {
-  return isVisualAsset(asset) || asset.asset_type === 'audio' || isVideoAsset(asset);
+  return isVisualAsset(asset) || (asset.asset_type === 'audio' && !isSfxAsset(asset)) || isVideoAsset(asset);
 }
 
 function isRelinkableAsset(asset: AnyRow) {
-  return isVisualAsset(asset) || asset.asset_type === 'audio' || isVideoAsset(asset);
+  return isVisualAsset(asset) || isAudioAsset(asset) || isVideoAsset(asset);
+}
+
+function assetSupportsDialoguePrimary(asset: AnyRow) {
+  return !isSfxAsset(asset) && (isVisualAsset(asset) || asset.asset_type === 'audio' || isVideoAsset(asset));
 }
 
 function assetKindLabel(asset: AnyRow) {
+  if (isSfxAsset(asset)) return 'SE';
   if (asset.asset_type === 'audio') return '音声';
   if (isVideoAsset(asset)) return '動画';
   if (isVisualAsset(asset)) return '画像';
@@ -1111,8 +1129,9 @@ function sortLinkedLineAssets(a: AnyRow, b: AnyRow) {
 
 function assetTypeOrder(asset: AnyRow) {
   if (isVisualAsset(asset)) return 1;
-  if (asset.asset_type === 'audio') return 2;
-  if (isVideoAsset(asset)) return 3;
+  if (asset.asset_type === 'audio' && !isSfxAsset(asset)) return 2;
+  if (isSfxAsset(asset)) return 3;
+  if (isVideoAsset(asset)) return 4;
   return 9;
 }
 
@@ -1269,7 +1288,7 @@ function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: A
 }
 
 function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo }: AssetRowProps) {
-  const isAudio = asset.asset_type === 'audio';
+  const isAudio = isAudioAsset(asset);
   const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
   const shouldContainImage = asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
@@ -1351,14 +1370,14 @@ function EditableDialogueLine({
   saving,
   soundEffects,
   lineTimingCues,
-  lineAudioAssets,
+  sfxAssets,
   onSave,
 }: {
   line: AnyRow;
   saving: boolean;
   soundEffects: AnyRow[];
   lineTimingCues: AnyRow[];
-  lineAudioAssets: AnyRow[];
+  sfxAssets: AnyRow[];
   onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[]) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1547,7 +1566,7 @@ function EditableDialogueLine({
                         className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-emerald-900 dark:bg-slate-950 dark:text-slate-100"
                       >
                         <option value="">未指定</option>
-                        {lineAudioAssets.map((asset) => (
+                        {sfxAssets.map((asset) => (
                           <option key={String(asset.id)} value={String(asset.id)}>
                             #{asset.id} {asset.duration_seconds ? `(${Number(asset.duration_seconds).toFixed(2)}s)` : ''} {String(asset.storage_path || '').split('/').pop()}
                           </option>
@@ -1747,7 +1766,8 @@ function LineAssetBundle({
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
   const imageAssets = assets.filter((asset) => isVisualAsset(asset));
-  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio');
+  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+  const sfxAssets = assets.filter(isSfxAsset);
   const videoAssets = assets.filter((asset) => isVideoAsset(asset));
   const linkedAssetIds = new Set(assets.map((asset) => String(asset.id)));
   const candidateAssets = allAssets.filter((asset) => !linkedAssetIds.has(String(asset.id)));
@@ -1771,9 +1791,10 @@ function LineAssetBundle({
           まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。
         </p>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 lg:grid-cols-4">
           <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
           <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
           <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} />
         </div>
       )}
@@ -1899,16 +1920,18 @@ function LinkedAssetCard({
         </a>
       )}
       {isVideoAsset(asset) && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} compact />}
-      {asset.asset_type === 'audio' && <AudioPlayer asset={asset} compact />}
+      {isAudioAsset(asset) && <AudioPlayer asset={asset} compact />}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
         {asset.is_primary && <Badge>primary</Badge>}
       </div>
-      <DialoguePrimaryControl
-        asset={asset}
-        saving={primarySaving}
-        onSetPrimary={() => onSetPrimaryAsset(asset)}
-      />
+      {assetSupportsDialoguePrimary(asset) && (
+        <DialoguePrimaryControl
+          asset={asset}
+          saving={primarySaving}
+          onSetPrimary={() => onSetPrimaryAsset(asset)}
+        />
+      )}
       {isVideoAsset(asset) && (
         <SubtitleVideoControls
           asset={asset}
@@ -2406,11 +2429,11 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
   const assetId = String(asset.id ?? '');
   const noteDirty = note.trim() !== savedNote.trim();
   const isVideo = isVideoAsset(asset);
-  const targetLabel = isVideo ? 'リップシンク動画' : asset.asset_type === 'audio' ? '音声' : '画像';
+  const targetLabel = isVideo ? 'リップシンク動画' : isSfxAsset(asset) ? 'SE' : asset.asset_type === 'audio' ? '音声' : '画像';
   const noteLabel = `${targetLabel}の修正指示`;
   const placeholder = isVideo
     ? '例: 口の動きが遅い、しゃべるキャラが違う、表情をもっと焦らせる、頭が揺れすぎる'
-    : asset.asset_type === 'audio'
+    : isAudioAsset(asset)
       ? '例: もっと可愛く、語尾を上げる、早口すぎるので少し落ち着かせる'
       : '例: みりあの髪留めを正しく、背景の人物を消す、表情をもっと焦らせる';
 
