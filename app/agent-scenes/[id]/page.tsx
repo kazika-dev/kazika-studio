@@ -246,7 +246,7 @@ export default function AgentSceneDetailPage() {
             prompt: cue.prompt,
             sfx_sound_effect_id: cue.sfx_sound_effect_id || null,
             sfx_asset_id: cue.sfx_asset_id || null,
-            volume: cue.volume || null,
+            volume: volumeMultiplierFromPercentInput(cue.volume),
           })),
           // Legacy summary columns: keep the first cue mirrored for older scripts/tools.
           video_prompt_timing_note: timingCues[0]?.cue_type !== 'sfx' ? timingCues[0]?.prompt || '' : '',
@@ -1431,7 +1431,7 @@ function EditableDialogueLine({
                 <div key={cue.local_id} className="rounded-lg bg-sky-50 px-2 py-1 text-xs leading-5 text-sky-800 dark:bg-sky-950 dark:text-sky-200">
                   <p>
                     cue{index + 1} / {cueTypeLabel(cue.cue_type)}: {formatCueRange(cue.start_seconds, cue.end_seconds)}{cue.prompt ? ` / ${cue.prompt}` : ''}
-                    {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}{cue.volume ? ` / vol ${Number(cue.volume).toFixed(2)}` : ''}
+                    {cue.sfx_sound_effect_id ? ` / SE#${cue.sfx_sound_effect_id}` : ''}{cue.sfx_asset_id ? ` / asset#${cue.sfx_asset_id}` : ''}{cue.volume ? ` / vol ${Number(cue.volume).toFixed(0)}%` : ''}
                   </p>
                   {sfxAsset && <div className="mt-2"><AudioPlayer asset={sfxAsset} compact /></div>}
                 </div>
@@ -1527,7 +1527,10 @@ function EditableDialogueLine({
                     種類
                     <select
                       value={cue.cue_type}
-                      onChange={(event) => updateCue(index, { cue_type: event.target.value })}
+                      onChange={(event) => {
+                        const nextType = event.target.value;
+                        updateCue(index, { cue_type: nextType, volume: nextType === 'sfx' && !cue.volume ? '100' : cue.volume });
+                      }}
                       className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                     >
                       {['motion', 'camera', 'sfx', 'dialogue', 'transition', 'hold', 'other'].map((type) => <option key={type} value={type}>{cueTypeLabel(type)}</option>)}
@@ -1575,7 +1578,7 @@ function EditableDialogueLine({
                         ))}
                       </select>
                     </label>
-                    <NumberInput label="SE音量" value={cue.volume} onChange={(value) => updateCue(index, { volume: value })} placeholder="例: 0.7 / 1.0" />
+                    <NumberInput label="SE音量(%)" value={cue.volume} onChange={(value) => updateCue(index, { volume: value })} placeholder="例: 80 / 100" />
 
                   </div>
                 )}
@@ -1620,7 +1623,7 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(cue.prompt || ''),
       sfx_sound_effect_id: cue.sfx_sound_effect_id == null ? '' : String(cue.sfx_sound_effect_id),
       sfx_asset_id: cue.sfx_asset_id == null ? '' : String(cue.sfx_asset_id),
-      volume: formatVolumeInput(cue.metadata?.volume),
+      volume: String(cue.cue_type || '') === 'sfx' ? formatVolumePercentInput(cue.volume ?? 1) : '',
       sfx_asset_url: typeof cue.sfx_asset_url === 'string' ? cue.sfx_asset_url : '',
       sfx_asset_storage_path: typeof cue.sfx_asset_storage_path === 'string' ? cue.sfx_asset_storage_path : '',
       sfx_asset_mime_type: typeof cue.sfx_asset_mime_type === 'string' ? cue.sfx_asset_mime_type : '',
@@ -1652,7 +1655,7 @@ function buildTimingCueInputs(line: AnyRow, lineTimingCues: AnyRow[]): TimingCue
       prompt: String(line.sfx_prompt || ''),
       sfx_sound_effect_id: line.sfx_sound_effect_id == null ? '' : String(line.sfx_sound_effect_id),
       sfx_asset_id: line.sfx_asset_id == null ? '' : String(line.sfx_asset_id),
-      volume: '',
+      volume: '100',
     });
   }
   return legacy;
@@ -1674,10 +1677,17 @@ function normalizeCueInputs(cues: TimingCueInput[]) {
     .filter((cue) => cue.prompt || cue.start_seconds || cue.end_seconds || cue.sfx_sound_effect_id || cue.sfx_asset_id || cue.volume);
 }
 
-function formatVolumeInput(value: unknown) {
+function formatVolumePercentInput(value: unknown) {
   if (value == null || value === '') return '';
   const numeric = Number(value);
-  return Number.isFinite(numeric) ? String(Number(numeric.toFixed(3))) : '';
+  return Number.isFinite(numeric) ? String(Math.round(numeric * 100)) : '';
+}
+
+function volumeMultiplierFromPercentInput(value: string) {
+  if (!value.trim()) return null;
+  const numeric = Number(value.trim());
+  if (!Number.isFinite(numeric)) return null;
+  return Math.round((numeric / 100) * 1000) / 1000;
 }
 
 function durationFromCue(cue: TimingCueInput | undefined) {

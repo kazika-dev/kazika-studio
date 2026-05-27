@@ -138,14 +138,14 @@ export async function PATCH(
             cue.prompt,
             cue.sfx_sound_effect_id,
             cue.sfx_asset_id,
-            JSON.stringify(cue.volume == null ? {} : { volume: cue.volume })
+            cue.volume
           );
-          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}::jsonb)`;
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9})`;
         }).join(', ');
         await query(
           `
             insert into kazika_studio_agents.script_line_timing_cues
-              (script_line_id, cue_index, cue_type, start_seconds, end_seconds, prompt, sfx_sound_effect_id, sfx_asset_id, metadata)
+              (script_line_id, cue_index, cue_type, start_seconds, end_seconds, prompt, sfx_sound_effect_id, sfx_asset_id, volume)
             values ${placeholders}
           `,
           values
