@@ -65,6 +65,7 @@ export async function PATCH(
     }
 
     const updatedRows = [];
+    const removedSfxCueRefs: Array<{ id: string; script_line_id: string; sfx_asset_id: string }> = [];
 
     const normalizedUpdates = updates.map((item, index) => {
       const assetId = Number.parseInt(String(item.id ?? ''), 10);
@@ -134,7 +135,7 @@ export async function PATCH(
 
       const assetResult = await query(
         `
-          select id, generation_job_id, asset_type
+          select id, generation_job_id, asset_type, script_line_id
           from kazika_studio_agents.assets
           where id = $1
             and (agent_story_scene_id = $2 or story_scene_id = $2)
@@ -203,6 +204,52 @@ export async function PATCH(
           JSON.stringify(metadataPatch),
         ]
       );
+
+      if (String(asset.asset_type || '') === 'sfx') {
+        const previousLineId = asset.script_line_id == null ? null : Number(asset.script_line_id);
+        const shouldClearSceneRefs = nextLineId === null;
+        const shouldClearPreviousLineRefs = previousLineId !== null && previousLineId !== nextLineId;
+
+        if (shouldClearSceneRefs || shouldClearPreviousLineRefs) {
+          const cueDeleteResult = await query(
+            `
+              delete from kazika_studio_agents.script_line_timing_cues cue
+              using kazika_studio_agents.script_lines sl
+              join kazika_studio_agents.scripts sc on sc.id = sl.script_id
+              where cue.script_line_id = sl.id
+                and cue.cue_type = 'sfx'
+                and cue.sfx_asset_id = $1
+                and (sc.agent_story_scene_id = $2 or sc.story_scene_id = $2)
+                and ($3::bigint is null or cue.script_line_id = $3)
+              returning cue.id, cue.script_line_id, cue.sfx_asset_id
+            `,
+            [assetId, sceneId, shouldClearSceneRefs ? null : previousLineId]
+          );
+          removedSfxCueRefs.push(...cueDeleteResult.rows.map((row) => ({
+            id: String(row.id),
+            script_line_id: String(row.script_line_id),
+            sfx_asset_id: String(row.sfx_asset_id),
+          })));
+
+          await query(
+            `
+              update kazika_studio_agents.script_lines sl
+              set sfx_prompt = null,
+                  sfx_start_seconds = null,
+                  sfx_duration_seconds = null,
+                  sfx_sound_effect_id = null,
+                  sfx_asset_id = null,
+                  updated_at = now()
+              from kazika_studio_agents.scripts sc
+              where sc.id = sl.script_id
+                and sl.sfx_asset_id = $1
+                and (sc.agent_story_scene_id = $2 or sc.story_scene_id = $2)
+                and ($3::bigint is null or sl.id = $3)
+            `,
+            [assetId, sceneId, shouldClearSceneRefs ? null : previousLineId]
+          );
+        }
+      }
 
       if (asset.generation_job_id) {
         await query(
@@ -325,7 +372,7 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ success: true, data: { assets: updatedRows, linkedAssets: linkedRows, primaryAssets: primaryRows } });
+    return NextResponse.json({ success: true, data: { assets: updatedRows, linkedAssets: linkedRows, primaryAssets: primaryRows, removedSfxCueRefs } });
   } catch (error: unknown) {
     console.error('Failed to update scene image display settings:', error);
     const message = error instanceof Error ? error.message : 'Failed to update scene image display settings';

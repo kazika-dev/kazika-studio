@@ -185,9 +185,13 @@ export default function AgentSceneDetailPage() {
         throw new Error(result.error || '素材の紐付け保存に失敗しました');
       }
       const linkedById = new Map<string, AnyRow>((result.data?.linkedAssets || []).map((row: AnyRow) => [String(row.id), row]));
+      const removedSfxCueIds = new Set<string>((result.data?.removedSfxCueRefs || []).map((row: AnyRow) => String(row.id)));
       setData((current) => current ? {
         ...current,
         assets: current.assets.map((row) => linkedById.get(String(row.id)) || row),
+        scriptLineTimingCues: removedSfxCueIds.size > 0
+          ? current.scriptLineTimingCues.filter((cue) => !removedSfxCueIds.has(String(cue.id)))
+          : current.scriptLineTimingCues,
       } : current);
     } catch (err) {
       setLinkError(err instanceof Error ? err.message : '素材の紐付け保存に失敗しました');

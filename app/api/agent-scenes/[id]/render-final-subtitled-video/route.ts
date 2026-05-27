@@ -364,8 +364,12 @@ async function loadSfxCues(sceneId: number, lineIds: number[]) {
       where cue.script_line_id = any($2::bigint[])
         and cue.cue_type = 'sfx'
         and cue.sfx_asset_id is not null
+        and a.asset_type = 'sfx'
+        and a.script_line_id is not null
         and (a.agent_story_scene_id = $1 or a.story_scene_id = $1 or a.script_line_id = cue.script_line_id)
         and coalesce(a.mime_type, '') like 'audio/%'
+        and coalesce(a.metadata->>'deleted', 'false') <> 'true'
+        and coalesce(a.metadata->>'logical_deleted', 'false') <> 'true'
       order by cue.script_line_id asc, cue.cue_index asc, cue.id asc
     `,
     [sceneId, lineIds]
