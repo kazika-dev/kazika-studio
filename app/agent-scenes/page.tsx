@@ -9,8 +9,11 @@ type AgentStory = {
   id: number;
   title: string;
   description?: string | null;
+  metadata?: Record<string, unknown> | null;
   thumbnail_url?: string | null;
   updated_at?: string | null;
+  default_image_aspect_ratio?: string | null;
+  default_video_aspect_ratio?: string | null;
   project_key?: string | null;
   genre_mode?: string | null;
   production_status?: string | null;
@@ -27,12 +30,15 @@ type AgentStory = {
 
 type AgentScene = {
   id: number;
+  story_id?: number | string | null;
   title: string;
   description?: string | null;
   summary?: string | null;
   location?: string | null;
   time_of_day?: string | null;
   mood?: string | null;
+  metadata?: Record<string, unknown> | null;
+  story_metadata?: Record<string, unknown> | null;
   sequence_order: number;
   story_title: string;
   project_key?: string | null;
@@ -96,6 +102,7 @@ export default function AgentScenesPage() {
   }, [projectKey, genreMode, productionStatus, selectedStoryId, urlInitialized]);
 
   const selectedStory = stories.find((story) => String(story.id) === selectedStoryId);
+  const selectedStoryScenes = selectedStoryId ? scenes.filter((scene) => String(scene.story_id || '') === selectedStoryId) : scenes;
   const hasFilters = Boolean(projectKey.trim() || genreMode || productionStatus || selectedStoryId);
 
   return (
@@ -250,6 +257,8 @@ export default function AgentScenesPage() {
           </div>
         )}
 
+        {selectedStory && <StoryStructure story={selectedStory} scenes={selectedStoryScenes.length ? selectedStoryScenes : scenes} />}
+
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">シーン一覧</h2>
@@ -324,6 +333,154 @@ export default function AgentScenesPage() {
       </div>
     </main>
   );
+}
+
+function StoryStructure({ story, scenes }: { story: AgentStory; scenes: AgentScene[] }) {
+  const metadata = story.metadata || {};
+  const motifs = getRecord(getRecord(metadata.motifs).kaguya_hime);
+  const characters = Array.isArray(metadata.main_characters) ? metadata.main_characters : [];
+  const fields = [
+    ['ログライン', getText(metadata.logline)],
+    ['前提', getText(metadata.premise)],
+    ['雰囲気', getText(metadata.target_vibe)],
+    ['事件の仕組み', getText(metadata.mystery_engine)],
+    ['感情の核', getText(metadata.emotional_core)],
+    ['ラスト方向', getText(metadata.ending_direction)],
+  ].filter(([, value]) => value);
+  const motifFields = [
+    ['かぐや姫', getText(motifs.kaguya)],
+    ['月の都', getText(motifs.moon_capital)],
+    ['月の使者', getText(motifs.moon_messengers)],
+    ['羽衣', getText(motifs.robe_of_feathers)],
+    ['五つの難題', getText(motifs.five_impossible_tasks)],
+    ['満月の期限', getText(motifs.full_moon_deadline)],
+  ].filter(([, value]) => value);
+
+  return (
+    <section className="mb-8 rounded-3xl border border-indigo-200 bg-white p-5 shadow-sm dark:border-indigo-900 dark:bg-slate-900">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="mb-2 inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">
+            保存済み構成 / Story #{story.id}
+          </p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{getText(metadata.working_subtitle) || story.title}</h2>
+          {story.title !== getText(metadata.working_subtitle) && (
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">登録タイトル: {story.title}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+          {story.project_key && <span className="rounded-full bg-indigo-50 px-2 py-1 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{story.project_key}</span>}
+          {story.genre_mode && <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700 dark:bg-violet-950 dark:text-violet-200">{story.genre_mode}</span>}
+          {story.production_status && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">{story.production_status}</span>}
+          {story.default_image_aspect_ratio && <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">画像 {story.default_image_aspect_ratio}</span>}
+          {story.default_video_aspect_ratio && <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">動画 {story.default_video_aspect_ratio}</span>}
+        </div>
+      </div>
+
+      <p className="mb-5 rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
+        {story.description || 'ストーリー説明は未設定です。'}
+      </p>
+
+      {fields.length > 0 && (
+        <div className="mb-5 grid gap-3 md:grid-cols-2">
+          {fields.map(([label, value]) => (
+            <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
+              <h3 className="mb-2 text-xs font-semibold text-indigo-600 dark:text-indigo-300">{label}</h3>
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {characters.length > 0 && (
+        <div className="mb-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">主要キャラ</h3>
+          <div className="grid gap-3 md:grid-cols-2">
+            {characters.map((character, index) => {
+              const item = getRecord(character);
+              return (
+                <div key={`${getText(item.name) || 'character'}-${index}`} className="rounded-2xl border border-slate-100 p-4 dark:border-slate-800">
+                  <p className="font-semibold text-slate-900 dark:text-white">{getText(item.name) || `キャラ${index + 1}`}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{getText(item.role)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {motifFields.length > 0 && (
+        <div className="mb-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">かぐや姫モチーフ</h3>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {motifFields.map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+                <p className="mb-2 text-xs font-semibold text-violet-700 dark:text-violet-200">{label}</p>
+                <p className="text-sm leading-6 text-slate-700 dark:text-slate-200">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-5">
+        <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">シーン構成全文</h3>
+        <div className="space-y-3">
+          {scenes.map((scene) => (
+            <div key={scene.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">#{scene.sequence_order}</span>
+                <Link href={`/agent-scenes/${scene.id}`} className="text-base font-semibold text-slate-900 hover:text-indigo-700 dark:text-white dark:hover:text-indigo-300">
+                  {scene.title}
+                </Link>
+                {scene.location && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">{scene.location}</span>}
+                {scene.time_of_day && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">{scene.time_of_day}</span>}
+                {scene.mood && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">{scene.mood}</span>}
+              </div>
+              {scene.summary && <p className="mb-2 text-sm font-medium leading-6 text-slate-700 dark:text-slate-200">{scene.summary}</p>}
+              {scene.description && <p className="whitespace-pre-wrap text-sm leading-7 text-slate-600 dark:text-slate-300">{scene.description}</p>}
+              <SceneMetadata metadata={scene.metadata} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">保存メタデータJSONを表示</summary>
+        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-600 dark:text-slate-300">
+          {JSON.stringify(metadata, null, 2)}
+        </pre>
+      </details>
+    </section>
+  );
+}
+
+function SceneMetadata({ metadata }: { metadata?: Record<string, unknown> | null }) {
+  if (!metadata) return null;
+  const chips = [
+    ['beat', getText(metadata.beat)],
+    ['reveal', getText(metadata.chat_reveal_level)],
+    ['motif', getText(metadata.kaguya_motif)],
+  ].filter(([, value]) => value);
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+      {chips.map(([label, value]) => (
+        <span key={label} className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">{label}: {value}</span>
+      ))}
+    </div>
+  );
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
 }
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
