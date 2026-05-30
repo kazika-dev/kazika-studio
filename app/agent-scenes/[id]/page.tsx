@@ -902,10 +902,10 @@ function CharacterCard({ character }: { character: AnyRow }) {
             <button
               type="button"
               onClick={openPreview}
-              className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-offset-2 transition hover:ring-2 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900 dark:ring-offset-slate-950"
+              className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-offset-2 transition hover:ring-2 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900 dark:ring-offset-slate-950"
               aria-label={`${characterName}のキャラシを拡大`}
             >
-              <img src={imageUrl} alt={characterName} className="h-full w-full object-cover" loading="lazy" />
+              <img src={imageUrl} alt={characterName} className="h-full w-full object-contain" loading="lazy" />
               <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition group-hover:opacity-100 group-focus:opacity-100">
                 <Maximize2 size={16} className="text-white" />
               </span>
@@ -938,17 +938,17 @@ function CharacterCard({ character }: { character: AnyRow }) {
 
       {isPreviewOpen && imageUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-2 backdrop-blur-sm sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-label={`${characterName}のキャラクターシート`}
           onClick={() => setIsPreviewOpen(false)}
         >
           <div
-            className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl dark:bg-slate-950"
+            className="flex h-[96vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl dark:bg-slate-950"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Character sheet</p>
                 <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">{characterName}</h2>
@@ -990,16 +990,13 @@ function CharacterCard({ character }: { character: AnyRow }) {
                 </button>
               </div>
             </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-100 p-4 dark:bg-slate-900/70">
-              <img src={activePreviewUrl} alt={`${characterName} character sheet`} className="max-h-[76vh] max-w-full rounded-xl object-contain shadow-lg" />
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-100 p-2 dark:bg-slate-900/70 sm:p-3">
+              <img
+                src={activePreviewUrl}
+                alt={`${characterName} character sheet`}
+                className="h-auto max-h-[calc(96vh-88px)] max-w-full rounded-xl object-contain shadow-lg"
+              />
             </div>
-            {(character.description || character.personality || character.looks) && (
-              <div className="grid gap-2 border-t border-slate-200 p-4 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300 md:grid-cols-3">
-                {character.description && <PromptBox label="説明" text={String(character.description)} />}
-                {character.personality && <PromptBox label="性格" text={String(character.personality)} />}
-                {character.looks && <PromptBox label="外見" text={String(character.looks)} />}
-              </div>
-            )}
           </div>
         </div>
       )}
