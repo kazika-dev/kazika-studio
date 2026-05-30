@@ -230,7 +230,7 @@ export default function AgentSceneDetailPage() {
     }
   };
 
-  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[]) => {
+  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[], videoGenerationMode: string) => {
     if (!Number.isFinite(sceneId)) return;
     const lineId = String(line.id || '');
     if (!lineId) return;
@@ -243,6 +243,7 @@ export default function AgentSceneDetailPage() {
         body: JSON.stringify({
           text: nextText,
           tts_text: nextTtsText,
+          video_generation_mode: videoGenerationMode,
           timing_cues: timingCues.map((cue) => ({
             cue_type: cue.cue_type,
             start_seconds: cue.start_seconds || null,
@@ -1371,6 +1372,21 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 }
 
 
+const DIALOGUE_VIDEO_MODE_LIPSYNC = 'lipsync';
+const DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT = 'silent_back_view_then_mux';
+
+function dialogueVideoGenerationMode(line: AnyRow) {
+  const metadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
+  const direct = typeof metadata.dialogue_video_generation_mode === 'string' ? metadata.dialogue_video_generation_mode : '';
+  const nested = metadata.video_generation_settings && typeof metadata.video_generation_settings === 'object'
+    && typeof metadata.video_generation_settings.dialogue_video_mode === 'string'
+    ? metadata.video_generation_settings.dialogue_video_mode
+    : '';
+  const mode = direct || nested;
+  return mode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC;
+}
+
+
 function EditableDialogueLine({
   line,
   saving,
@@ -1384,7 +1400,7 @@ function EditableDialogueLine({
   soundEffects: AnyRow[];
   lineTimingCues: AnyRow[];
   sfxAssets: AnyRow[];
-  onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[]) => void;
+  onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[], videoGenerationMode: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(line.text || ''));
@@ -1394,11 +1410,14 @@ function EditableDialogueLine({
   const savedTtsText = String(line.tts_text || line.text || '');
   const hasCustomTts = Boolean(savedTtsText && savedTtsText !== savedText);
   const savedCueInputs = buildTimingCueInputs(line, lineTimingCues);
+  const savedVideoGenerationMode = dialogueVideoGenerationMode(line);
   const [timingCues, setTimingCues] = useState<TimingCueInput[]>(savedCueInputs);
+  const [videoGenerationMode, setVideoGenerationMode] = useState(savedVideoGenerationMode);
   const effectiveTtsText = customTts ? (ttsText.trim() || text.trim()) : text.trim();
   const normalizedTimingCues = normalizeCueInputs(timingCues);
   const dirty = text !== savedText
     || effectiveTtsText !== savedTtsText
+    || videoGenerationMode !== savedVideoGenerationMode
     || JSON.stringify(normalizedTimingCues) !== JSON.stringify(normalizeCueInputs(savedCueInputs));
 
   const resetFields = () => {
@@ -1406,6 +1425,7 @@ function EditableDialogueLine({
     setTtsText(savedTtsText);
     setCustomTts(hasCustomTts);
     setTimingCues(savedCueInputs);
+    setVideoGenerationMode(savedVideoGenerationMode);
   };
 
   if (!editing) {
@@ -1426,6 +1446,9 @@ function EditableDialogueLine({
         </div>
         {hasCustomTts && (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
+        )}
+        {savedVideoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT && (
+          <p className="mt-2 rounded-lg bg-violet-50 px-2 py-1 text-xs text-violet-800 dark:bg-violet-950 dark:text-violet-200">動画設定: 後ろ姿/音声なし生成 → DB音声を後からmux</p>
         )}
         {savedCueInputs.length > 0 && (
           <div className="mt-2 space-y-2">
@@ -1500,6 +1523,22 @@ function EditableDialogueLine({
             />
           </div>
         )}
+      </div>
+
+      <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 dark:border-violet-950 dark:bg-violet-950/40">
+        <div className="text-[11px] font-semibold text-violet-800 dark:text-violet-200">Grok dialogue動画の生成モード</div>
+        <label className="mt-2 flex items-start gap-2 text-xs leading-5 text-violet-800 dark:text-violet-200">
+          <input
+            type="checkbox"
+            checked={videoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT}
+            onChange={(event) => setVideoGenerationMode(event.target.checked ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC)}
+            className="mt-1 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+          />
+          <span>
+            後ろ姿/口元を見せない映像として音声なしで生成し、DBの会話音声だけを後からmuxする
+            <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">口パクが崩れる時用。Grokには声・ナレーション・BGMを作らせず、背中/横後ろ/口元非表示の芝居に寄せます。</span>
+          </span>
+        </label>
       </div>
 
       <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 dark:border-sky-950 dark:bg-sky-950/40">
@@ -1596,7 +1635,7 @@ function EditableDialogueLine({
         <button
           type="button"
           disabled={saving || !text.trim() || !dirty}
-          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues)}
+          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues, videoGenerationMode)}
           className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
         >
           {saving ? '保存中...' : '保存'}

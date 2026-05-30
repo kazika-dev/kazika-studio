@@ -36,6 +36,7 @@ export async function PATCH(
     const sfxSoundEffectId = parseOptionalBigInt(body.sfx_sound_effect_id);
     const sfxAssetId = parseOptionalBigInt(body.sfx_asset_id);
     const timingCues = parseTimingCues(body.timing_cues);
+    const videoGenerationMode = parseVideoGenerationMode(body.video_generation_mode);
     if (!text) {
       return NextResponse.json({ success: false, error: '会話テキストを入力してください' }, { status: 400 });
     }
@@ -78,12 +79,27 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Dialogue not found' }, { status: 404 });
     }
 
-    const metadataPatch = {
+    const metadataPatch: Record<string, unknown> = {
       ...(line.metadata && typeof line.metadata === 'object' ? line.metadata : {}),
       edited_in_agent_scene: true,
       edited_at: new Date().toISOString(),
       edited_by: user.id,
     };
+
+    if (videoGenerationMode) {
+      const existingVideoSettings = metadataPatch.video_generation_settings && typeof metadataPatch.video_generation_settings === 'object'
+        ? (metadataPatch.video_generation_settings as Record<string, unknown>)
+        : {};
+      metadataPatch.dialogue_video_generation_mode = videoGenerationMode;
+      metadataPatch.video_generation_settings = {
+        ...existingVideoSettings,
+        dialogue_video_mode: videoGenerationMode,
+        no_grok_voice: videoGenerationMode === 'silent_back_view_then_mux',
+        back_view_only: videoGenerationMode === 'silent_back_view_then_mux',
+        hide_mouth: videoGenerationMode === 'silent_back_view_then_mux',
+        mux_db_audio_after: true,
+      };
+    }
 
     const updatedLineResult = await query(
       `
@@ -255,6 +271,16 @@ type ParsedTimingCue = {
   sfx_asset_id: number | null;
   volume: number | null;
 };
+
+const VALID_VIDEO_GENERATION_MODES = new Set(['lipsync', 'silent_back_view_then_mux']);
+
+function parseVideoGenerationMode(value: unknown) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !VALID_VIDEO_GENERATION_MODES.has(value)) {
+    throw new Error('動画生成モードが不正です');
+  }
+  return value;
+}
 
 const VALID_CUE_TYPES = new Set(['motion', 'camera', 'sfx', 'dialogue', 'transition', 'hold', 'other']);
 
