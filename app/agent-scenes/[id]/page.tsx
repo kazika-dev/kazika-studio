@@ -1444,11 +1444,27 @@ function EditableDialogueLine({
             編集
           </button>
         </div>
+        <label className="mt-2 flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50 px-2 py-2 text-xs leading-5 text-violet-800 dark:border-violet-950 dark:bg-violet-950/40 dark:text-violet-200">
+          <input
+            type="checkbox"
+            checked={savedVideoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT}
+            disabled={saving || !savedText.trim()}
+            onChange={(event) => onSave(
+              line,
+              savedText.trim(),
+              savedTtsText.trim() || savedText.trim(),
+              normalizeCueInputs(savedCueInputs),
+              event.target.checked ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC,
+            )}
+            className="mt-1 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+          />
+          <span>
+            後ろ姿/口元を見せない映像として音声なしで生成し、DBの会話音声だけを後からmuxする
+            <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">{saving ? '保存中...' : 'チェックだけなら編集を開かずにここで切り替えできます。'}</span>
+          </span>
+        </label>
         {hasCustomTts && (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
-        )}
-        {savedVideoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT && (
-          <p className="mt-2 rounded-lg bg-violet-50 px-2 py-1 text-xs text-violet-800 dark:bg-violet-950 dark:text-violet-200">動画設定: 後ろ姿/音声なし生成 → DB音声を後からmux</p>
         )}
         {savedCueInputs.length > 0 && (
           <div className="mt-2 space-y-2">
