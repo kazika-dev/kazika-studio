@@ -29,15 +29,7 @@ export async function GET(
           ssd.*,
           st.title as story_title,
           st.user_id,
-          st.description as story_description,
-          st.thumbnail_url as story_thumbnail_url,
-          st.metadata as story_metadata,
-          st.default_image_aspect_ratio as story_default_image_aspect_ratio,
-          st.default_video_aspect_ratio as story_default_video_aspect_ratio,
-          coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key') as project_key,
-          coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode') as genre_mode,
-          coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status') as production_status,
-          coalesce(ssd.metadata->>'episode_no', st.metadata->>'episode_no') as episode_no
+          st.description as story_description
         from kazika_studio_agents.story_scenes_domain ssd
         join kazika_studio_agents.stories st on st.id = ssd.story_id
         where ssd.id = $1
@@ -51,23 +43,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
     }
 
-    const [storyScenesResult, scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, clipsResult, jobsResult, layoutsResult, soundEffectsResult] = await Promise.all([
-      query(
-        `
-          select
-            ssd.*,
-            coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key') as project_key,
-            coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode') as genre_mode,
-            coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status') as production_status,
-            coalesce(ssd.metadata->>'episode_no', st.metadata->>'episode_no') as episode_no
-          from kazika_studio_agents.story_scenes_domain ssd
-          join kazika_studio_agents.stories st on st.id = ssd.story_id
-          where ssd.story_id = $1
-            and st.user_id = $2
-          order by ssd.sequence_order asc, ssd.id asc
-        `,
-        [scene.story_id, user.id]
-      ),
+    const [scriptsResult, conversationsResult, shotsResult, assetsResult, tracksResult, clipsResult, jobsResult, layoutsResult, soundEffectsResult] = await Promise.all([
       query(
         `
           select
@@ -306,19 +282,6 @@ export async function GET(
       success: true,
       data: {
         scene,
-        story: {
-          id: scene.story_id,
-          title: scene.story_title,
-          description: scene.story_description,
-          thumbnail_url: scene.story_thumbnail_url,
-          metadata: scene.story_metadata,
-          default_image_aspect_ratio: scene.story_default_image_aspect_ratio,
-          default_video_aspect_ratio: scene.story_default_video_aspect_ratio,
-          project_key: scene.project_key,
-          genre_mode: scene.genre_mode,
-          production_status: scene.production_status,
-        },
-        storyScenes: storyScenesResult.rows,
         scripts: scriptsResult.rows,
         scriptLines: linesResult.rows,
         scriptLineTimingCues: timingCuesResult.rows,
