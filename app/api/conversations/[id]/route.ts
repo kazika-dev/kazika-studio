@@ -81,8 +81,11 @@ export async function GET(
         conversation: {
           id: conversation.id,
           studio_id: conversation.studio_id,
+          story_scene_id: conversation.story_scene_id,
           title: conversation.title,
           description: conversation.description,
+          draft: conversation.draft,
+          location: conversation.location,
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
           metadata: conversation.metadata,
@@ -205,7 +208,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, description, metadata } = body;
+    const { title, description, draft, location, metadata } = body;
 
     // Verify ownership
     const { data: conversation, error: convError } = await db
@@ -239,7 +242,16 @@ export async function PATCH(
     const updates: any = {};
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
+    if (draft !== undefined) updates.draft = draft;
+    if (location !== undefined) updates.location = location;
     if (metadata !== undefined) updates.metadata = metadata;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No update fields provided' },
+        { status: 400 }
+      );
+    }
 
     const { data: updated, error: updateError} = await db
       .from('conversations')
