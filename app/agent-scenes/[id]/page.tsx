@@ -525,7 +525,7 @@ export default function AgentSceneDetailPage() {
     }
   };
 
-  const renderFinalSubtitledVideo = async () => {
+  const renderFinalSubtitledVideo = async (includeSubtitles = true) => {
     if (!Number.isFinite(sceneId)) return;
     setRenderingFinalSubtitledVideo(true);
     setSubtitleError('');
@@ -533,10 +533,11 @@ export default function AgentSceneDetailPage() {
       const response = await fetch(`/api/agent-scenes/${sceneId}/render-final-subtitled-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeSubtitles }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '動画結合＋字幕焼き込みに失敗しました');
+        throw new Error(result.error || (includeSubtitles ? '動画結合＋字幕焼き込みに失敗しました' : '字幕なし動画結合に失敗しました'));
       }
       const nextAsset = result.data?.asset;
       const nextJob = result.data?.generationJob;
@@ -546,7 +547,7 @@ export default function AgentSceneDetailPage() {
         generationJobs: nextJob ? [nextJob, ...current.generationJobs] : current.generationJobs,
       } : current);
     } catch (err) {
-      setSubtitleError(err instanceof Error ? err.message : '動画結合＋字幕焼き込みに失敗しました');
+      setSubtitleError(err instanceof Error ? err.message : '動画結合に失敗しました');
     } finally {
       setRenderingFinalSubtitledVideo(false);
     }
@@ -2323,7 +2324,7 @@ function SubtitleTools({
   renderingFinal: boolean;
   error: string;
   onSync: () => void;
-  onRenderFinal: () => void;
+  onRenderFinal: (includeSubtitles?: boolean) => void;
 }) {
   const enabledCount = subtitleClips.filter((clip) => subtitleMetadata(clip).enabled !== false && subtitleText(clip)).length;
   return (
@@ -2337,12 +2338,21 @@ function SubtitleTools({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onRenderFinal}
+            onClick={() => onRenderFinal(true)}
             disabled={renderingFinal || sourceVideoCount === 0 || enabledCount === 0}
             className="rounded-full border border-indigo-200 bg-indigo-600 px-3 py-1 font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-500 dark:hover:bg-indigo-400"
             title="セリフ順に動画をつなげて、現在の字幕スタイルで焼き込みます"
           >
             {renderingFinal ? '結合書き出し中...' : `動画結合＋字幕焼き込み (${sourceVideoCount}本)`}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRenderFinal(false)}
+            disabled={renderingFinal || sourceVideoCount === 0}
+            className="rounded-full border border-indigo-200 bg-white px-3 py-1 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-950 dark:text-indigo-200 dark:hover:bg-indigo-950"
+            title="セリフ順に動画をつなげて、字幕を焼き込まずに final_video を書き出します"
+          >
+            {renderingFinal ? '結合書き出し中...' : `動画結合・字幕なし (${sourceVideoCount}本)`}
           </button>
           <button
             type="button"
@@ -2355,7 +2365,7 @@ function SubtitleTools({
         </div>
       </div>
       <p className="mt-2 leading-5 text-slate-600 dark:text-slate-300">
-        text timeline clip を字幕として使います。単体動画の焼き込みに加えて、セリフ順の動画を1本につなげてから同じ字幕スタイルで final_video を書き出せます。
+        text timeline clip を字幕として使います。セリフ順の動画結合は、字幕焼き込みあり/字幕なしのどちらでも final_video を書き出せます。
       </p>
       {error && <p className="mt-2 text-red-600 dark:text-red-300">{error}</p>}
     </div>

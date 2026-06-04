@@ -399,25 +399,43 @@ function ffmpegAudioFilterLabel(value: string) {
   return value.replace(/[^A-Za-z0-9_]/g, '_');
 }
 
-function buildSubtitleAndSfxArgs(combinedPath: string, assPath: string, outputPath: string, sfxEvents: SfxMixEvent[]) {
+function buildFinalRenderArgs(
+  combinedPath: string,
+  assPath: string | null,
+  outputPath: string,
+  sfxEvents: SfxMixEvent[],
+  includeSubtitles: boolean
+) {
+  const shouldBurnSubtitles = includeSubtitles && Boolean(assPath);
   if (sfxEvents.length === 0) {
-    return [
-      '-y',
-      '-i', combinedPath,
-      '-vf', subtitleAssFilter(assPath),
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '20',
-      '-c:a', 'copy',
-      '-movflags', '+faststart',
-      outputPath,
-    ];
+    return shouldBurnSubtitles
+      ? [
+          '-y',
+          '-i', combinedPath,
+          '-vf', subtitleAssFilter(assPath),
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '20',
+          '-c:a', 'copy',
+          '-movflags', '+faststart',
+          outputPath,
+        ]
+      : [
+          '-y',
+          '-i', combinedPath,
+          '-c', 'copy',
+          '-movflags', '+faststart',
+          outputPath,
+        ];
   }
 
   const args = ['-y', '-i', combinedPath];
   for (const event of sfxEvents) args.push('-i', event.inputPath);
 
-  const filterParts = [`[0:v]${subtitleAssFilter(assPath)}[v]`, '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[basea]'];
+  const filterParts = [
+    ...(shouldBurnSubtitles ? [`[0:v]${subtitleAssFilter(assPath)}[v]`] : []),
+    '[0:a]aformat=sample_rates=48000:channel_layouts=stereo[basea]',
+  ];
   const audioLabels = ['[basea]'];
   sfxEvents.forEach((event, index) => {
     const label = `sfx${ffmpegAudioFilterLabel(String(event.cueId))}_${index}`;
@@ -431,11 +449,10 @@ function buildSubtitleAndSfxArgs(combinedPath: string, assPath: string, outputPa
 
   args.push(
     '-filter_complex', filterParts.join(';'),
-    '-map', '[v]',
+    '-map', shouldBurnSubtitles ? '[v]' : '0:v:0',
     '-map', '[aout]',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '20',
+    '-c:v', shouldBurnSubtitles ? 'libx264' : 'copy',
+    ...(shouldBurnSubtitles ? ['-preset', 'veryfast', '-crf', '20'] : []),
     '-c:a', 'aac',
     '-ar', '48000',
     '-ac', '2',
@@ -446,7 +463,7 @@ function buildSubtitleAndSfxArgs(combinedPath: string, assPath: string, outputPa
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   let workDir = '';
@@ -456,6 +473,9 @@ export async function POST(
     if (!Number.isFinite(sceneId)) {
       return NextResponse.json({ success: false, error: 'Invalid scene id' }, { status: 400 });
     }
+    const body = await request.json().catch(() => ({})) as { includeSubtitles?: unknown };
+    const includeSubtitles = body.includeSubtitles !== false;
+
     const auth = await requireScene(sceneId);
     if ('error' in auth) return auth.error;
 
@@ -465,7 +485,7 @@ export async function POST(
     }
 
     const sourceLineIds = sourceVideos.map((asset) => asset.script_line_id);
-    const subtitles = await loadSubtitles(sceneId, sourceLineIds);
+    const subtitles = includeSubtitles ? await loadSubtitles(sceneId, sourceLineIds) : [];
     const scriptLinesById = await loadScriptLines(sourceLineIds);
     const sfxCues = await loadSfxCues(sceneId, sourceLineIds);
     const sfxCuesByLineId = new Map<string, SfxCueRow[]>();
@@ -565,7 +585,7 @@ export async function POST(
       const durationMs = normalizedDurationsMs[index] || 6000;
       const scriptLine = scriptLinesById.get(String(asset.script_line_id));
       const isDialogue = isDialogueLineType(asset.line_type ?? scriptLine?.line_type);
-      const lineSubtitles = isDialogue
+      const lineSubtitles = includeSubtitles && isDialogue
         ? subtitles
             .filter((clip) => clip.script_line_id != null && String(clip.script_line_id) === String(asset.script_line_id))
             .filter((clip) => clip.metadata?.enabled !== false && subtitleText(clip).trim())
@@ -599,7 +619,7 @@ export async function POST(
         });
       }
 
-      if (lineSubtitles.length > 0) {
+      if (includeSubtitles && lineSubtitles.length > 0) {
         for (const clip of lineSubtitles) {
           const localStart = Math.min(Math.max(clipLocalStartMs(clip), 0), durationMs);
           const localEnd = Math.min(Math.max(clipLocalEndMs(clip, durationMs), localStart + 300), durationMs);
@@ -610,7 +630,7 @@ export async function POST(
             text: subtitleText(clip).trim(),
           });
         }
-      } else {
+      } else if (includeSubtitles) {
         const fallbackText = fallbackSubtitleTextForLine(scriptLine);
         if (fallbackText) {
           subtitleEvents.push({
@@ -624,11 +644,13 @@ export async function POST(
       offsetMs += durationMs;
     }
 
-    if (subtitleEvents.length === 0) {
+    if (includeSubtitles && subtitleEvents.length === 0) {
       return NextResponse.json({ success: false, error: 'No subtitle text found for the selected videos.' }, { status: 400 });
     }
 
-    await writeFile(assPath, buildAss(subtitleEvents, targetWidth, targetHeight), 'utf8');
+    if (includeSubtitles) {
+      await writeFile(assPath, buildAss(subtitleEvents, targetWidth, targetHeight), 'utf8');
+    }
 
     for (const [index, event] of sfxMixEvents.entries()) {
       const sfxFile = await getFileFromStorage(event.storagePath);
@@ -638,11 +660,13 @@ export async function POST(
       event.inputPath = inputPath;
     }
 
-    await runFfmpeg(ffmpegPath, buildSubtitleAndSfxArgs(combinedPath, assPath, outputPath, sfxMixEvents));
+    await runFfmpeg(ffmpegPath, buildFinalRenderArgs(combinedPath, includeSubtitles ? assPath : null, outputPath, sfxMixEvents, includeSubtitles));
 
     const outputBuffer = await readFile(outputPath);
     const timestamp = Date.now();
-    const filename = `scene-${sceneId}-final-subtitled-${timestamp}.mp4`;
+    const filename = includeSubtitles
+      ? `scene-${sceneId}-final-subtitled-${timestamp}.mp4`
+      : `scene-${sceneId}-final-nosubtitles-${timestamp}.mp4`;
     const storagePath = await uploadImageToStorage(
       outputBuffer.toString('base64'),
       'video/mp4',
@@ -656,7 +680,7 @@ export async function POST(
       `
         insert into kazika_studio_agents.generation_jobs
           (user_id, agent_story_scene_id, job_type, provider, model, status, input, output, metadata, started_at, completed_at)
-        values ($1, $2, 'video_render', 'kazika-studio', 'ffmpeg-concat-ass-subtitles', 'completed', $3::jsonb, $4::jsonb, $5::jsonb, now(), now())
+        values ($1, $2, 'video_render', 'kazika-studio', $6, 'completed', $3::jsonb, $4::jsonb, $5::jsonb, now(), now())
         returning *
       `,
       [
@@ -667,9 +691,11 @@ export async function POST(
           subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean),
           sfx_asset_ids: sfxMixEvents.map((event) => event.assetId),
           sfx_cue_ids: sfxMixEvents.map((event) => event.cueId),
+          include_subtitles: includeSubtitles,
         }),
         JSON.stringify({ storage_path: storagePath }),
-        JSON.stringify({ renderer: 'ffmpeg', subtitle_format: 'ass', concat: true, burned_in_subtitles: true, mixed_sfx: sfxMixEvents.length > 0 }),
+        JSON.stringify({ renderer: 'ffmpeg', subtitle_format: includeSubtitles ? 'ass' : null, concat: true, burned_in_subtitles: includeSubtitles, mixed_sfx: sfxMixEvents.length > 0 }),
+        includeSubtitles ? 'ffmpeg-concat-ass-subtitles' : 'ffmpeg-concat',
       ]
     );
     const job = jobResult.rows[0];
@@ -691,9 +717,9 @@ export async function POST(
         outputBuffer.length,
         JSON.stringify({
           source_video_asset_ids: sourceVideos.map((asset) => asset.id),
-          burned_in_subtitles: true,
+          burned_in_subtitles: includeSubtitles,
           final_concat: true,
-          subtitle_clip_ids: subtitleEvents.map((event) => event.id).filter(Boolean),
+          subtitle_clip_ids: includeSubtitles ? subtitleEvents.map((event) => event.id).filter(Boolean) : [],
           sfx_asset_ids: sfxMixEvents.map((event) => event.assetId),
           sfx_cue_ids: sfxMixEvents.map((event) => event.cueId),
           sfx_mix_events: sfxMixEvents.map((event) => ({
@@ -709,7 +735,7 @@ export async function POST(
           mixed_sfx: sfxMixEvents.length > 0,
           output_size_source: 'first_video',
           output_size: { width: targetWidth, height: targetHeight },
-          subtitle_style: { vertical_position: 'bottom_12_percent', background: 'none', punctuation_wrap: true },
+          subtitle_style: includeSubtitles ? { vertical_position: 'bottom_12_percent', background: 'none', punctuation_wrap: true } : null,
         }),
       ]
     );
@@ -720,8 +746,9 @@ export async function POST(
         asset: renderedAssetResult.rows[0],
         generationJob: job,
         sourceVideoCount: sourceVideos.length,
-        subtitleCount: subtitleEvents.length,
+        subtitleCount: includeSubtitles ? subtitleEvents.length : 0,
         sfxCount: sfxMixEvents.length,
+        burnedInSubtitles: includeSubtitles,
         signedUrl,
         previewUrl: signedUrl,
       },
