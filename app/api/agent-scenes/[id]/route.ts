@@ -51,8 +51,11 @@ export async function GET(
             count(sl.id)::integer as line_count
           from kazika_studio_agents.scripts sc
           left join kazika_studio_agents.script_lines sl on sl.script_id = sc.id
-          where sc.agent_story_scene_id = $1
-             or sc.story_scene_id = $2
+            and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+            and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
+          where (sc.agent_story_scene_id = $1
+             or sc.story_scene_id = $2)
+            and coalesce(sc.status, '') <> 'superseded'
           group by sc.id
           order by sc.version desc, sc.id desc
         `,
