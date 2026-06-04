@@ -323,7 +323,7 @@ async function loadSubtitles(sceneId: number, lineIds: number[]) {
       where tt.agent_story_scene_id = $1
         and tt.track_type = 'text'
         and tc.script_line_id = any($2::bigint[])
-        and coalesce(sl.line_type, 'dialogue') = 'dialogue'
+        and coalesce(sl.line_type, 'dialogue') in ('dialogue', 'inner_monologue')
       order by tc.script_line_id asc, tc.start_time_ms asc, tc.id asc
     `,
     [sceneId, lineIds]
@@ -378,7 +378,8 @@ async function loadSfxCues(sceneId: number, lineIds: number[]) {
 }
 
 function isDialogueLineType(lineType: string | null | undefined) {
-  return String(lineType || 'dialogue') === 'dialogue';
+  const normalized = String(lineType || 'dialogue');
+  return normalized === 'dialogue' || normalized === 'inner_monologue';
 }
 
 function fallbackSubtitleTextForLine(line: ScriptLineRow | undefined) {

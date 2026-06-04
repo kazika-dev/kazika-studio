@@ -128,7 +128,7 @@ export async function POST(
         select sl.id, sl.line_index, sl.line_type, sl.speaker_name, sl.text, sl.tts_text
         from kazika_studio_agents.script_lines sl
         where sl.script_id = $1
-          and coalesce(sl.line_type, 'dialogue') = 'dialogue'
+          and coalesce(sl.line_type, 'dialogue') in ('dialogue', 'inner_monologue')
         order by sl.line_index asc, sl.id asc
       `,
       [scriptId]

@@ -212,7 +212,7 @@ export async function POST(
         [asset.script_line_id]
       );
       const lineType = String(lineResult.rows[0]?.line_type || 'dialogue');
-      if (lineType !== 'dialogue') {
+      if (lineType !== 'dialogue' && lineType !== 'inner_monologue') {
         return NextResponse.json({ success: false, error: 'Scene-only/action videos are excluded from subtitle burn-in.' }, { status: 400 });
       }
     }
