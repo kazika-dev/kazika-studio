@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +54,7 @@ export default function AgentSceneDetailPage() {
   const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
   const [savingPrimaryAssetId, setSavingPrimaryAssetId] = useState('');
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
+  const [mergingScriptId, setMergingScriptId] = useState('');
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
@@ -64,32 +65,32 @@ export default function AgentSceneDetailPage() {
   const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
   const [renderingFinalSubtitledVideo, setRenderingFinalSubtitledVideo] = useState(false);
 
-  useEffect(() => {
+  const loadScene = useCallback(async () => {
     if (!Number.isFinite(sceneId)) {
       setError('無効なシーンIDです');
       setLoading(false);
       return;
     }
 
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const response = await fetch(`/api/agent-scenes/${sceneId}`);
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || 'シーンの取得に失敗しました');
-        }
-        setData(result.data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'シーンの取得に失敗しました');
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}`);
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'シーンの取得に失敗しました');
       }
-    };
-
-    void load();
+      setData(result.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'シーンの取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
   }, [sceneId]);
+
+  useEffect(() => {
+    void loadScene();
+  }, [loadScene]);
 
   const currentAssets = useMemo(() => {
     const allAssets = data?.assets || [];
@@ -330,6 +331,32 @@ export default function AgentSceneDetailPage() {
       setDialogueError(err instanceof Error ? err.message : '会話行の削除に失敗しました');
     } finally {
       setSavingDialogueLineId('');
+    }
+  };
+
+  const mergeConsecutiveDialogueLines = async (script: AnyRow) => {
+    if (!Number.isFinite(sceneId)) return;
+    const scriptId = String(script.id || '');
+    if (!scriptId) return;
+    const scriptTitle = String(script.title || `script ${scriptId}`);
+    if (!window.confirm(`「${scriptTitle}」内の連続する同一スピーカーのdialogueを1行にまとめます。\n\n後続行は論理削除され、素材/字幕クリップは先頭行へ紐付け直します。`)) return;
+    setMergingScriptId(scriptId);
+    setDialogueError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/script-lines/merge-consecutive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script_id: scriptId }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '連続セリフの統合に失敗しました');
+      }
+      await loadScene();
+    } catch (err) {
+      setDialogueError(err instanceof Error ? err.message : '連続セリフの統合に失敗しました');
+    } finally {
+      setMergingScriptId('');
     }
   };
 
@@ -659,6 +686,14 @@ export default function AgentSceneDetailPage() {
                           <h3 className="font-semibold text-slate-900 dark:text-white">{script.title}</h3>
                           <p className="text-xs text-slate-500 dark:text-slate-400">v{script.version} / {script.status} / {script.line_count || 0} lines</p>
                         </div>
+                        <button
+                          type="button"
+                          disabled={mergingScriptId === String(script.id)}
+                          onClick={() => mergeConsecutiveDialogueLines(script)}
+                          className="rounded-full border border-indigo-200 px-3 py-1 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950"
+                        >
+                          {mergingScriptId === String(script.id) ? '統合中...' : '同一話者を統合'}
+                        </button>
                       </div>
                       <div className="space-y-2">
                         {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
