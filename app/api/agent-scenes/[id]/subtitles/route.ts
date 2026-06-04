@@ -129,6 +129,8 @@ export async function POST(
         from kazika_studio_agents.script_lines sl
         where sl.script_id = $1
           and coalesce(sl.line_type, 'dialogue') in ('dialogue', 'inner_monologue')
+          and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+          and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
         order by sl.line_index asc, sl.id asc
       `,
       [scriptId]

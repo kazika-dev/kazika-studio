@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
-import { query } from '@/lib/db';
+import { getPool, query } from '@/lib/db';
 
 export async function PATCH(
   request: NextRequest,
@@ -218,6 +218,8 @@ export async function PATCH(
         ) as body_text
         from kazika_studio_agents.script_lines
         where script_id = $1
+          and coalesce(metadata->>'deleted', 'false') <> 'true'
+          and coalesce(metadata->>'logical_deleted', 'false') <> 'true'
       `,
       [line.script_id]
     );
@@ -258,6 +260,225 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : 'Failed to update dialogue';
     const status = message.includes('秒数指定') || message.includes('SE音源ID') || message.includes('キュー') ? 400 : 500;
     return NextResponse.json({ success: false, error: message }, { status });
+  }
+}
+
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; lineId: string }> }
+) {
+  const client = await getPool().connect();
+  try {
+    const db = await createKazikaClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, lineId } = await params;
+    const sceneId = Number.parseInt(id, 10);
+    const scriptLineId = Number.parseInt(lineId, 10);
+    if (!Number.isFinite(sceneId) || !Number.isFinite(scriptLineId)) {
+      return NextResponse.json({ success: false, error: 'Invalid scene or dialogue id' }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+    const deletedAt = new Date().toISOString();
+
+    await client.query('BEGIN');
+
+    const lineResult = await client.query(
+      `
+        select
+          sl.*,
+          sc.id as script_id,
+          sc.agent_story_scene_id,
+          sc.story_scene_id,
+          sc.conversation_id,
+          sc.agent_conversation_id,
+          st.user_id
+        from kazika_studio_agents.script_lines sl
+        join kazika_studio_agents.scripts sc on sc.id = sl.script_id
+        join kazika_studio_agents.story_scenes_domain ssd
+          on ssd.id = sc.agent_story_scene_id
+          or ssd.source_story_scene_id = sc.story_scene_id
+        join kazika_studio_agents.stories st on st.id = ssd.story_id
+        where ssd.id = $1
+          and sl.id = $2
+          and st.user_id = $3
+        limit 1
+        for update of sl
+      `,
+      [sceneId, scriptLineId, user.id]
+    );
+
+    const line = lineResult.rows[0];
+    if (!line) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Dialogue not found' }, { status: 404 });
+    }
+
+    const existingMetadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
+    const deletedMetadata = {
+      ...existingMetadata,
+      deleted: true,
+      logical_deleted: true,
+      deleted_at: deletedAt,
+      deleted_by: user.id,
+      delete_reason: reason || 'Deleted from agent scene dialogue editor',
+      edited_in_agent_scene: true,
+      edited_at: deletedAt,
+      edited_by: user.id,
+    };
+
+    const deletedLineResult = await client.query(
+      `
+        update kazika_studio_agents.script_lines
+        set metadata = $2::jsonb,
+            updated_at = now()
+        where id = $1
+        returning *
+      `,
+      [scriptLineId, JSON.stringify(deletedMetadata)]
+    );
+
+    await client.query(
+      `delete from kazika_studio_agents.script_line_timing_cues where script_line_id = $1`,
+      [scriptLineId]
+    );
+
+    const linkedMessageIds = Array.from(new Set([
+      line.agent_conversation_message_id,
+      line.source_conversation_message_id,
+    ].filter(Boolean).map((value) => Number(value))));
+
+    if (linkedMessageIds.length > 0) {
+      await client.query(
+        `
+          update kazika_studio_agents.conversation_messages
+          set metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
+          where id = any($1::bigint[])
+        `,
+        [linkedMessageIds, JSON.stringify({ deleted_from_agent_scene: true, deleted_at: deletedAt, deleted_by: user.id, delete_reason: reason || null })]
+      );
+    }
+
+    const assetMetadataPatch = {
+      stale_due_to_script_line_delete: true,
+      stale_script_line_deleted_at: deletedAt,
+      stale_script_line_id: String(scriptLineId),
+      deleted: true,
+      logical_deleted: true,
+      deleted_at: deletedAt,
+      deleted_by: user.id,
+      delete_reason: reason || 'Linked script line was deleted from the agent scene dialogue editor',
+    };
+    const affectedAssetsResult = await client.query(
+      `
+        update kazika_studio_agents.assets
+        set is_primary = false,
+            metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb,
+            updated_at = now()
+        where agent_story_scene_id = $1
+          and asset_type in ('image', 'thumbnail', 'storyboard', 'audio', 'sfx', 'video')
+          and (
+            script_line_id = $2
+            or (metadata->'covered_script_line_ids') ? $4
+            or (metadata->'audio_group_covered_script_line_ids') ? $4
+          )
+        returning *
+      `,
+      [sceneId, scriptLineId, JSON.stringify(assetMetadataPatch), String(scriptLineId)]
+    );
+
+    const deletedSubtitleClipsResult = await client.query(
+      `
+        update kazika_studio_agents.timeline_clips tc
+        set metadata = coalesce(tc.metadata, '{}'::jsonb) || $3::jsonb,
+            updated_at = now()
+        from kazika_studio_agents.timeline_tracks tt
+        where tt.id = tc.track_id
+          and (tt.agent_story_scene_id = $1 or tt.story_scene_id = $1)
+          and tc.script_line_id = $2
+        returning tc.*
+      `,
+      [sceneId, scriptLineId, JSON.stringify({ deleted: true, logical_deleted: true, enabled: false, deleted_at: deletedAt, deleted_by: user.id })]
+    );
+
+    const bodyResult = await client.query(
+      `
+        select string_agg(
+          case
+            when nullif(speaker_name, '') is null then text
+            else speaker_name || ': ' || text
+          end,
+          E'\n' order by line_index asc, id asc
+        ) as body_text,
+        count(*)::integer as line_count
+        from kazika_studio_agents.script_lines
+        where script_id = $1
+          and coalesce(metadata->>'deleted', 'false') <> 'true'
+          and coalesce(metadata->>'logical_deleted', 'false') <> 'true'
+      `,
+      [line.script_id]
+    );
+
+    const updatedScriptResult = await client.query(
+      `
+        update kazika_studio_agents.scripts
+        set body_text = $2,
+            updated_at = now(),
+            metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
+        where id = $1
+        returning *
+      `,
+      [
+        line.script_id,
+        bodyResult.rows[0]?.body_text || '',
+        JSON.stringify({
+          edited_in_agent_scene: true,
+          script_line_deleted_at: deletedAt,
+          script_line_deleted_by: user.id,
+          active_line_count: bodyResult.rows[0]?.line_count || 0,
+        }),
+      ]
+    );
+
+    const conversationIds = Array.from(new Set([
+      line.agent_conversation_id,
+      line.conversation_id,
+    ].filter(Boolean).map((value) => Number(value))));
+    if (conversationIds.length > 0) {
+      await client.query(
+        `update kazika_studio_agents.conversations set updated_at = now() where id = any($1::bigint[])`,
+        [conversationIds]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        scriptLine: deletedLineResult.rows[0],
+        script: updatedScriptResult.rows[0],
+        affectedAssets: affectedAssetsResult.rows,
+        deletedSubtitleClips: deletedSubtitleClipsResult.rows,
+      },
+    });
+  } catch (error: unknown) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    console.error('Failed to delete agent scene dialogue:', error);
+    const message = error instanceof Error ? error.message : 'Failed to delete dialogue';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
 

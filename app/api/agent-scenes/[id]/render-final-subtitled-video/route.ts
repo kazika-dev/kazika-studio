@@ -324,6 +324,8 @@ async function loadSubtitles(sceneId: number, lineIds: number[]) {
         and tt.track_type = 'text'
         and tc.script_line_id = any($2::bigint[])
         and coalesce(sl.line_type, 'dialogue') in ('dialogue', 'inner_monologue')
+        and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+        and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
       order by tc.script_line_id asc, tc.start_time_ms asc, tc.id asc
     `,
     [sceneId, lineIds]

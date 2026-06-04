@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Unlink, Users, X } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -288,6 +288,46 @@ export default function AgentSceneDetailPage() {
       } : current);
     } catch (err) {
       setDialogueError(err instanceof Error ? err.message : '会話の保存に失敗しました');
+    } finally {
+      setSavingDialogueLineId('');
+    }
+  };
+
+  const deleteDialogueLine = async (line: AnyRow) => {
+    if (!Number.isFinite(sceneId)) return;
+    const lineId = String(line.id || '');
+    if (!lineId) return;
+    const label = `#${line.line_index || ''} ${line.speaker_name ? `${line.speaker_name}: ` : ''}${String(line.text || '').slice(0, 80)}`;
+    if (!window.confirm(`${label}\n\nこの台本行を削除します。関連する音声/画像/字幕clipはprimary解除され、履歴として残ります。`)) return;
+    setSavingDialogueLineId(lineId);
+    setDialogueError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/script-lines/${lineId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Deleted from agent scene dialogue editor' }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '会話行の削除に失敗しました');
+      }
+      const updatedScript = result.data?.script;
+      const affectedAssets = Array.isArray(result.data?.affectedAssets) ? result.data.affectedAssets : [];
+      const affectedAssetsById = new Map<string, AnyRow>(affectedAssets.map((asset: AnyRow) => [String(asset.id), asset]));
+      setData((current) => current ? {
+        ...current,
+        scripts: updatedScript
+          ? current.scripts.map((script) => String(script.id) === String(updatedScript.id) ? { ...script, ...updatedScript } : script)
+          : current.scripts,
+        scriptLines: current.scriptLines.filter((row) => String(row.id) !== lineId),
+        scriptLineTimingCues: current.scriptLineTimingCues.filter((cue) => String(cue.script_line_id) !== lineId),
+        assets: current.assets.map((asset) => affectedAssetsById.get(String(asset.id)) || asset),
+        timelineClips: current.timelineClips.map((clip) => String(clip.script_line_id) === lineId
+          ? { ...clip, metadata: { ...clip.metadata, deleted: true, logical_deleted: true, enabled: false } }
+          : clip),
+      } : current);
+    } catch (err) {
+      setDialogueError(err instanceof Error ? err.message : '会話行の削除に失敗しました');
     } finally {
       setSavingDialogueLineId('');
     }
@@ -647,6 +687,7 @@ export default function AgentSceneDetailPage() {
                                 lineTimingCues={lineTimingCues}
                                 sfxAssets={sceneSfxAssets}
                                 onSave={persistDialogueLine}
+                                onDelete={deleteDialogueLine}
                               />
                               <LineAssetBundle
                                 line={line}
@@ -1391,6 +1432,7 @@ function EditableDialogueLine({
   lineTimingCues,
   sfxAssets,
   onSave,
+  onDelete,
 }: {
   line: AnyRow;
   saving: boolean;
@@ -1398,6 +1440,7 @@ function EditableDialogueLine({
   lineTimingCues: AnyRow[];
   sfxAssets: AnyRow[];
   onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[], videoGenerationMode: string) => void;
+  onDelete: (line: AnyRow) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(line.text || ''));
@@ -1430,16 +1473,26 @@ function EditableDialogueLine({
       <div className="mt-2">
         <div className="flex items-start justify-between gap-2">
           <p className="min-w-0 flex-1 leading-6 text-slate-800 dark:text-slate-100">{savedText}</p>
-          <button
-            type="button"
-            onClick={() => {
-              resetFields();
-              setEditing(true);
-            }}
-            className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-          >
-            編集
-          </button>
+          <div className="shrink-0 space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetFields();
+                setEditing(true);
+              }}
+              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+            >
+              編集
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => onDelete(line)}
+              className="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-[11px] font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+            >
+              <Trash2 size={12} /> {saving ? '処理中...' : '削除'}
+            </button>
+          </div>
         </div>
         <label className="mt-2 flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50 px-2 py-2 text-xs leading-5 text-violet-800 dark:border-violet-950 dark:bg-violet-950/40 dark:text-violet-200">
           <input

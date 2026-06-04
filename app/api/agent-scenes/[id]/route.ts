@@ -116,6 +116,8 @@ export async function GET(
             count(tc.id)::integer as clip_count
           from kazika_studio_agents.timeline_tracks tt
           left join kazika_studio_agents.timeline_clips tc on tc.track_id = tt.id
+            and coalesce(tc.metadata->>'deleted', 'false') <> 'true'
+            and coalesce(tc.metadata->>'logical_deleted', 'false') <> 'true'
           where tt.agent_story_scene_id = $1
              or tt.story_scene_id = $2
           group by tt.id
@@ -138,8 +140,10 @@ export async function GET(
           from kazika_studio_agents.timeline_clips tc
           join kazika_studio_agents.timeline_tracks tt on tt.id = tc.track_id
           left join kazika_studio_agents.assets a on a.id = tc.asset_id
-          where tt.agent_story_scene_id = $1
-             or tt.story_scene_id = $2
+          where (tt.agent_story_scene_id = $1
+             or tt.story_scene_id = $2)
+            and coalesce(tc.metadata->>'deleted', 'false') <> 'true'
+            and coalesce(tc.metadata->>'logical_deleted', 'false') <> 'true'
           order by tt.sort_order asc, tc.start_time_ms asc, tc.id asc
         `,
         [scene.id, scene.source_story_scene_id]
@@ -205,6 +209,8 @@ export async function GET(
             ) ch on true
             left join kazika_studio_agents.assets a on a.script_line_id = sl.id
             where sl.script_id = any($1::bigint[])
+              and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+              and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
             group by sl.id, ch.name, ch.image_url
             order by sl.script_id asc, sl.line_index asc
           `,
@@ -230,6 +236,8 @@ export async function GET(
             left join kazikastudio.m_sound_effects se on se.id = cue.sfx_sound_effect_id
             left join kazika_studio_agents.assets a on a.id = cue.sfx_asset_id
             where sl.script_id = any($1::bigint[])
+              and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+              and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
             order by cue.script_line_id asc, cue.cue_index asc, cue.id asc
           `,
           [scriptIds]
@@ -252,6 +260,8 @@ export async function GET(
           from kazika_studio_agents.script_lines sl
           where sl.script_id = any($2::bigint[])
             and sl.agent_character_id is not null
+            and coalesce(sl.metadata->>'deleted', 'false') <> 'true'
+            and coalesce(sl.metadata->>'logical_deleted', 'false') <> 'true'
         ),
         layout_character_names as (
           select distinct nullif(item->>'name', '') as name
