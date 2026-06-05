@@ -37,6 +37,12 @@ export async function PATCH(
     const sfxAssetId = parseOptionalBigInt(body.sfx_asset_id);
     const timingCues = parseTimingCues(body.timing_cues);
     const videoGenerationMode = parseVideoGenerationMode(body.video_generation_mode);
+    const hasSpeakerPatch = Object.prototype.hasOwnProperty.call(body, 'speaker_name')
+      || Object.prototype.hasOwnProperty.call(body, 'agent_character_id')
+      || Object.prototype.hasOwnProperty.call(body, 'line_type');
+    const requestedAgentCharacterId = Object.prototype.hasOwnProperty.call(body, 'agent_character_id')
+      ? parseOptionalBigInt(body.agent_character_id)
+      : undefined;
     if (!text) {
       return NextResponse.json({ success: false, error: '会話テキストを入力してください' }, { status: 400 });
     }
@@ -79,11 +85,28 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Dialogue not found' }, { status: 404 });
     }
 
+    const nextSpeakerName = hasSpeakerPatch ? parseSpeakerName(body.speaker_name, line.speaker_name) : line.speaker_name;
+    const nextLineType = hasSpeakerPatch ? parseLineType(body.line_type, line.line_type) : line.line_type;
+    const nextAgentCharacterId = requestedAgentCharacterId === undefined
+      ? (line.agent_character_id == null ? null : Number(line.agent_character_id))
+      : requestedAgentCharacterId;
+
+    if (nextAgentCharacterId != null) {
+      const characterResult = await query(
+        `select id from kazika_studio_agents.characters where id = $1 and user_id = $2 limit 1`,
+        [nextAgentCharacterId, user.id]
+      );
+      if (!characterResult.rows[0]) {
+        return NextResponse.json({ success: false, error: '指定した話者キャラが見つかりません' }, { status: 400 });
+      }
+    }
+
     const metadataPatch: Record<string, unknown> = {
       ...(line.metadata && typeof line.metadata === 'object' ? line.metadata : {}),
       edited_in_agent_scene: true,
       edited_at: new Date().toISOString(),
       edited_by: user.id,
+      ...(hasSpeakerPatch ? { speaker_changed_from_agent_scene: true } : {}),
     };
 
     if (videoGenerationMode) {
@@ -115,6 +138,9 @@ export async function PATCH(
             sfx_sound_effect_id = $10,
             sfx_asset_id = $11,
             metadata = $12::jsonb,
+            speaker_name = $13,
+            agent_character_id = $14,
+            line_type = $15,
             updated_at = now()
         where id = $1
         returning *
@@ -132,6 +158,9 @@ export async function PATCH(
         sfxSoundEffectId,
         sfxAssetId,
         JSON.stringify(metadataPatch),
+        nextSpeakerName || null,
+        nextAgentCharacterId,
+        nextLineType,
       ]
     );
 
@@ -200,10 +229,12 @@ export async function PATCH(
         `
           update kazika_studio_agents.conversation_messages
           set message_text = $2,
+              speaker_name = $4,
+              character_id = $5,
               metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
           where id = any($1::bigint[])
         `,
-        [linkedMessageIds, text, JSON.stringify({ edited_from_agent_scene: true, edited_at: new Date().toISOString(), edited_by: user.id })]
+        [linkedMessageIds, text, JSON.stringify({ edited_from_agent_scene: true, edited_at: new Date().toISOString(), edited_by: user.id, line_type: nextLineType }), nextSpeakerName || '', nextAgentCharacterId]
       );
     }
 
@@ -241,10 +272,24 @@ export async function PATCH(
       line.conversation_id,
     ].filter(Boolean).map((value) => Number(value))));
     if (conversationIds.length > 0) {
-      await query(
-        `update kazika_studio_agents.conversations set updated_at = now() where id = any($1::bigint[])`,
+      const conversationsResult = await query(
+        `select id, draft from kazika_studio_agents.conversations where id = any($1::bigint[])`,
         [conversationIds]
       );
+      for (const conversation of conversationsResult.rows) {
+        const nextDraft = updateDraftLineSpeaker(
+          conversation.draft,
+          line,
+          text,
+          nextSpeakerName || '',
+          nextAgentCharacterId,
+          nextLineType
+        );
+        await query(
+          `update kazika_studio_agents.conversations set draft = $2, updated_at = now() where id = $1`,
+          [conversation.id, nextDraft]
+        );
+      }
     }
 
     return NextResponse.json({
@@ -483,6 +528,45 @@ export async function DELETE(
 }
 
 
+function updateDraftLineSpeaker(
+  draft: unknown,
+  line: Record<string, unknown>,
+  text: string,
+  speakerName: string,
+  agentCharacterId: number | null,
+  lineType: string
+) {
+  if (typeof draft !== 'string' || !draft.trim()) return typeof draft === 'string' ? draft : null;
+  try {
+    const parsed = JSON.parse(draft) as Record<string, unknown>;
+    const messages = Array.isArray(parsed.messages) ? parsed.messages : null;
+    if (!messages) return draft;
+    const lineIndex = Number(line.line_index);
+    const linkedIds = new Set([
+      line.agent_conversation_message_id,
+      line.source_conversation_message_id,
+    ].filter((value) => value != null).map((value) => String(value)));
+    parsed.messages = messages.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const message = item as Record<string, unknown>;
+      const matchesId = message.id != null && linkedIds.has(String(message.id));
+      const matchesOrder = Number(message.sequence_order) === lineIndex;
+      if (!matchesId && !matchesOrder) return message;
+      return {
+        ...message,
+        speaker_name: speakerName,
+        character_id: agentCharacterId,
+        line_type: lineType,
+        message_text: text,
+      };
+    });
+    return JSON.stringify(parsed);
+  } catch {
+    return draft;
+  }
+}
+
+
 type ParsedTimingCue = {
   cue_type: string;
   start_seconds: number | null;
@@ -494,6 +578,23 @@ type ParsedTimingCue = {
 };
 
 const VALID_VIDEO_GENERATION_MODES = new Set(['lipsync', 'silent_back_view_then_mux']);
+const VALID_LINE_TYPES = new Set(['dialogue', 'action', 'inner_monologue', 'narration', 'scene_only', 'system']);
+
+function parseLineType(value: unknown, fallback: string) {
+  if (value === undefined) return fallback || 'dialogue';
+  if (typeof value !== 'string' || !VALID_LINE_TYPES.has(value)) {
+    throw new Error('行の種類が不正です');
+  }
+  return value;
+}
+
+function parseSpeakerName(value: unknown, fallback: string | null) {
+  if (value === undefined) return fallback || '';
+  if (typeof value !== 'string') throw new Error('話者名が不正です');
+  const speakerName = value.trim();
+  if (speakerName.length > 120) throw new Error('話者名が長すぎます');
+  return speakerName;
+}
 
 function parseVideoGenerationMode(value: unknown) {
   if (value == null || value === '') return null;

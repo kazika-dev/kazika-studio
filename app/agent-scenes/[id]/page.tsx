@@ -231,7 +231,14 @@ export default function AgentSceneDetailPage() {
     }
   };
 
-  const persistDialogueLine = async (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[], videoGenerationMode: string) => {
+  const persistDialogueLine = async (
+    line: AnyRow,
+    nextText: string,
+    nextTtsText: string,
+    timingCues: TimingCueInput[],
+    videoGenerationMode: string,
+    speakerPatch?: { speaker_name: string; agent_character_id: string | null; line_type: string }
+  ) => {
     if (!Number.isFinite(sceneId)) return;
     const lineId = String(line.id || '');
     if (!lineId) return;
@@ -244,6 +251,11 @@ export default function AgentSceneDetailPage() {
         body: JSON.stringify({
           text: nextText,
           tts_text: nextTtsText,
+          ...(speakerPatch ? {
+            speaker_name: speakerPatch.speaker_name,
+            agent_character_id: speakerPatch.agent_character_id,
+            line_type: speakerPatch.line_type,
+          } : {}),
           video_generation_mode: videoGenerationMode,
           timing_cues: timingCues.map((cue) => ({
             cue_type: cue.cue_type,
@@ -719,6 +731,7 @@ export default function AgentSceneDetailPage() {
                               <EditableDialogueLine
                                 line={line}
                                 saving={savingDialogueLineId === String(line.id)}
+                                characters={data?.characters || []}
                                 soundEffects={soundEffects}
                                 lineTimingCues={lineTimingCues}
                                 sfxAssets={sceneSfxAssets}
@@ -1464,6 +1477,7 @@ function dialogueVideoGenerationMode(line: AnyRow) {
 function EditableDialogueLine({
   line,
   saving,
+  characters,
   soundEffects,
   lineTimingCues,
   sfxAssets,
@@ -1472,10 +1486,18 @@ function EditableDialogueLine({
 }: {
   line: AnyRow;
   saving: boolean;
+  characters: AnyRow[];
   soundEffects: AnyRow[];
   lineTimingCues: AnyRow[];
   sfxAssets: AnyRow[];
-  onSave: (line: AnyRow, nextText: string, nextTtsText: string, timingCues: TimingCueInput[], videoGenerationMode: string) => void;
+  onSave: (
+    line: AnyRow,
+    nextText: string,
+    nextTtsText: string,
+    timingCues: TimingCueInput[],
+    videoGenerationMode: string,
+    speakerPatch?: { speaker_name: string; agent_character_id: string | null; line_type: string }
+  ) => void;
   onDelete: (line: AnyRow) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1484,6 +1506,21 @@ function EditableDialogueLine({
   const [customTts, setCustomTts] = useState(false);
   const savedText = String(line.text || '');
   const savedTtsText = String(line.tts_text || line.text || '');
+  const savedSpeakerName = String(line.speaker_name || '');
+  const savedAgentCharacterId = line.agent_character_id == null ? '' : String(line.agent_character_id);
+  const savedLineType = String(line.line_type || 'dialogue');
+  const savedCharacter = characters.find((character) => String(character.id) === savedAgentCharacterId);
+  const savedSpeakerMode = savedAgentCharacterId && savedCharacter?.name === savedSpeakerName
+    ? `character:${savedAgentCharacterId}`
+    : savedSpeakerName === '状況説明'
+    ? 'action:situation'
+    : savedSpeakerName
+    ? 'custom'
+    : 'none';
+  const [speakerMode, setSpeakerMode] = useState(savedSpeakerMode);
+  const [speakerName, setSpeakerName] = useState(savedSpeakerName);
+  const [agentCharacterId, setAgentCharacterId] = useState(savedAgentCharacterId);
+  const [lineType, setLineType] = useState(savedLineType);
   const hasCustomTts = Boolean(savedTtsText && savedTtsText !== savedText);
   const savedCueInputs = buildTimingCueInputs(line, lineTimingCues);
   const savedVideoGenerationMode = dialogueVideoGenerationMode(line);
@@ -1493,6 +1530,9 @@ function EditableDialogueLine({
   const normalizedTimingCues = normalizeCueInputs(timingCues);
   const dirty = text !== savedText
     || effectiveTtsText !== savedTtsText
+    || speakerName !== savedSpeakerName
+    || agentCharacterId !== savedAgentCharacterId
+    || lineType !== savedLineType
     || videoGenerationMode !== savedVideoGenerationMode
     || JSON.stringify(normalizedTimingCues) !== JSON.stringify(normalizeCueInputs(savedCueInputs));
 
@@ -1500,6 +1540,10 @@ function EditableDialogueLine({
     setText(savedText);
     setTtsText(savedTtsText);
     setCustomTts(hasCustomTts);
+    setSpeakerMode(savedSpeakerMode);
+    setSpeakerName(savedSpeakerName);
+    setAgentCharacterId(savedAgentCharacterId);
+    setLineType(savedLineType);
     setTimingCues(savedCueInputs);
     setVideoGenerationMode(savedVideoGenerationMode);
   };
@@ -1584,10 +1628,104 @@ function EditableDialogueLine({
   const removeCue = (index: number) => {
     setTimingCues((current) => current.filter((_, cueIndex) => cueIndex !== index));
   };
+  const sortedCharacters = [...characters].sort((a, b) => {
+    const favoriteDiff = Number(Boolean(b.is_favorite)) - Number(Boolean(a.is_favorite));
+    if (favoriteDiff) return favoriteDiff;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+  });
+  const applySpeakerMode = (nextMode: string) => {
+    setSpeakerMode(nextMode);
+    if (nextMode === 'none') {
+      setSpeakerName('');
+      setAgentCharacterId('');
+      return;
+    }
+    if (nextMode === 'action:situation') {
+      setSpeakerName('状況説明');
+      setAgentCharacterId('');
+      setLineType('action');
+      return;
+    }
+    if (nextMode === 'custom') {
+      setSpeakerName(speakerName || savedSpeakerName || '');
+      return;
+    }
+    if (nextMode.startsWith('character:')) {
+      const nextId = nextMode.slice('character:'.length);
+      const nextCharacter = characters.find((character) => String(character.id) === nextId);
+      setAgentCharacterId(nextId);
+      setSpeakerName(String(nextCharacter?.name || ''));
+      if (lineType === 'action' || lineType === 'scene_only' || lineType === 'system') {
+        setLineType('dialogue');
+      }
+    }
+  };
 
   return (
     <div className="mt-2 rounded-xl border border-indigo-100 bg-white p-3 dark:border-indigo-950 dark:bg-slate-900">
-      <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">会話テキスト</label>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+        <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          話者
+          <select
+            value={speakerMode}
+            onChange={(event) => applySpeakerMode(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          >
+            <option value="none">話者なし</option>
+            <option value="action:situation">状況説明</option>
+            <option value="custom">カスタム表示名</option>
+            {sortedCharacters.map((character) => (
+              <option key={String(character.id)} value={`character:${character.id}`}>
+                {character.is_favorite ? '★ ' : ''}{character.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          種類
+          <select
+            value={lineType}
+            onChange={(event) => setLineType(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          >
+            <option value="dialogue">dialogue / セリフ</option>
+            <option value="inner_monologue">inner_monologue / 内省</option>
+            <option value="action">action / 状況説明</option>
+            <option value="narration">narration / ナレーション</option>
+            <option value="scene_only">scene_only / 画だけ</option>
+            <option value="system">system / 制作メモ</option>
+          </select>
+        </label>
+      </div>
+      {speakerMode === 'custom' && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr]">
+          <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            表示名
+            <input
+              value={speakerName}
+              onChange={(event) => setSpeakerName(event.target.value)}
+              placeholder="例: 透（内省）"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </label>
+          <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            紐づけキャラ
+            <select
+              value={agentCharacterId}
+              onChange={(event) => setAgentCharacterId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            >
+              <option value="">なし</option>
+              {sortedCharacters.map((character) => (
+                <option key={String(character.id)} value={String(character.id)}>
+                  {character.is_favorite ? '★ ' : ''}{character.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <label className="mt-3 block text-[11px] font-medium text-slate-500 dark:text-slate-400">会話テキスト</label>
       <textarea
         value={text}
         onChange={(event) => {
@@ -1737,7 +1875,11 @@ function EditableDialogueLine({
         <button
           type="button"
           disabled={saving || !text.trim() || !dirty}
-          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues, videoGenerationMode)}
+          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues, videoGenerationMode, {
+            speaker_name: speakerName.trim(),
+            agent_character_id: agentCharacterId || null,
+            line_type: lineType,
+          })}
           className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
         >
           {saving ? '保存中...' : '保存'}

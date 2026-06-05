@@ -249,7 +249,13 @@ export async function GET(
 
     const charactersResult = await query(
       `
-        with metadata_character_ids as (
+        with scene_project as (
+          select nullif(coalesce(ssd.metadata->>'project_key', st.metadata->>'project_key'), '') as project_key
+          from kazika_studio_agents.story_scenes_domain ssd
+          join kazika_studio_agents.stories st on st.id = ssd.story_id
+          where ssd.id = $1
+        ),
+        metadata_character_ids as (
           select (jsonb_array_elements_text(coalesce(ssd.metadata->'speaker_character_ids', '[]'::jsonb)))::bigint as id
           from kazika_studio_agents.story_scenes_domain ssd
           where ssd.id = $1
@@ -286,6 +292,10 @@ export async function GET(
         from kazika_studio_agents.characters ch
         where ch.id in (select id from metadata_character_ids union select id from line_character_ids)
            or ch.name in (select name from layout_character_names where name is not null)
+           or (
+             ch.metadata->>'project_key' = (select project_key from scene_project)
+             and (select project_key from scene_project) is not null
+           )
         order by ch.id asc
       `,
       [scene.id, scriptIds]
