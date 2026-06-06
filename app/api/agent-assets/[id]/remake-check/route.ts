@@ -27,6 +27,8 @@ export async function PATCH(
     const checked = Boolean(body.checked);
     const bodyHasNote = Object.prototype.hasOwnProperty.call(body, 'note');
     const requestedNote = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+    const bodyHasReferenceMode = Object.prototype.hasOwnProperty.call(body, 'referenceMode');
+    const requestedReferenceMode = parseRemakeReferenceMode(body.referenceMode);
 
     const assetResult = await query(
       `
@@ -61,9 +63,12 @@ export async function PATCH(
     }
 
     const isVideo = ['video', 'talking_video', 'synced_video', 'final_video'].includes(assetType);
+    const isImageLike = ['image', 'thumbnail', 'storyboard'].includes(assetType);
     const existingMetadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata as Record<string, unknown> : {};
     const existingNote = remakeCheckNoteFromMetadata(existingMetadata);
+    const existingReferenceMode = remakeReferenceModeFromMetadata(existingMetadata);
     const note = bodyHasNote ? requestedNote : existingNote;
+    const referenceMode = bodyHasReferenceMode ? requestedReferenceMode : existingReferenceMode;
     const metadataPatch: Record<string, unknown> = {
       remake_check: checked,
       remake_status: checked ? 'needs_remake' : 'ok',
@@ -74,6 +79,11 @@ export async function PATCH(
       remake_check_updated_at: new Date().toISOString(),
       remake_check_updated_by: user.id,
     };
+
+    if (isImageLike) {
+      metadataPatch.remake_reference_mode = referenceMode;
+      metadataPatch.remake_check_reference_mode = referenceMode;
+    }
 
     const updatedResult = await query(
       `
@@ -100,4 +110,15 @@ function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
     if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 500);
   }
   return '';
+}
+
+type RemakeReferenceMode = 'storyboard' | 'original' | 'none';
+
+function parseRemakeReferenceMode(value: unknown): RemakeReferenceMode {
+  if (value === 'storyboard' || value === 'original' || value === 'none') return value;
+  return 'storyboard';
+}
+
+function remakeReferenceModeFromMetadata(metadata: Record<string, unknown>): RemakeReferenceMode {
+  return parseRemakeReferenceMode(metadata.remake_reference_mode ?? metadata.remake_check_reference_mode);
 }

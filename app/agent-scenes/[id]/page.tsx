@@ -2739,16 +2739,27 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
 }
 
 function RemakeCheckControl({ asset }: { asset: AnyRow }) {
-  const metadata: Record<string, unknown> = isRecord(asset.metadata) ? asset.metadata : {};
+  const metadata: Record<string, unknown> = useMemo(
+    () => isRecord(asset.metadata) ? asset.metadata : {},
+    [asset.metadata]
+  );
   const initialNote = remakeCheckNoteFromMetadata(metadata);
+  const initialReferenceMode = remakeReferenceModeFromMetadata(metadata);
   const [checked, setChecked] = useState(Boolean(metadata.remake_check));
   const [note, setNote] = useState(initialNote);
   const [savedNote, setSavedNote] = useState(initialNote);
+  const [referenceMode, setReferenceMode] = useState(initialReferenceMode);
+  const [savedReferenceMode, setSavedReferenceMode] = useState(initialReferenceMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const assetId = String(asset.id ?? '');
   const noteDirty = note.trim() !== savedNote.trim();
+  const referenceModeDirty = referenceMode !== savedReferenceMode;
+  const saveButtonLabel = checked
+    ? referenceModeDirty && !noteDirty ? '参照元を保存' : '修正指示を保存'
+    : note.trim() ? '修正指示を保存してON' : '参照元を保存してON';
   const isVideo = isVideoAsset(asset);
+  const isImageLike = isVisualAsset(asset);
   const targetLabel = isVideo ? 'リップシンク動画' : isSfxAsset(asset) ? 'SE' : asset.asset_type === 'audio' ? '音声' : '画像';
   const noteLabel = `${targetLabel}の修正指示`;
   const placeholder = isVideo
@@ -2759,9 +2770,12 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
 
   useEffect(() => {
     const nextNote = remakeCheckNoteFromMetadata(metadata);
+    const nextReferenceMode = remakeReferenceModeFromMetadata(metadata);
     setChecked(Boolean(metadata.remake_check));
     setNote(nextNote);
     setSavedNote(nextNote);
+    setReferenceMode(nextReferenceMode);
+    setSavedReferenceMode(nextReferenceMode);
   }, [asset.id, metadata]);
 
   const save = async (nextChecked = checked) => {
@@ -2774,13 +2788,14 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
       const response = await fetch(`/api/agent-assets/${assetId}/remake-check`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checked: nextChecked, note }),
+        body: JSON.stringify({ checked: nextChecked, note, referenceMode: isImageLike ? referenceMode : undefined }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました');
       }
       setSavedNote(note.trim());
+      if (isImageLike) setSavedReferenceMode(referenceMode);
     } catch (err) {
       setChecked(previousChecked);
       setError(err instanceof Error ? err.message : '保存に失敗しました');
@@ -2814,14 +2829,39 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
         placeholder={placeholder}
         className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-[12px] leading-5 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-2 focus:ring-amber-100 dark:border-amber-900 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-amber-950"
       />
+      {isImageLike && (
+        <div className="mt-2">
+          <div className="mb-1 text-[11px] font-medium text-amber-800 dark:text-amber-200">画像作り直しの参照元</div>
+          <div className="flex flex-wrap gap-1.5">
+            {REMAKE_REFERENCE_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setReferenceMode(option.value)}
+                disabled={saving}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${referenceMode === option.value
+                  ? 'border-amber-500 bg-amber-500 text-white shadow-sm'
+                  : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950'
+                }`}
+                title={option.description}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+            {REMAKE_REFERENCE_MODE_OPTIONS.find((option) => option.value === referenceMode)?.description}
+          </p>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => save(checked || Boolean(note.trim()))}
-          disabled={saving || (!noteDirty && checked) || (!checked && !note.trim())}
+          onClick={() => save(checked || Boolean(note.trim()) || referenceModeDirty)}
+          disabled={saving || (!noteDirty && !referenceModeDirty && checked) || (!checked && !note.trim() && !referenceModeDirty)}
           className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950"
         >
-          {checked ? '修正指示を保存' : '修正指示を保存してON'}
+          {saveButtonLabel}
         </button>
         {checked && <span className="text-[11px] text-amber-700 dark:text-amber-300">エージェントが{targetLabel}の再生成対象として拾えます。</span>}
       </div>
@@ -2942,6 +2982,20 @@ function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
     if (typeof value === 'string' && value.trim()) return value;
   }
   return '';
+}
+
+type RemakeReferenceMode = 'storyboard' | 'original' | 'none';
+
+const REMAKE_REFERENCE_MODE_OPTIONS: Array<{ value: RemakeReferenceMode; label: string; description: string }> = [
+  { value: 'storyboard', label: '絵コンテ参照', description: '絵コンテ・レイアウトをベースに作り直す。' },
+  { value: 'original', label: '元画像参照', description: 'いまの画像をベースに、修正指示だけ反映する。' },
+  { value: 'none', label: '参照なし', description: '画像参照を使わず、修正指示とプロンプトだけで作り直す。' },
+];
+
+function remakeReferenceModeFromMetadata(metadata: Record<string, unknown>): RemakeReferenceMode {
+  const value = metadata.remake_reference_mode ?? metadata.remake_check_reference_mode;
+  if (value === 'storyboard' || value === 'original' || value === 'none') return value;
+  return 'storyboard';
 }
 
 function assetUrl(asset: AnyRow) {
