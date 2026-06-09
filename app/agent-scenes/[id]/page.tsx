@@ -604,7 +604,8 @@ export default function AgentSceneDetailPage() {
     list.push(cue);
     timingCuesByLineId.set(key, list);
   }
-  const storyboardAssets = assets.filter(isStoryboardAsset).sort(sortSceneAssets);
+  const allStoryboardAssets = assets.filter(isStoryboardAsset).sort(sortSceneAssets);
+  const storyboardAssets = visibleAssets.filter(isStoryboardAsset).sort(sortSceneAssets);
   const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
   const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
 
@@ -673,12 +674,16 @@ export default function AgentSceneDetailPage() {
             </Panel>
 
             <Panel title="絵コンテ" icon={<Clapperboard size={18} />}>
-              {storyboardAssets.length === 0 ? (
+              {allStoryboardAssets.length === 0 ? (
                 <Empty>まだ絵コンテがありません。storyboard asset として登録するとここに表示されます。</Empty>
+              ) : storyboardAssets.length === 0 ? (
+                <Empty>primary の絵コンテはありません。過去版は右側の「履歴表示」をONにすると確認できます。</Empty>
               ) : (
                 <div className="space-y-3">
                   <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-                    配置図の次に確認する連続絵コンテ。カメラ・芝居・シーンの流れを優先し、最終画は各ショット画像で詰めます。
+                    {showAssetHistory
+                      ? '履歴を含めた絵コンテを表示中。カメラ・芝居・シーンの流れを確認します。'
+                      : '現在使用中の primary 絵コンテのみ表示中。過去版は右側の「履歴表示」をONにすると確認できます。'}
                   </p>
                   {storyboardAssets.map((asset) => (
                     <AssetRow key={String(asset.id)} asset={asset} />
