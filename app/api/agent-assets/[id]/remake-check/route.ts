@@ -66,9 +66,14 @@ export async function PATCH(
     const isImageLike = ['image', 'thumbnail', 'storyboard'].includes(assetType);
     const existingMetadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata as Record<string, unknown> : {};
     const existingNote = remakeCheckNoteFromMetadata(existingMetadata);
+    const existingChecked = Boolean(existingMetadata.remake_check);
     const existingReferenceMode = remakeReferenceModeFromMetadata(existingMetadata);
     const note = bodyHasNote ? requestedNote : existingNote;
-    const referenceMode = bodyHasReferenceMode ? requestedReferenceMode : existingReferenceMode;
+    const referenceMode = bodyHasReferenceMode
+      ? requestedReferenceMode
+      : !existingChecked && checked
+        ? 'character_sheet'
+        : existingReferenceMode;
     const metadataPatch: Record<string, unknown> = {
       remake_check: checked,
       remake_status: checked ? 'needs_remake' : 'ok',

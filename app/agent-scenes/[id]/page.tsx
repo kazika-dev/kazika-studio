@@ -2783,8 +2783,9 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
     [asset.metadata]
   );
   const initialNote = remakeCheckNoteFromMetadata(metadata);
-  const initialReferenceMode = remakeReferenceModeFromMetadata(metadata);
-  const [checked, setChecked] = useState(Boolean(metadata.remake_check));
+  const initialChecked = Boolean(metadata.remake_check);
+  const initialReferenceMode = initialChecked ? remakeReferenceModeFromMetadata(metadata) : 'character_sheet';
+  const [checked, setChecked] = useState(initialChecked);
   const [note, setNote] = useState(initialNote);
   const [savedNote, setSavedNote] = useState(initialNote);
   const [referenceMode, setReferenceMode] = useState(initialReferenceMode);
@@ -2809,8 +2810,9 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
 
   useEffect(() => {
     const nextNote = remakeCheckNoteFromMetadata(metadata);
-    const nextReferenceMode = remakeReferenceModeFromMetadata(metadata);
-    setChecked(Boolean(metadata.remake_check));
+    const nextChecked = Boolean(metadata.remake_check);
+    const nextReferenceMode = nextChecked ? remakeReferenceModeFromMetadata(metadata) : 'character_sheet';
+    setChecked(nextChecked);
     setNote(nextNote);
     setSavedNote(nextNote);
     setReferenceMode(nextReferenceMode);
