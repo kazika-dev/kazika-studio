@@ -111,7 +111,7 @@ export default function AgentSceneDetailPage() {
   const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
 
   const materialAssets = useMemo(
-    () => visibleAssets.filter((asset) => !((asset.asset_type === 'audio' || isSfxAsset(asset)) && asset.script_line_id) && !isStoryboardAsset(asset)).sort(sortSceneAssets),
+    () => visibleAssets.filter((asset) => !((asset.asset_type === 'audio' || isSfxAsset(asset)) && asset.script_line_id) && !isStoryboardAsset(asset) && !isBackgroundReferenceAsset(asset)).sort(sortSceneAssets),
     [visibleAssets]
   );
 
@@ -595,6 +595,8 @@ export default function AgentSceneDetailPage() {
 
   const { scene, scripts, scriptLines, scriptLineTimingCues = [], characters, conversations, shots, assets, timelineTracks, timelineClips, generationJobs, sceneLayouts, soundEffects = [] } = data;
   const layoutAssets = visibleAssets.filter((asset) => asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram');
+  const allBackgroundReferenceAssets = assets.filter(isBackgroundReferenceAsset).sort(sortSceneAssets);
+  const backgroundReferenceAssets = visibleAssets.filter(isBackgroundReferenceAsset).sort(sortSceneAssets);
   const sceneSfxAssets = assets.filter(isSfxAsset);
   const timingCuesByLineId = new Map<string, AnyRow[]>();
   for (const cue of scriptLineTimingCues) {
@@ -669,6 +671,25 @@ export default function AgentSceneDetailPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="背景設定" icon={<ImageIcon size={18} />}>
+              {allBackgroundReferenceAssets.length === 0 ? (
+                <Empty>まだ背景設定画がありません。background_reference asset として登録するとここに表示されます。</Empty>
+              ) : backgroundReferenceAssets.length === 0 ? (
+                <Empty>primary の背景設定画はありません。過去版は右側の「履歴表示」をONにすると確認できます。</Empty>
+              ) : (
+                <div className="space-y-3">
+                  <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                    {showAssetHistory
+                      ? '履歴を含めた背景設定画を表示中。ロケーション・光・空間関係の確認用です。'
+                      : '現在使用中の primary 背景設定画のみ表示中。過去版は右側の「履歴表示」をONにすると確認できます。'}
+                  </p>
+                  {backgroundReferenceAssets.map((asset) => (
+                    <AssetRow key={String(asset.id)} asset={asset} />
+                  ))}
                 </div>
               )}
             </Panel>
@@ -1165,6 +1186,18 @@ function isStoryboardAsset(asset: AnyRow) {
   return String(asset.asset_type || '') === 'storyboard';
 }
 
+function isBackgroundReferenceAsset(asset: AnyRow) {
+  const type = String(asset.asset_type || '');
+  const metadata = assetMetadata(asset);
+  return type === 'background_reference'
+    || type === 'location_reference'
+    || type === 'environment_reference'
+    || metadata.intended_use === 'background_reference'
+    || metadata.intended_use === 'location_reference'
+    || metadata.background_reference === true
+    || metadata.background_reference === 'true';
+}
+
 function isVisualAsset(asset: AnyRow) {
   const type = String(asset.asset_type || '');
   return type === 'image' || type === 'thumbnail' || type === 'storyboard';
@@ -1216,6 +1249,7 @@ function assetKindLabel(asset: AnyRow) {
   if (isSfxAsset(asset)) return 'SE';
   if (asset.asset_type === 'audio') return '音声';
   if (isVideoAsset(asset)) return '動画';
+  if (isBackgroundReferenceAsset(asset)) return '背景設定';
   if (isVisualAsset(asset)) return '画像';
   return String(asset.asset_type || '素材');
 }
@@ -1389,8 +1423,8 @@ function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: A
 function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo }: AssetRowProps) {
   const isAudio = isAudioAsset(asset);
   const isVideo = isVideoAsset(asset);
-  const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
-  const shouldContainImage = asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram';
+  const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram' || isBackgroundReferenceAsset(asset);
+  const shouldContainImage = asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram' || isBackgroundReferenceAsset(asset);
   const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
   const src = assetUrl(asset);
