@@ -2871,21 +2871,27 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
       {isImageLike && (
         <div className="mt-2">
           <div className="mb-1 text-[11px] font-medium text-amber-800 dark:text-amber-200">画像作り直しの参照元</div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             {REMAKE_REFERENCE_MODE_OPTIONS.map((option) => (
-              <button
+              <label
                 key={option.value}
-                type="button"
-                onClick={() => setReferenceMode(option.value)}
-                disabled={saving}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${referenceMode === option.value
-                  ? 'border-amber-500 bg-amber-500 text-white shadow-sm'
-                  : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950'
-                }`}
                 title={option.description}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${referenceMode === option.value
+                  ? 'border-amber-500 bg-amber-100 text-amber-900 shadow-sm dark:bg-amber-950 dark:text-amber-100'
+                  : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-200 dark:hover:bg-amber-950'
+                } ${saving ? 'cursor-not-allowed opacity-60' : ''}`}
               >
-                {option.label}
-              </button>
+                <input
+                  type="radio"
+                  name={`remake-reference-mode-${assetId}`}
+                  value={option.value}
+                  checked={referenceMode === option.value}
+                  onChange={() => setReferenceMode(option.value)}
+                  disabled={saving}
+                  className="h-3.5 w-3.5 accent-amber-500"
+                />
+                <span>{option.label}{option.value === 'character_sheet' ? '（デフォルト）' : ''}</span>
+              </label>
             ))}
           </div>
           <p className="mt-1 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
