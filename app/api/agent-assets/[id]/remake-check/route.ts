@@ -112,11 +112,11 @@ function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
   return '';
 }
 
-type RemakeReferenceMode = 'storyboard' | 'original' | 'none';
+type RemakeReferenceMode = 'character_sheet' | 'storyboard' | 'original' | 'none';
 
 function parseRemakeReferenceMode(value: unknown): RemakeReferenceMode {
-  if (value === 'storyboard' || value === 'original' || value === 'none') return value;
-  return 'storyboard';
+  if (value === 'character_sheet' || value === 'storyboard' || value === 'original' || value === 'none') return value;
+  return 'character_sheet';
 }
 
 function remakeReferenceModeFromMetadata(metadata: Record<string, unknown>): RemakeReferenceMode {

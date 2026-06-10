@@ -3023,9 +3023,10 @@ function remakeCheckNoteFromMetadata(metadata: Record<string, unknown>) {
   return '';
 }
 
-type RemakeReferenceMode = 'storyboard' | 'original' | 'none';
+type RemakeReferenceMode = 'character_sheet' | 'storyboard' | 'original' | 'none';
 
 const REMAKE_REFERENCE_MODE_OPTIONS: Array<{ value: RemakeReferenceMode; label: string; description: string }> = [
+  { value: 'character_sheet', label: 'キャラシ参照', description: 'キャラシとプロンプトだけで作り直す。絵コンテ・元画像・レイアウト画像は参照しない。' },
   { value: 'storyboard', label: '絵コンテ参照', description: '絵コンテ・レイアウトをベースに作り直す。' },
   { value: 'original', label: '元画像参照', description: 'いまの画像をベースに、修正指示だけ反映する。' },
   { value: 'none', label: '参照なし', description: '画像参照を使わず、修正指示とプロンプトだけで作り直す。' },
@@ -3033,8 +3034,8 @@ const REMAKE_REFERENCE_MODE_OPTIONS: Array<{ value: RemakeReferenceMode; label: 
 
 function remakeReferenceModeFromMetadata(metadata: Record<string, unknown>): RemakeReferenceMode {
   const value = metadata.remake_reference_mode ?? metadata.remake_check_reference_mode;
-  if (value === 'storyboard' || value === 'original' || value === 'none') return value;
-  return 'storyboard';
+  if (value === 'character_sheet' || value === 'storyboard' || value === 'original' || value === 'none') return value;
+  return 'character_sheet';
 }
 
 function assetUrl(asset: AnyRow) {
