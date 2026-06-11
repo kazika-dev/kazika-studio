@@ -14,22 +14,48 @@ gcloud services enable \
   artifactregistry.googleapis.com
 ```
 
-Give the Cloud Build service account permission to deploy Cloud Run. Replace
-`PROJECT_ID` and `PROJECT_NUMBER` first.
+Create a user-managed service account for Cloud Build. Do not use the legacy
+`PROJECT_NUMBER@cloudbuild.gserviceaccount.com` account in a trigger's
+`service_account` field; Cloud Build rejects that value for user-specified
+service accounts.
+
+Replace `PROJECT_ID` first.
 
 ```bash
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
+PROJECT_ID=your-project-id
+BUILD_SA=cloud-run-builder
+BUILD_SA_EMAIL="${BUILD_SA}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud iam service-accounts create "${BUILD_SA}" \
+  --project="${PROJECT_ID}" \
+  --display-name="Cloud Run builder"
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BUILD_SA_EMAIL}" \
   --role="roles/run.admin"
 
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BUILD_SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser"
 
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:PROJECT_NUMBER@cloudbuild.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
+# Needed because cloudbuild.cloudrun.yaml creates the Artifact Registry repo
+# when it does not exist yet. After the repo exists, writer-level access is
+# enough if you prefer to reduce permissions.
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${BUILD_SA_EMAIL}" \
+  --role="roles/artifactregistry.admin"
 ```
+
+When creating a Cloud Build trigger, set **Service account** to the full
+user-managed account resource:
+
+```text
+projects/PROJECT_ID/serviceAccounts/cloud-run-builder@PROJECT_ID.iam.gserviceaccount.com
+```
+
+Alternatively, leave the trigger service account field unset so Cloud Build
+selects a default account. Do not enter the legacy Cloud Build default service
+account manually.
 
 ## Deploy manually through Cloud Build
 
