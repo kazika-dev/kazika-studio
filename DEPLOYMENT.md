@@ -109,14 +109,14 @@ git push origin main
 
 ### 6.1 Vercel URLの登録
 
-デプロイ後のURL（例：`https://kazika-studio.vercel.app`）をSupabaseに登録：
+デプロイ後のURL（例：`https://kazika-studio-vrdafz7ndq-an.a.run.app`）をSupabaseに登録：
 
 1. Supabaseダッシュボード > Authentication > URL Configuration
-2. **Site URL**: `https://kazika-studio.vercel.app`
+2. **Site URL**: `https://kazika-studio-vrdafz7ndq-an.a.run.app`
 3. **Redirect URLs**に以下を追加：
-   - `https://kazika-studio.vercel.app/auth/callback`
-   - `https://kazika-studio.vercel.app/login`
-   - `https://kazika-studio.vercel.app`
+   - `https://kazika-studio-vrdafz7ndq-an.a.run.app/auth/callback`
+   - `https://kazika-studio-vrdafz7ndq-an.a.run.app/login`
+   - `https://kazika-studio-vrdafz7ndq-an.a.run.app`
 
 ### 6.2 メール認証の設定確認
 

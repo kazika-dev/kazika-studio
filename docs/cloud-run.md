@@ -79,7 +79,7 @@ Configure these on the Cloud Run service. Do not commit real values to Git.
   `GCP_PROJECT_ID`, `GCP_CLIENT_EMAIL`, `GCP_PRIVATE_KEY`
 - Optional feature keys: `ELEVENLABS_API_KEY`, `HIGGSFIELD_API_KEY`,
   `HIGGSFIELD_SECRET`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VERTEX_API_KEY`
-- Recommended: `NEXT_PUBLIC_APP_URL=https://YOUR-CLOUD-RUN-URL`
+- Recommended: `NEXT_PUBLIC_APP_URL=https://kazika-studio-vrdafz7ndq-an.a.run.app`
 
 For an existing Cloud Run service, `gcloud run deploy` normally preserves current
 environment variables. Set secrets once with `gcloud run services update` or the
