@@ -37,130 +37,267 @@ export async function GET(request: NextRequest) {
       values.push(productionStatus);
       filters.push(`coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status', '') = $${values.length}`);
     }
-
-    const storyValues = [...values];
-    const storyFilters = [...filters];
-
     if (Number.isFinite(storyId) && storyId > 0) {
       values.push(storyId);
       filters.push(`st.id = $${values.length}`);
-
-      storyValues.push(storyId);
-      storyFilters.push(`st.id = $${storyValues.length}`);
     }
 
-    const storyWhereClause = storyFilters.join('\n          and ');
-    const sceneValues = [...values];
-
-    values.push(limit, offset);
-    const limitParam = values.length - 1;
-    const offsetParam = values.length;
     const whereClause = filters.join('\n          and ');
+    const baseValues = [...values];
+    const countValues = [...values];
 
-    const result = await query(
-      `
-        with scene_counts as (
+    const sceneValues = [...values, limit, offset];
+    const limitParam = sceneValues.length - 1;
+    const offsetParam = sceneValues.length;
+
+    const sceneCountsCte = `
+        script_rows as (
+          select sc.id, ps.id as scene_id
+          from paged_scenes ps
+          join kazika_studio_agents.scripts sc on sc.agent_story_scene_id = ps.id
+        ),
+        line_rows as (
+          select sl.id, sr.scene_id
+          from script_rows sr
+          join kazika_studio_agents.script_lines sl on sl.script_id = sr.id
+        ),
+        shot_rows as (
+          select sh.id, ps.id as scene_id
+          from paged_scenes ps
+          join kazika_studio_agents.shots sh on sh.agent_story_scene_id = ps.id
+          union
+          select sh.id, sr.scene_id
+          from script_rows sr
+          join kazika_studio_agents.shots sh on sh.script_id = sr.id
+        ),
+        asset_scene_links as (
+          select ps.id as scene_id, a.id, a.asset_type
+          from paged_scenes ps
+          join kazika_studio_agents.assets a on a.agent_story_scene_id = ps.id
+          union all
+          select sr.scene_id, a.id, a.asset_type
+          from script_rows sr
+          join kazika_studio_agents.assets a on a.script_id = sr.id
+          union all
+          select shr.scene_id, a.id, a.asset_type
+          from shot_rows shr
+          join kazika_studio_agents.assets a on a.shot_id = shr.id
+          union all
+          select lr.scene_id, a.id, a.asset_type
+          from line_rows lr
+          join kazika_studio_agents.assets a on a.script_line_id = lr.id
+        ),
+        script_counts as (
+          select scene_id, count(distinct id)::integer as script_count
+          from script_rows
+          group by scene_id
+        ),
+        line_counts as (
+          select scene_id, count(distinct id)::integer as line_count
+          from line_rows
+          group by scene_id
+        ),
+        shot_counts as (
+          select scene_id, count(distinct id)::integer as shot_count
+          from shot_rows
+          group by scene_id
+        ),
+        asset_counts as (
           select
-            ssd.id,
-            count(distinct sc.id) as script_count,
-            count(distinct sl.id) as line_count,
-            count(distinct sh.id) as shot_count,
-            count(distinct a.id) as asset_count,
-            count(distinct a.id) filter (where a.asset_type = 'audio') as audio_count,
-            count(distinct a.id) filter (where a.asset_type in ('image', 'thumbnail')) as image_count,
-            count(distinct a.id) filter (where a.asset_type in ('video', 'talking_video', 'synced_video', 'final_video')) as video_count
-          from kazika_studio_agents.story_scenes_domain ssd
-          left join kazika_studio_agents.scripts sc on sc.agent_story_scene_id = ssd.id
-          left join kazika_studio_agents.script_lines sl on sl.script_id = sc.id
-          left join kazika_studio_agents.shots sh on sh.agent_story_scene_id = ssd.id or sh.script_id = sc.id
-          left join kazika_studio_agents.assets a on a.agent_story_scene_id = ssd.id or a.script_id = sc.id or a.shot_id = sh.id or a.script_line_id = sl.id
-          group by ssd.id
-        )
-        select
-          ssd.*,
-          st.title as story_title,
-          st.user_id,
-          st.metadata as story_metadata,
-          coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key') as project_key,
-          coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode') as genre_mode,
-          coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status') as production_status,
-          coalesce(ssd.metadata->>'episode_no', st.metadata->>'episode_no') as episode_no,
-          coalesce(sc.script_count, 0)::integer as script_count,
-          coalesce(sc.line_count, 0)::integer as line_count,
-          coalesce(sc.shot_count, 0)::integer as shot_count,
-          coalesce(sc.asset_count, 0)::integer as asset_count,
-          coalesce(sc.audio_count, 0)::integer as audio_count,
-          coalesce(sc.image_count, 0)::integer as image_count,
-          coalesce(sc.video_count, 0)::integer as video_count
-        from kazika_studio_agents.story_scenes_domain ssd
-        join kazika_studio_agents.stories st on st.id = ssd.story_id
-        left join scene_counts sc on sc.id = ssd.id
-        where ${whereClause}
-        order by st.updated_at desc nulls last, st.id desc, ssd.sequence_order asc, ssd.id asc
-        limit $${limitParam} offset $${offsetParam}
-      `,
-      values
-    );
-
-    const storiesResult = await query(
-      `
-        with scene_counts as (
+            scene_id,
+            count(distinct id)::integer as asset_count,
+            count(distinct id) filter (where asset_type = 'audio')::integer as audio_count,
+            count(distinct id) filter (where asset_type in ('image', 'thumbnail'))::integer as image_count,
+            count(distinct id) filter (where asset_type in ('video', 'talking_video', 'synced_video', 'final_video'))::integer as video_count
+          from asset_scene_links
+          group by scene_id
+        ),
+        scene_counts as (
           select
-            ssd.id,
-            count(distinct sc.id) as script_count,
-            count(distinct sl.id) as line_count,
-            count(distinct sh.id) as shot_count,
-            count(distinct a.id) as asset_count,
-            count(distinct a.id) filter (where a.asset_type = 'audio') as audio_count,
-            count(distinct a.id) filter (where a.asset_type in ('image', 'thumbnail')) as image_count,
-            count(distinct a.id) filter (where a.asset_type in ('video', 'talking_video', 'synced_video', 'final_video')) as video_count
-          from kazika_studio_agents.story_scenes_domain ssd
-          left join kazika_studio_agents.scripts sc on sc.agent_story_scene_id = ssd.id
-          left join kazika_studio_agents.script_lines sl on sl.script_id = sc.id
-          left join kazika_studio_agents.shots sh on sh.agent_story_scene_id = ssd.id or sh.script_id = sc.id
-          left join kazika_studio_agents.assets a on a.agent_story_scene_id = ssd.id or a.script_id = sc.id or a.shot_id = sh.id or a.script_line_id = sl.id
-          group by ssd.id
-        )
-        select
-          st.id,
-          st.title,
-          st.description,
-          st.thumbnail_url,
-          st.updated_at,
-          st.metadata,
-          st.default_image_aspect_ratio,
-          st.default_video_aspect_ratio,
-          coalesce(st.metadata->>'project_key', max(ssd.metadata->>'project_key')) as project_key,
-          coalesce(st.metadata->>'genre_mode', max(ssd.metadata->>'genre_mode')) as genre_mode,
-          coalesce(st.metadata->>'production_status', max(ssd.metadata->>'production_status')) as production_status,
-          count(distinct ssd.id)::integer as scene_count,
-          (array_agg(ssd.id order by ssd.sequence_order asc, ssd.id asc))[1] as first_scene_id,
-          coalesce(sum(sc.script_count), 0)::integer as script_count,
-          coalesce(sum(sc.line_count), 0)::integer as line_count,
-          coalesce(sum(sc.shot_count), 0)::integer as shot_count,
-          coalesce(sum(sc.asset_count), 0)::integer as asset_count,
-          coalesce(sum(sc.audio_count), 0)::integer as audio_count,
-          coalesce(sum(sc.image_count), 0)::integer as image_count,
-          coalesce(sum(sc.video_count), 0)::integer as video_count
-        from kazika_studio_agents.stories st
-        join kazika_studio_agents.story_scenes_domain ssd on ssd.story_id = st.id
-        left join scene_counts sc on sc.id = ssd.id
-        where ${storyWhereClause}
-        group by st.id
-        order by st.updated_at desc nulls last, st.id desc
-      `,
-      storyValues
-    );
+            ps.id,
+            coalesce(sc.script_count, 0)::integer as script_count,
+            coalesce(lc.line_count, 0)::integer as line_count,
+            coalesce(shc.shot_count, 0)::integer as shot_count,
+            coalesce(ac.asset_count, 0)::integer as asset_count,
+            coalesce(ac.audio_count, 0)::integer as audio_count,
+            coalesce(ac.image_count, 0)::integer as image_count,
+            coalesce(ac.video_count, 0)::integer as video_count
+          from paged_scenes ps
+          left join script_counts sc on sc.scene_id = ps.id
+          left join line_counts lc on lc.scene_id = ps.id
+          left join shot_counts shc on shc.scene_id = ps.id
+          left join asset_counts ac on ac.scene_id = ps.id
+        )`;
 
-    const countResult = await query(
-      `
-        select count(*)::integer as total
-        from kazika_studio_agents.story_scenes_domain ssd
-        join kazika_studio_agents.stories st on st.id = ssd.story_id
-        where ${whereClause}
-      `,
-      sceneValues
-    );
+    const storyCountsCte = `
+        script_rows as (
+          select sc.id, ts.id as scene_id
+          from target_scenes ts
+          join kazika_studio_agents.scripts sc on sc.agent_story_scene_id = ts.id
+        ),
+        line_rows as (
+          select sl.id, sr.scene_id
+          from script_rows sr
+          join kazika_studio_agents.script_lines sl on sl.script_id = sr.id
+        ),
+        shot_rows as (
+          select sh.id, ts.id as scene_id
+          from target_scenes ts
+          join kazika_studio_agents.shots sh on sh.agent_story_scene_id = ts.id
+          union
+          select sh.id, sr.scene_id
+          from script_rows sr
+          join kazika_studio_agents.shots sh on sh.script_id = sr.id
+        ),
+        asset_scene_links as (
+          select ts.id as scene_id, a.id, a.asset_type
+          from target_scenes ts
+          join kazika_studio_agents.assets a on a.agent_story_scene_id = ts.id
+          union all
+          select sr.scene_id, a.id, a.asset_type
+          from script_rows sr
+          join kazika_studio_agents.assets a on a.script_id = sr.id
+          union all
+          select shr.scene_id, a.id, a.asset_type
+          from shot_rows shr
+          join kazika_studio_agents.assets a on a.shot_id = shr.id
+          union all
+          select lr.scene_id, a.id, a.asset_type
+          from line_rows lr
+          join kazika_studio_agents.assets a on a.script_line_id = lr.id
+        ),
+        script_counts as (
+          select scene_id, count(distinct id)::integer as script_count
+          from script_rows
+          group by scene_id
+        ),
+        line_counts as (
+          select scene_id, count(distinct id)::integer as line_count
+          from line_rows
+          group by scene_id
+        ),
+        shot_counts as (
+          select scene_id, count(distinct id)::integer as shot_count
+          from shot_rows
+          group by scene_id
+        ),
+        asset_counts as (
+          select
+            scene_id,
+            count(distinct id)::integer as asset_count,
+            count(distinct id) filter (where asset_type = 'audio')::integer as audio_count,
+            count(distinct id) filter (where asset_type in ('image', 'thumbnail'))::integer as image_count,
+            count(distinct id) filter (where asset_type in ('video', 'talking_video', 'synced_video', 'final_video'))::integer as video_count
+          from asset_scene_links
+          group by scene_id
+        ),
+        scene_counts as (
+          select
+            ts.id,
+            coalesce(sc.script_count, 0)::integer as script_count,
+            coalesce(lc.line_count, 0)::integer as line_count,
+            coalesce(shc.shot_count, 0)::integer as shot_count,
+            coalesce(ac.asset_count, 0)::integer as asset_count,
+            coalesce(ac.audio_count, 0)::integer as audio_count,
+            coalesce(ac.image_count, 0)::integer as image_count,
+            coalesce(ac.video_count, 0)::integer as video_count
+          from target_scenes ts
+          left join script_counts sc on sc.scene_id = ts.id
+          left join line_counts lc on lc.scene_id = ts.id
+          left join shot_counts shc on shc.scene_id = ts.id
+          left join asset_counts ac on ac.scene_id = ts.id
+        )`;
+
+    const [result, storiesResult, countResult] = await Promise.all([
+      query(
+        `
+          with target_scenes as (
+            select ssd.id
+            from kazika_studio_agents.story_scenes_domain ssd
+            join kazika_studio_agents.stories st on st.id = ssd.story_id
+            where ${whereClause}
+          ),
+          paged_scenes as (
+            select
+              ssd.*,
+              st.title as story_title,
+              st.user_id,
+              st.metadata as story_metadata,
+              st.updated_at as story_updated_at,
+              coalesce(st.metadata->>'project_key', ssd.metadata->>'project_key') as project_key,
+              coalesce(st.metadata->>'genre_mode', ssd.metadata->>'genre_mode') as genre_mode,
+              coalesce(ssd.metadata->>'production_status', st.metadata->>'production_status') as production_status,
+              coalesce(ssd.metadata->>'episode_no', st.metadata->>'episode_no') as episode_no
+            from target_scenes ts
+            join kazika_studio_agents.story_scenes_domain ssd on ssd.id = ts.id
+            join kazika_studio_agents.stories st on st.id = ssd.story_id
+            order by st.updated_at desc nulls last, st.id desc, ssd.sequence_order asc, ssd.id asc
+            limit $${limitParam} offset $${offsetParam}
+          ),
+          ${sceneCountsCte}
+          select
+            ps.*,
+            coalesce(sc.script_count, 0)::integer as script_count,
+            coalesce(sc.line_count, 0)::integer as line_count,
+            coalesce(sc.shot_count, 0)::integer as shot_count,
+            coalesce(sc.asset_count, 0)::integer as asset_count,
+            coalesce(sc.audio_count, 0)::integer as audio_count,
+            coalesce(sc.image_count, 0)::integer as image_count,
+            coalesce(sc.video_count, 0)::integer as video_count
+          from paged_scenes ps
+          left join scene_counts sc on sc.id = ps.id
+          order by ps.story_updated_at desc nulls last, ps.story_id desc, ps.sequence_order asc, ps.id asc
+        `,
+        sceneValues
+      ),
+      query(
+        `
+          with target_scenes as (
+            select ssd.id, ssd.story_id, ssd.sequence_order, ssd.metadata
+            from kazika_studio_agents.story_scenes_domain ssd
+            join kazika_studio_agents.stories st on st.id = ssd.story_id
+            where ${whereClause}
+          ),
+          ${storyCountsCte}
+          select
+            st.id,
+            st.title,
+            st.description,
+            st.thumbnail_url,
+            st.updated_at,
+            st.metadata,
+            st.default_image_aspect_ratio,
+            st.default_video_aspect_ratio,
+            coalesce(st.metadata->>'project_key', max(ts.metadata->>'project_key')) as project_key,
+            coalesce(st.metadata->>'genre_mode', max(ts.metadata->>'genre_mode')) as genre_mode,
+            coalesce(st.metadata->>'production_status', max(ts.metadata->>'production_status')) as production_status,
+            count(distinct ts.id)::integer as scene_count,
+            (array_agg(ts.id order by ts.sequence_order asc, ts.id asc))[1] as first_scene_id,
+            coalesce(sum(sc.script_count), 0)::integer as script_count,
+            coalesce(sum(sc.line_count), 0)::integer as line_count,
+            coalesce(sum(sc.shot_count), 0)::integer as shot_count,
+            coalesce(sum(sc.asset_count), 0)::integer as asset_count,
+            coalesce(sum(sc.audio_count), 0)::integer as audio_count,
+            coalesce(sum(sc.image_count), 0)::integer as image_count,
+            coalesce(sum(sc.video_count), 0)::integer as video_count
+          from target_scenes ts
+          join kazika_studio_agents.stories st on st.id = ts.story_id
+          left join scene_counts sc on sc.id = ts.id
+          group by st.id
+          order by st.updated_at desc nulls last, st.id desc
+        `,
+        baseValues
+      ),
+      query(
+        `
+          select count(*)::integer as total
+          from kazika_studio_agents.story_scenes_domain ssd
+          join kazika_studio_agents.stories st on st.id = ssd.story_id
+          where ${whereClause}
+        `,
+        countValues
+      ),
+    ]);
 
     return NextResponse.json({
       success: true,

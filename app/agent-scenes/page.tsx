@@ -64,6 +64,8 @@ export default function AgentScenesPage() {
   const [genreMode, setGenreMode] = useState('');
   const [productionStatus, setProductionStatus] = useState('');
   const [selectedStoryId, setSelectedStoryId] = useState('');
+  const [pageSize, setPageSize] = useState(50);
+  const [currentPage, setCurrentPage] = useState(0);
   const [urlInitialized, setUrlInitialized] = useState(false);
 
   useEffect(() => {
@@ -72,13 +74,20 @@ export default function AgentScenesPage() {
   }, []);
 
   useEffect(() => {
+    setCurrentPage(0);
+  }, [projectKey, genreMode, productionStatus, selectedStoryId, pageSize]);
+
+  useEffect(() => {
     if (!urlInitialized) return;
 
     const load = async () => {
       setLoading(true);
       setError('');
       try {
-        const params = new URLSearchParams({ limit: '200' });
+        const params = new URLSearchParams({
+          limit: String(pageSize),
+          offset: String(currentPage * pageSize),
+        });
         if (projectKey.trim()) params.set('project_key', projectKey.trim());
         if (genreMode) params.set('genre_mode', genreMode);
         if (productionStatus) params.set('production_status', productionStatus);
@@ -99,11 +108,21 @@ export default function AgentScenesPage() {
     };
 
     void load();
-  }, [projectKey, genreMode, productionStatus, selectedStoryId, urlInitialized]);
+  }, [projectKey, genreMode, productionStatus, selectedStoryId, pageSize, currentPage, urlInitialized]);
 
   const selectedStory = stories.find((story) => String(story.id) === selectedStoryId);
   const selectedStoryScenes = selectedStoryId ? scenes.filter((scene) => String(scene.story_id || '') === selectedStoryId) : scenes;
   const hasFilters = Boolean(projectKey.trim() || genreMode || productionStatus || selectedStoryId);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPageClamped = Math.min(currentPage, totalPages - 1);
+  const pageStart = total === 0 ? 0 : currentPageClamped * pageSize + 1;
+  const pageEnd = Math.min(total, currentPageClamped * pageSize + scenes.length);
+
+  useEffect(() => {
+    if (currentPage !== currentPageClamped) {
+      setCurrentPage(currentPageClamped);
+    }
+  }, [currentPage, currentPageClamped]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -132,7 +151,7 @@ export default function AgentScenesPage() {
             {hasFilters && (
               <button
                 type="button"
-                onClick={() => { setProjectKey(''); setGenreMode(''); setProductionStatus(''); setSelectedStoryId(''); }}
+                onClick={() => { setProjectKey(''); setGenreMode(''); setProductionStatus(''); setSelectedStoryId(''); setCurrentPage(0); }}
                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
               >
                 クリア
@@ -216,7 +235,7 @@ export default function AgentScenesPage() {
                 <button
                   key={story.id}
                   type="button"
-                  onClick={() => setSelectedStoryId(String(story.id))}
+                  onClick={() => { setSelectedStoryId(String(story.id)); setCurrentPage(0); }}
                   className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-sm dark:hover:border-indigo-700 dark:hover:bg-slate-900 ${String(story.id) === selectedStoryId ? 'border-indigo-300 bg-indigo-50 shadow-sm dark:border-indigo-700 dark:bg-indigo-950/40' : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950'}`}
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
@@ -264,16 +283,38 @@ export default function AgentScenesPage() {
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">シーン一覧</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {selectedStory ? `選択中: ${selectedStory.title}` : '全ストーリーのシーンを表示中'}
+              {total > 0 && ` / ${pageStart}-${pageEnd}件目を表示`}
             </p>
           </div>
-          {selectedStoryId && (
-            <Link
-              href="/agent-scenes"
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
-            >
-              ストーリー一覧へ戻る
-            </Link>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              表示件数
+              <select
+                value={pageSize}
+                onChange={(event) => setPageSize(Number(event.target.value))}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </label>
+            <PaginationControls
+              currentPage={currentPageClamped}
+              totalPages={totalPages}
+              loading={loading}
+              onPageChange={setCurrentPage}
+            />
+            {selectedStoryId && (
+              <Link
+                href="/agent-scenes"
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
+              >
+                ストーリー一覧へ戻る
+              </Link>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -328,6 +369,17 @@ export default function AgentScenesPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="mt-6 flex justify-center">
+            <PaginationControls
+              currentPage={currentPageClamped}
+              totalPages={totalPages}
+              loading={loading}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>
@@ -481,6 +533,45 @@ function getText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return '';
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  loading,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const isFirst = currentPage <= 0;
+  const isLast = currentPage >= totalPages - 1;
+
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+        disabled={loading || isFirst}
+        className="rounded-full px-3 py-1 font-medium transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800"
+      >
+        前へ
+      </button>
+      <span className="min-w-16 text-center font-semibold text-slate-900 dark:text-white">
+        {currentPage + 1} / {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+        disabled={loading || isLast}
+        className="rounded-full px-3 py-1 font-medium transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800"
+      >
+        次へ
+      </button>
+    </div>
+  );
 }
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
