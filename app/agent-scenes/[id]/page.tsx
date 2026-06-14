@@ -654,7 +654,10 @@ export default function AgentSceneDetailPage() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{scene.story_title}</p>
-              <h1 className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
+                <CopySceneIdButton sceneId={scene.id} />
+              </div>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                 {scene.summary || scene.description || 'シーン概要は未設定です。'}
               </p>
@@ -3151,6 +3154,11 @@ function audioDownloadName(asset: AnyRow) {
 function CopyAssetIdButton({ assetId }: { assetId: ReactNode }) {
   const value = String(assetId ?? '');
   return <CopyPrefixedIdButton label="asset_id" value={value} idleText="copy asset_id" title="asset_id: 形式でコピー" />;
+}
+
+function CopySceneIdButton({ sceneId }: { sceneId: ReactNode }) {
+  const value = String(sceneId ?? '');
+  return <CopyPrefixedIdButton label="scene_id" value={value} idleText={`scene_id: ${value}`} title="scene_id: 形式でコピー" />;
 }
 
 function CopyDialogueIdButton({ dialogueId }: { dialogueId: ReactNode }) {
