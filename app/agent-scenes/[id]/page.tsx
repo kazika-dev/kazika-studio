@@ -54,7 +54,9 @@ export default function AgentSceneDetailPage() {
   const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
   const [savingPrimaryAssetId, setSavingPrimaryAssetId] = useState('');
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
+  const [savingLineCompletionId, setSavingLineCompletionId] = useState('');
   const [mergingScriptId, setMergingScriptId] = useState('');
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
@@ -303,6 +305,34 @@ export default function AgentSceneDetailPage() {
       setDialogueError(err instanceof Error ? err.message : '会話の保存に失敗しました');
     } finally {
       setSavingDialogueLineId('');
+    }
+  };
+
+  const persistLineCompletion = async (line: AnyRow, completed: boolean) => {
+    if (!Number.isFinite(sceneId)) return;
+    const lineId = String(line.id || '');
+    if (!lineId) return;
+    setSavingLineCompletionId(lineId);
+    setDialogueError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/script-lines/${lineId}/completion`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '完成チェックの保存に失敗しました');
+      }
+      const updatedLine = result.data?.scriptLine;
+      setData((current) => current && updatedLine ? {
+        ...current,
+        scriptLines: current.scriptLines.map((row) => String(row.id) === String(updatedLine.id) ? { ...row, ...updatedLine } : row),
+      } : current);
+    } catch (err) {
+      setDialogueError(err instanceof Error ? err.message : '完成チェックの保存に失敗しました');
+    } finally {
+      setSavingLineCompletionId('');
     }
   };
 
@@ -610,6 +640,8 @@ export default function AgentSceneDetailPage() {
   const storyboardAssets = visibleAssets.filter(isStoryboardAsset).sort(sortSceneAssets);
   const subtitleClips = timelineClips.filter((clip) => String(clip.track_type || '') === 'text' || subtitleMetadata(clip).kind === 'subtitle');
   const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
+  const completedScriptLineCount = scriptLines.filter(isScriptLineCompleted).length;
+  const incompleteScriptLineCount = Math.max(0, scriptLines.length - completedScriptLineCount);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -718,73 +750,110 @@ export default function AgentSceneDetailPage() {
                 <Empty>まだ scripts / script_lines がありません。</Empty>
               ) : (
                 <div className="space-y-5">
-                  {scripts.map((script) => (
-                    <div key={String(script.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <h3 className="font-semibold text-slate-900 dark:text-white">{script.title}</h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">v{script.version} / {script.status} / {script.line_count || 0} lines</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      完成 {completedScriptLineCount} / 未完成 {incompleteScriptLineCount} / 全 {scriptLines.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowIncompleteOnly((value) => !value)}
+                      className={`rounded-full border px-3 py-1 font-medium transition ${showIncompleteOnly ? 'border-blue-300 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950 dark:hover:text-blue-300'}`}
+                    >
+                      {showIncompleteOnly ? '全て表示' : '未完成のみ表示'}
+                    </button>
+                  </div>
+                  {scripts.map((script) => {
+                    const scriptRows = scriptLines.filter((line) => line.script_id === script.id);
+                    const visibleScriptRows = showIncompleteOnly ? scriptRows.filter((line) => !isScriptLineCompleted(line)) : scriptRows;
+                    const scriptCompletedCount = scriptRows.filter(isScriptLineCompleted).length;
+                    return (
+                      <div key={String(script.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h3 className="font-semibold text-slate-900 dark:text-white">{script.title}</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">v{script.version} / {script.status} / {script.line_count || 0} lines / 完成 {scriptCompletedCount}</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={mergingScriptId === String(script.id)}
+                            onClick={() => mergeConsecutiveDialogueLines(script)}
+                            className="rounded-full border border-indigo-200 px-3 py-1 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950"
+                          >
+                            {mergingScriptId === String(script.id) ? '統合中...' : '同一話者を統合'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          disabled={mergingScriptId === String(script.id)}
-                          onClick={() => mergeConsecutiveDialogueLines(script)}
-                          className="rounded-full border border-indigo-200 px-3 py-1 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950"
-                        >
-                          {mergingScriptId === String(script.id) ? '統合中...' : '同一話者を統合'}
-                        </button>
+                        {visibleScriptRows.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-blue-200 bg-blue-50 px-3 py-4 text-center text-xs text-blue-600 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                            {showIncompleteOnly ? 'このscriptの未完成lineはありません。' : '表示できるlineがありません。'}
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {visibleScriptRows.map((line) => {
+                              const completed = isScriptLineCompleted(line);
+                              const lineAssets = assetsByLineId.get(String(line.id)) || [];
+                              const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
+                              const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+                              const lineSfxAssets = lineAssets.filter(isSfxAsset);
+                              const lineVideoAssets = lineAssets.filter((asset) => isVideoAsset(asset));
+                              const lineTimingCues = timingCuesByLineId.get(String(line.id)) || [];
+                              return (
+                                <div key={String(line.id)} className={`rounded-xl p-3 text-sm transition ${completed ? 'border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30' : 'bg-slate-50 dark:bg-slate-950'}`}>
+                                  <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    <label className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 font-medium transition ${completed ? 'border-blue-300 bg-blue-600 text-white dark:border-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950 dark:hover:text-blue-300'}`}
+                                      title="このlineの完成状態を切り替え"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={completed}
+                                        disabled={savingLineCompletionId === String(line.id)}
+                                        onChange={(event) => persistLineCompletion(line, event.target.checked)}
+                                        className="sr-only"
+                                      />
+                                      <Check size={12} />
+                                      {savingLineCompletionId === String(line.id) ? '保存中...' : completed ? '完成' : '未完成'}
+                                    </label>
+                                    <span>#{line.line_index}</span>
+                                    <CopyDialogueIdButton dialogueId={line.id} />
+                                    <span>{line.line_type}</span>
+                                    {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
+                                    <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
+                                    <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
+                                    <LinkedAssetCount icon={<Sparkles size={13} />} count={lineSfxAssets.length} />
+                                    <LinkedAssetCount icon={<Film size={13} />} count={lineVideoAssets.length} />
+                                  </div>
+                                  <EditableDialogueLine
+                                    line={line}
+                                    saving={savingDialogueLineId === String(line.id)}
+                                    characters={data?.characters || []}
+                                    soundEffects={soundEffects}
+                                    lineTimingCues={lineTimingCues}
+                                    sfxAssets={sceneSfxAssets}
+                                    onSave={persistDialogueLine}
+                                    onDelete={deleteDialogueLine}
+                                  />
+                                  <LineAssetBundle
+                                    line={line}
+                                    assets={lineAssets}
+                                    allAssets={relinkableAssets}
+                                    allLines={scriptLines}
+                                    savingLinkAssetId={savingLinkAssetId}
+                                    savingPrimaryAssetId={savingPrimaryAssetId}
+                                    onRelinkAsset={persistAssetLineLink}
+                                    onSetPrimaryAsset={persistDialoguePrimaryAsset}
+                                    subtitleClips={subtitleClips}
+                                    savingSubtitleClipId={savingSubtitleClipId}
+                                    renderingSubtitleAssetId={renderingSubtitleAssetId}
+                                    onSaveSubtitleClip={saveSubtitleClip}
+                                    onRenderSubtitledVideo={renderSubtitledVideo}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-2">
-                        {scriptLines.filter((line) => line.script_id === script.id).map((line) => {
-                          const lineAssets = assetsByLineId.get(String(line.id)) || [];
-                          const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
-                          const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
-                          const lineSfxAssets = lineAssets.filter(isSfxAsset);
-                          const lineVideoAssets = lineAssets.filter((asset) => isVideoAsset(asset));
-                          const lineTimingCues = timingCuesByLineId.get(String(line.id)) || [];
-                          return (
-                            <div key={String(line.id)} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950">
-                              <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                <span>#{line.line_index}</span>
-                                <CopyDialogueIdButton dialogueId={line.id} />
-                                <span>{line.line_type}</span>
-                                {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
-                                <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
-                                <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
-                                <LinkedAssetCount icon={<Sparkles size={13} />} count={lineSfxAssets.length} />
-                                <LinkedAssetCount icon={<Film size={13} />} count={lineVideoAssets.length} />
-                              </div>
-                              <EditableDialogueLine
-                                line={line}
-                                saving={savingDialogueLineId === String(line.id)}
-                                characters={data?.characters || []}
-                                soundEffects={soundEffects}
-                                lineTimingCues={lineTimingCues}
-                                sfxAssets={sceneSfxAssets}
-                                onSave={persistDialogueLine}
-                                onDelete={deleteDialogueLine}
-                              />
-                              <LineAssetBundle
-                                line={line}
-                                assets={lineAssets}
-                                allAssets={relinkableAssets}
-                                allLines={scriptLines}
-                                savingLinkAssetId={savingLinkAssetId}
-                                savingPrimaryAssetId={savingPrimaryAssetId}
-                                onRelinkAsset={persistAssetLineLink}
-                                onSetPrimaryAsset={persistDialoguePrimaryAsset}
-                                subtitleClips={subtitleClips}
-                                savingSubtitleClipId={savingSubtitleClipId}
-                                renderingSubtitleAssetId={renderingSubtitleAssetId}
-                                onSaveSubtitleClip={saveSubtitleClip}
-                                onRenderSubtitledVideo={renderSubtitledVideo}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </Panel>
@@ -1274,6 +1343,21 @@ function assetMetadata(asset: AnyRow): Record<string, unknown> {
 
 function subtitleMetadata(clip: AnyRow): Record<string, unknown> {
   return isRecord(clip.metadata) ? clip.metadata : {};
+}
+
+function lineMetadata(line: AnyRow): Record<string, unknown> {
+  return isRecord(line.metadata) ? line.metadata : {};
+}
+
+function isScriptLineCompleted(line: AnyRow) {
+  const metadata = lineMetadata(line);
+  if (Object.prototype.hasOwnProperty.call(metadata, 'script_line_completed')) {
+    return metadata.script_line_completed === true || metadata.script_line_completed === 'true';
+  }
+  return metadata.completed === true
+    || metadata.completed === 'true'
+    || metadata.final_completed === true
+    || metadata.final_completed === 'true';
 }
 
 function subtitleText(clip: AnyRow) {
