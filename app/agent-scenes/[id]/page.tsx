@@ -1376,12 +1376,18 @@ type AssetGroupSectionProps = Omit<AssetRowProps, 'asset'> & {
 
 function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: AssetGroupSectionProps) {
   const [showNonPrimary, setShowNonPrimary] = useState(false);
+  const [page, setPage] = useState(1);
   const primaryRows = rows.filter((asset) => Boolean(asset.is_primary));
   const nonPrimaryRows = rows.filter((asset) => !asset.is_primary);
   const visibleRows = [...primaryRows, ...(showNonPrimary ? nonPrimaryRows : [])];
-  const cappedRows = visibleRows.slice(0, showAssetHistory ? 50 : 8);
+  const pageSize = showAssetHistory ? 24 : 8;
+  const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const startIndex = (safePage - 1) * pageSize;
+  const pagedRows = visibleRows.slice(startIndex, startIndex + pageSize);
   const hiddenCount = nonPrimaryRows.length;
-  const hiddenByLimitCount = Math.max(0, visibleRows.length - cappedRows.length);
+  const canPagePrev = safePage > 1;
+  const canPageNext = safePage < pageCount;
 
   return (
     <div>
@@ -1389,33 +1395,107 @@ function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: A
         <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
           {assetIcon(type)} {type} <span className="text-xs text-slate-400">{rows.length}</span>
         </h3>
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowNonPrimary((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-          >
-            {showNonPrimary ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showNonPrimary ? `primary以外を隠す (${hiddenCount})` : `primary以外を表示 (${hiddenCount})`}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {visibleRows.length > pageSize && (
+            <AssetPaginationControls
+              page={safePage}
+              pageCount={pageCount}
+              startIndex={startIndex}
+              visibleCount={pagedRows.length}
+              totalCount={visibleRows.length}
+              canPrev={canPagePrev}
+              canNext={canPageNext}
+              onPrev={() => setPage((value) => Math.max(1, value - 1))}
+              onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
+            />
+          )}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowNonPrimary((value) => !value);
+                setPage(1);
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+            >
+              {showNonPrimary ? <EyeOff size={12} /> : <Eye size={12} />}
+              {showNonPrimary ? `primary以外を隠す (${hiddenCount})` : `primary以外を表示 (${hiddenCount})`}
+            </button>
+          )}
+        </div>
       </div>
-      {cappedRows.length === 0 ? (
+      {pagedRows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">
           primary素材なし。必要なら「primary以外を表示」で候補を確認できます。
         </p>
       ) : (
         <div className="space-y-2">
-          {cappedRows.map((asset) => (
+          {pagedRows.map((asset) => (
             <AssetRow key={String(asset.id)} asset={asset} {...assetRowProps} />
           ))}
-          {hiddenByLimitCount > 0 && (
-            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-              表示上限のため、さらに {hiddenByLimitCount} 件を省略中。
-            </p>
+          {visibleRows.length > pageSize && (
+            <div className="pt-1">
+              <AssetPaginationControls
+                page={safePage}
+                pageCount={pageCount}
+                startIndex={startIndex}
+                visibleCount={pagedRows.length}
+                totalCount={visibleRows.length}
+                canPrev={canPagePrev}
+                canNext={canPageNext}
+                onPrev={() => setPage((value) => Math.max(1, value - 1))}
+                onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
+              />
+            </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function AssetPaginationControls({
+  page,
+  pageCount,
+  startIndex,
+  visibleCount,
+  totalCount,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+}: {
+  page: number;
+  pageCount: number;
+  startIndex: number;
+  visibleCount: number;
+  totalCount: number;
+  canPrev: boolean;
+  canNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+      <span className="px-1">
+        {startIndex + 1}-{startIndex + visibleCount} / {totalCount} ・ {page}/{pageCount}
+      </span>
+      <button
+        type="button"
+        onClick={onPrev}
+        disabled={!canPrev}
+        className="rounded-full border border-slate-200 px-2 py-0.5 font-medium transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+      >
+        前へ
+      </button>
+      <button
+        type="button"
+        onClick={onNext}
+        disabled={!canNext}
+        className="rounded-full border border-slate-200 px-2 py-0.5 font-medium transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+      >
+        次へ
+      </button>
     </div>
   );
 }
