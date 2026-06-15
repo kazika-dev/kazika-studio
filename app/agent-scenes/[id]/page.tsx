@@ -56,7 +56,7 @@ export default function AgentSceneDetailPage() {
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
   const [savingLineCompletionId, setSavingLineCompletionId] = useState('');
   const [mergingScriptId, setMergingScriptId] = useState('');
-  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(true);
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
@@ -646,9 +646,12 @@ export default function AgentSceneDetailPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
       <div className="mx-auto max-w-7xl">
-        <Link href="/agent-scenes" className="mb-4 inline-flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-300">
-          <ArrowLeft size={16} /> 新シーン一覧へ
-        </Link>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <Link href="/agent-scenes" className="inline-flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-300">
+            <ArrowLeft size={16} /> 新シーン一覧へ
+          </Link>
+          <CopySceneIdButton sceneId={scene.id} />
+        </div>
 
         <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -656,7 +659,6 @@ export default function AgentSceneDetailPage() {
               <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{scene.story_title}</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
-                <CopySceneIdButton sceneId={scene.id} />
               </div>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                 {scene.summary || scene.description || 'シーン概要は未設定です。'}
@@ -818,6 +820,7 @@ export default function AgentSceneDetailPage() {
                                     <span>#{line.line_index}</span>
                                     <CopyDialogueIdButton dialogueId={line.id} />
                                     <span>{line.line_type}</span>
+                                    <LineTimestampBadges line={line} />
                                     {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
                                     <LinkedAssetCount icon={<ImageIcon size={13} />} count={lineImageAssets.length} />
                                     <LinkedAssetCount icon={<Mic2 size={13} />} count={lineAudioAssets.length} />
@@ -1361,6 +1364,52 @@ function isScriptLineCompleted(line: AnyRow) {
     || metadata.completed === 'true'
     || metadata.final_completed === true
     || metadata.final_completed === 'true';
+}
+
+function LineTimestampBadges({ line }: { line: AnyRow }) {
+  const createdAt = dateValue(line.created_at ?? lineMetadata(line).created_at);
+  const recreatedAt = scriptLineRecreatedAt(line);
+  const hasRecreated = Boolean(recreatedAt && (!createdAt || Math.abs(recreatedAt.getTime() - createdAt.getTime()) > 1000));
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+      {createdAt && <span title={createdAt.toISOString()}>作成 {formatSceneDateTime(createdAt)}</span>}
+      {hasRecreated && recreatedAt && <span title={recreatedAt.toISOString()}>再作成 {formatSceneDateTime(recreatedAt)}</span>}
+      {!hasRecreated && recreatedAt && <span title={recreatedAt.toISOString()}>再作成なし</span>}
+    </span>
+  );
+}
+
+function scriptLineRecreatedAt(line: AnyRow) {
+  const metadata = lineMetadata(line);
+  return dateValue(
+    line.recreated_at
+      ?? line.regenerated_at
+      ?? metadata.script_line_recreated_at
+      ?? metadata.script_line_regenerated_at
+      ?? metadata.recreated_at
+      ?? metadata.regenerated_at
+      ?? line.updated_at
+      ?? metadata.updated_at
+  );
+}
+
+function dateValue(value: unknown) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function formatSceneDateTime(value: Date) {
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(value);
 }
 
 function subtitleText(clip: AnyRow) {
