@@ -239,6 +239,7 @@ export default function AgentSceneDetailPage() {
     nextTtsText: string,
     timingCues: TimingCueInput[],
     videoGenerationMode: string,
+    videoGenerationProvider: string,
     speakerPatch?: { speaker_name: string; agent_character_id: string | null; line_type: string }
   ) => {
     if (!Number.isFinite(sceneId)) return;
@@ -259,6 +260,7 @@ export default function AgentSceneDetailPage() {
             line_type: speakerPatch.line_type,
           } : {}),
           video_generation_mode: videoGenerationMode,
+          video_generation_provider: videoGenerationProvider,
           timing_cues: timingCues.map((cue) => ({
             cue_type: cue.cue_type,
             start_seconds: cue.start_seconds || null,
@@ -1297,6 +1299,7 @@ function isFinalRenderSourceVideo(asset: AnyRow) {
   return burnedIn !== true && burnedIn !== 'true';
 }
 
+
 function isSfxAsset(asset: AnyRow) {
   const metadata = assetMetadata(asset);
   return asset.asset_type === 'sfx'
@@ -1716,6 +1719,8 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 
 const DIALOGUE_VIDEO_MODE_LIPSYNC = 'lipsync';
 const DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT = 'silent_back_view_then_mux';
+const VIDEO_GENERATION_PROVIDER_GROK = 'grok';
+const VIDEO_GENERATION_PROVIDER_LTX_FLF2V = 'ltx_2_3_flf2v';
 
 function dialogueVideoGenerationMode(line: AnyRow) {
   const metadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
@@ -1727,6 +1732,40 @@ function dialogueVideoGenerationMode(line: AnyRow) {
   const mode = direct || nested;
   return mode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC;
 }
+
+function explicitVideoGenerationProvider(line: AnyRow) {
+  const metadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
+  const nested = metadata.video_generation_settings && typeof metadata.video_generation_settings === 'object'
+    ? metadata.video_generation_settings as AnyRow
+    : {};
+  return typeof metadata.video_generation_provider === 'string' ? metadata.video_generation_provider
+    : typeof metadata.dialogue_video_generation_provider === 'string' ? metadata.dialogue_video_generation_provider
+    : typeof nested.video_generation_provider === 'string' ? nested.video_generation_provider
+    : typeof nested.video_provider === 'string' ? nested.video_provider
+    : '';
+}
+
+function videoGenerationProvider(line: AnyRow, cues: TimingCueInput[] = []) {
+  const raw = explicitVideoGenerationProvider(line);
+  if (raw === VIDEO_GENERATION_PROVIDER_LTX_FLF2V) return VIDEO_GENERATION_PROVIDER_LTX_FLF2V;
+  if (raw === VIDEO_GENERATION_PROVIDER_GROK) return VIDEO_GENERATION_PROVIDER_GROK;
+  return recommendedVideoGenerationProvider(String(line.line_type || 'dialogue'), cues);
+}
+
+function recommendedVideoGenerationProvider(lineType: string, cues: TimingCueInput[] = []) {
+  return shouldPreferLtxFlf2v(lineType, cues) ? VIDEO_GENERATION_PROVIDER_LTX_FLF2V : VIDEO_GENERATION_PROVIDER_GROK;
+}
+
+function shouldPreferLtxFlf2v(lineType: string, cues: TimingCueInput[] = []) {
+  const passiveLineType = lineType === 'scene_only' || lineType === 'inner_monologue';
+  if (!passiveLineType) return false;
+  return !normalizeCueInputs(cues).some((cue) => ['motion', 'camera', 'transition', 'other'].includes(cue.cue_type) && Boolean(cue.prompt.trim()));
+}
+
+function videoGenerationProviderLabel(provider: string) {
+  return provider === VIDEO_GENERATION_PROVIDER_LTX_FLF2V ? 'LTX 2.3 flf2v（同一画像 start/end）' : 'Grok';
+}
+
 
 
 function EditableDialogueLine({
@@ -1751,6 +1790,7 @@ function EditableDialogueLine({
     nextTtsText: string,
     timingCues: TimingCueInput[],
     videoGenerationMode: string,
+    videoGenerationProvider: string,
     speakerPatch?: { speaker_name: string; agent_character_id: string | null; line_type: string }
   ) => void;
   onDelete: (line: AnyRow) => void;
@@ -1779,16 +1819,22 @@ function EditableDialogueLine({
   const hasCustomTts = Boolean(savedTtsText && savedTtsText !== savedText);
   const savedCueInputs = buildTimingCueInputs(line, lineTimingCues);
   const savedVideoGenerationMode = dialogueVideoGenerationMode(line);
+  const hasExplicitVideoGenerationProvider = Boolean(explicitVideoGenerationProvider(line));
+  const savedVideoGenerationProvider = videoGenerationProvider(line, savedCueInputs);
   const [timingCues, setTimingCues] = useState<TimingCueInput[]>(savedCueInputs);
   const [videoGenerationMode, setVideoGenerationMode] = useState(savedVideoGenerationMode);
+  const [videoGenerationProviderOverride, setVideoGenerationProviderOverride] = useState<string | null>(null);
   const effectiveTtsText = customTts ? (ttsText.trim() || text.trim()) : text.trim();
-  const normalizedTimingCues = normalizeCueInputs(timingCues);
+  const normalizedTimingCues = useMemo(() => normalizeCueInputs(timingCues), [timingCues]);
+  const recommendedVideoGenerationProviderState = recommendedVideoGenerationProvider(lineType, normalizedTimingCues);
+  const videoGenerationProviderState = videoGenerationProviderOverride ?? (hasExplicitVideoGenerationProvider ? savedVideoGenerationProvider : recommendedVideoGenerationProviderState);
   const dirty = text !== savedText
     || effectiveTtsText !== savedTtsText
     || speakerName !== savedSpeakerName
     || agentCharacterId !== savedAgentCharacterId
     || lineType !== savedLineType
     || videoGenerationMode !== savedVideoGenerationMode
+    || videoGenerationProviderState !== savedVideoGenerationProvider
     || JSON.stringify(normalizedTimingCues) !== JSON.stringify(normalizeCueInputs(savedCueInputs));
 
   const resetFields = () => {
@@ -1801,6 +1847,7 @@ function EditableDialogueLine({
     setLineType(savedLineType);
     setTimingCues(savedCueInputs);
     setVideoGenerationMode(savedVideoGenerationMode);
+    setVideoGenerationProviderOverride(null);
   };
 
   if (!editing) {
@@ -1840,6 +1887,7 @@ function EditableDialogueLine({
               savedTtsText.trim() || savedText.trim(),
               normalizeCueInputs(savedCueInputs),
               event.target.checked ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC,
+              savedVideoGenerationProvider,
             )}
             className="mt-1 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
           />
@@ -1848,6 +1896,27 @@ function EditableDialogueLine({
             <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">{saving ? '保存中...' : 'チェックだけなら編集を開かずにここで切り替えできます。'}</span>
           </span>
         </label>
+        <div className="mt-2 rounded-lg bg-slate-50 px-2 py-2 text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+          <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            動画生成
+            <select
+              value={savedVideoGenerationProvider}
+              disabled={saving || !savedText.trim()}
+              onChange={(event) => onSave(
+                line,
+                savedText.trim(),
+                savedTtsText.trim() || savedText.trim(),
+                normalizeCueInputs(savedCueInputs),
+                savedVideoGenerationMode,
+                event.target.value,
+              )}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
+              <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v</option>
+            </select>
+          </label>
+        </div>
         {hasCustomTts && (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">TTS個別指定: {savedTtsText}</p>
         )}
@@ -2021,19 +2090,38 @@ function EditableDialogueLine({
       </div>
 
       <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 dark:border-violet-950 dark:bg-violet-950/40">
-        <div className="text-[11px] font-semibold text-violet-800 dark:text-violet-200">Grok dialogue動画の生成モード</div>
-        <label className="mt-2 flex items-start gap-2 text-xs leading-5 text-violet-800 dark:text-violet-200">
-          <input
-            type="checkbox"
-            checked={videoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT}
-            onChange={(event) => setVideoGenerationMode(event.target.checked ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC)}
-            className="mt-1 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
-          />
-          <span>
-            後ろ姿/口元を見せない映像として音声なしで生成し、DBの会話音声だけを後からmuxする
-            <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">口パクが崩れる時用。Grokには声・ナレーション・BGMを作らせず、背中/横後ろ/口元非表示の芝居に寄せます。</span>
-          </span>
+        <div className="text-[11px] font-semibold text-violet-800 dark:text-violet-200">動画生成エンジン / Grok生成モード</div>
+        <label className="mt-2 block text-[11px] font-medium text-violet-800 dark:text-violet-200">
+          生成エンジン
+          <select
+            value={videoGenerationProviderState}
+            onChange={(event) => setVideoGenerationProviderOverride(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-violet-900 dark:bg-slate-950 dark:text-slate-100"
+          >
+            <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
+            <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v（同一画像をfirst/endに使う）</option>
+          </select>
+          <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">推奨: {videoGenerationProviderLabel(recommendedVideoGenerationProviderState)}。scene_only/内省で動作キューがないものはLTX flf2v寄せ。</span>
         </label>
+        {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_GROK && (
+          <label className="mt-2 flex items-start gap-2 text-xs leading-5 text-violet-800 dark:text-violet-200">
+            <input
+              type="checkbox"
+              checked={videoGenerationMode === DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT}
+              onChange={(event) => setVideoGenerationMode(event.target.checked ? DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT : DIALOGUE_VIDEO_MODE_LIPSYNC)}
+              className="mt-1 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span>
+              後ろ姿/口元を見せない映像として音声なしで生成し、DBの会話音声だけを後からmuxする
+              <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">口パクが崩れる時用。Grokには声・ナレーション・BGMを作らせず、背中/横後ろ/口元非表示の芝居に寄せます。</span>
+            </span>
+          </label>
+        )}
+        {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_LTX_FLF2V && (
+          <p className="mt-2 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-violet-700 dark:bg-slate-950/60 dark:text-violet-200">
+            LTX flf2vはprimary dialogue画像をfirst frame/end frameの両方に同じ画像として渡す想定。セリフ本文ではなく、静かな視覚モーションだけを短いpromptにします。
+          </p>
+        )}
       </div>
 
       <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 dark:border-sky-950 dark:bg-sky-950/40">
@@ -2130,7 +2218,7 @@ function EditableDialogueLine({
         <button
           type="button"
           disabled={saving || !text.trim() || !dirty}
-          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues, videoGenerationMode, {
+          onClick={() => onSave(line, text.trim(), effectiveTtsText, normalizedTimingCues, videoGenerationMode, videoGenerationProviderState, {
             speaker_name: speakerName.trim(),
             agent_character_id: agentCharacterId || null,
             line_type: lineType,

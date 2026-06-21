@@ -37,6 +37,7 @@ export async function PATCH(
     const sfxAssetId = parseOptionalBigInt(body.sfx_asset_id);
     const timingCues = parseTimingCues(body.timing_cues);
     const videoGenerationMode = parseVideoGenerationMode(body.video_generation_mode);
+    const videoGenerationProvider = parseVideoGenerationProvider(body.video_generation_provider);
     const hasSpeakerPatch = Object.prototype.hasOwnProperty.call(body, 'speaker_name')
       || Object.prototype.hasOwnProperty.call(body, 'agent_character_id')
       || Object.prototype.hasOwnProperty.call(body, 'line_type');
@@ -109,20 +110,39 @@ export async function PATCH(
       ...(hasSpeakerPatch ? { speaker_changed_from_agent_scene: true } : {}),
     };
 
-    if (videoGenerationMode) {
+    if (videoGenerationMode || videoGenerationProvider) {
       const existingVideoSettings = metadataPatch.video_generation_settings && typeof metadataPatch.video_generation_settings === 'object'
         ? (metadataPatch.video_generation_settings as Record<string, unknown>)
         : {};
-      metadataPatch.dialogue_video_generation_mode = videoGenerationMode;
+      const existingVideoMode = typeof metadataPatch.dialogue_video_generation_mode === 'string' ? metadataPatch.dialogue_video_generation_mode
+        : typeof existingVideoSettings.dialogue_video_mode === 'string' ? existingVideoSettings.dialogue_video_mode
+        : 'lipsync';
+      const existingProvider = typeof metadataPatch.video_generation_provider === 'string' ? metadataPatch.video_generation_provider
+        : typeof metadataPatch.dialogue_video_generation_provider === 'string' ? metadataPatch.dialogue_video_generation_provider
+        : typeof existingVideoSettings.video_generation_provider === 'string' ? existingVideoSettings.video_generation_provider
+        : typeof existingVideoSettings.video_provider === 'string' ? existingVideoSettings.video_provider
+        : 'grok';
+      const nextVideoMode = videoGenerationMode || existingVideoMode;
+      const nextProvider = videoGenerationProvider || existingProvider;
+      metadataPatch.dialogue_video_generation_mode = nextVideoMode;
+      metadataPatch.video_generation_provider = nextProvider;
+      metadataPatch.dialogue_video_generation_provider = nextProvider;
       metadataPatch.video_generation_settings = {
         ...existingVideoSettings,
-        dialogue_video_mode: videoGenerationMode,
-        no_grok_voice: videoGenerationMode === 'silent_back_view_then_mux',
-        back_view_only: videoGenerationMode === 'silent_back_view_then_mux',
-        hide_mouth: videoGenerationMode === 'silent_back_view_then_mux',
+        dialogue_video_mode: nextVideoMode,
+        video_generation_provider: nextProvider,
+        video_provider: nextProvider,
+        no_grok_voice: nextVideoMode === 'silent_back_view_then_mux',
+        back_view_only: nextVideoMode === 'silent_back_view_then_mux',
+        hide_mouth: nextVideoMode === 'silent_back_view_then_mux',
         mux_db_audio_after: true,
+        ltx_workflow_mode: nextProvider === 'ltx_2_3_flf2v' ? 'flf2v' : null,
+        ltx_flf2v_first_frame_source: nextProvider === 'ltx_2_3_flf2v' ? 'primary_dialogue_image' : null,
+        ltx_flf2v_end_frame_source: nextProvider === 'ltx_2_3_flf2v' ? 'primary_dialogue_image' : null,
+        ltx_flf2v_use_same_primary_image_for_first_and_last_frame: nextProvider === 'ltx_2_3_flf2v',
       };
     }
+
 
     const updatedLineResult = await query(
       `
@@ -578,6 +598,7 @@ type ParsedTimingCue = {
 };
 
 const VALID_VIDEO_GENERATION_MODES = new Set(['lipsync', 'silent_back_view_then_mux']);
+const VALID_VIDEO_GENERATION_PROVIDERS = new Set(['grok', 'ltx_2_3_flf2v']);
 const VALID_LINE_TYPES = new Set(['dialogue', 'action', 'inner_monologue', 'narration', 'scene_only', 'system']);
 
 function parseLineType(value: unknown, fallback: string) {
@@ -600,6 +621,15 @@ function parseVideoGenerationMode(value: unknown) {
   if (value == null || value === '') return null;
   if (typeof value !== 'string' || !VALID_VIDEO_GENERATION_MODES.has(value)) {
     throw new Error('動画生成モードが不正です');
+  }
+  return value;
+}
+
+
+function parseVideoGenerationProvider(value: unknown) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !VALID_VIDEO_GENERATION_PROVIDERS.has(value)) {
+    throw new Error('動画生成エンジンが不正です');
   }
   return value;
 }
