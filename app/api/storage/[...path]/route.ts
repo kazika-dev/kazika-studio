@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
-import { fetchFileFromStorageViaSignedUrl, getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
+import { getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
 
 function contentDispositionFilename(filePath: string) {
   const rawName = filePath.split('/').filter(Boolean).pop() || 'download';
@@ -156,19 +156,8 @@ export async function GET(
           },
         });
       } catch (rangeError) {
-        console.warn('[Storage Proxy] SDK range fetch failed; falling back to signed URL server fetch:', rangeError instanceof Error ? rangeError.message : String(rangeError));
-        const fallback = await fetchFileFromStorageViaSignedUrl(filePath, rangeHeader);
-        return new NextResponse(new Uint8Array(fallback.data), {
-          status: fallback.status === 206 ? 206 : 200,
-          headers: {
-            'Content-Type': fallback.contentType,
-            'Cache-Control': 'private, max-age=3600',
-            'Accept-Ranges': 'bytes',
-            ...(fallback.contentRange ? { 'Content-Range': fallback.contentRange } : {}),
-            'Content-Length': fallback.data.length.toString(),
-            ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
-          },
-        });
+        console.error('[Storage Proxy] SDK range fetch failed:', rangeError instanceof Error ? rangeError.message : String(rangeError));
+        throw rangeError;
       }
     }
 
