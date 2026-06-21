@@ -39,7 +39,18 @@ export function getStorageBucketName(): string {
  */
 export function getStorageClient(): Storage {
   if (!storageClient) {
-    // 環境変数から認証情報を取得
+    // Cloud Run では実行サービスアカウントの ADC を使う。
+    // GCP_SERVICE_ACCOUNT_KEY を明示 credentials として渡すと google-auth-library が
+    // https://www.googleapis.com/oauth2/v4/token にトークン交換しに行き、
+    // Cloud Run 上で ERR_STREAM_PREMATURE_CLOSE になることがある。
+    if (process.env.K_SERVICE) {
+      storageClient = new Storage({
+        projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || undefined,
+      });
+      return storageClient;
+    }
+
+    // ローカル実行では環境変数から認証情報を取得
     const credentials = process.env.GCP_SERVICE_ACCOUNT_KEY;
 
     if (!credentials) {
