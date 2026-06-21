@@ -1,9 +1,108 @@
 import { Storage } from '@google-cloud/storage';
+import crypto from 'node:crypto';
 
 /**
  * GCP Storageクライアントのシングルトンインスタンス
  */
 let storageClient: Storage | null = null;
+
+function encodeRfc3986(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function normalizeStorageObjectPath(filePath: string): string {
+  let path = String(filePath || '').trim();
+  if (!path) return '';
+  try {
+    const parsed = new URL(path);
+    if (parsed.hostname === 'storage.googleapis.com') {
+      const bucketName = getStorageBucketName();
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if (parts[0] === bucketName) {
+        path = parts.slice(1).join('/');
+      }
+    }
+  } catch {
+    // Not a URL; keep treating it as an object path.
+  }
+  return path.replace(/^\/+/, '').replace(/^api\/storage\//, '').split('?')[0];
+}
+
+function getServiceAccountCredentials(): { client_email: string; private_key: string; project_id?: string } {
+  const credentials = process.env.GCP_SERVICE_ACCOUNT_KEY;
+
+  if (!credentials) {
+    throw new Error('GCP_SERVICE_ACCOUNT_KEY environment variable is not set');
+  }
+
+  try {
+    const credentialsJson = JSON.parse(credentials);
+    if (!credentialsJson.client_email || !credentialsJson.private_key) {
+      throw new Error('client_email/private_key is missing');
+    }
+    return credentialsJson;
+  } catch (error) {
+    throw new Error('Failed to parse GCP_SERVICE_ACCOUNT_KEY: ' + (error as Error).message);
+  }
+}
+
+function createLocalV4ReadSignedUrl(filePath: string, expiresInSeconds = 300): string {
+  const bucketName = getStorageBucketName();
+  const objectPath = normalizeStorageObjectPath(filePath);
+  const credentials = getServiceAccountCredentials();
+  const now = new Date();
+  const iso = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const datestamp = iso.slice(0, 8);
+  const credentialScope = `${datestamp}/auto/storage/goog4_request`;
+  const host = 'storage.googleapis.com';
+  const canonicalUri = `/${encodeRfc3986(bucketName)}/${objectPath.split('/').map(encodeRfc3986).join('/')}`;
+  const queryParams: Record<string, string> = {
+    'X-Goog-Algorithm': 'GOOG4-RSA-SHA256',
+    'X-Goog-Credential': `${credentials.client_email}/${credentialScope}`,
+    'X-Goog-Date': iso,
+    'X-Goog-Expires': String(expiresInSeconds),
+    'X-Goog-SignedHeaders': 'host',
+  };
+  const canonicalQueryString = Object.entries(queryParams)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
+    .join('&');
+  const canonicalHeaders = `host:${host}\n`;
+  const canonicalRequest = ['GET', canonicalUri, canonicalQueryString, canonicalHeaders, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
+  const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
+  const stringToSign = ['GOOG4-RSA-SHA256', iso, credentialScope, hashedCanonicalRequest].join('\n');
+  const signature = crypto.sign('RSA-SHA256', Buffer.from(stringToSign), credentials.private_key).toString('hex');
+
+  return `https://${host}${canonicalUri}?${canonicalQueryString}&X-Goog-Signature=${signature}`;
+}
+
+export async function fetchFileFromStorageViaSignedUrl(filePath: string, rangeHeader?: string): Promise<{
+  data: Buffer;
+  contentType: string;
+  size: number | null;
+  contentRange: string | null;
+  status: number;
+}> {
+  const signedUrl = createLocalV4ReadSignedUrl(filePath);
+  const response = await fetch(signedUrl, rangeHeader ? { headers: { Range: rangeHeader } } : undefined);
+
+  if (!response.ok) {
+    throw new Error(`Signed storage fetch failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = Buffer.from(await response.arrayBuffer());
+  const contentRange = response.headers.get('content-range');
+  const rangeSize = contentRange?.match(/\/(\d+)$/)?.[1];
+  const size = rangeSize ? Number(rangeSize) : Number(response.headers.get('content-length') || data.length);
+
+  return {
+    data,
+    contentType: response.headers.get('content-type') || 'application/octet-stream',
+    size: Number.isFinite(size) ? size : null,
+    contentRange,
+    status: response.status,
+  };
+}
 
 export function getStorageBucketName(): string {
   const bucketName = process.env.GCP_STORAGE_BUCKET;
@@ -142,22 +241,33 @@ export async function getFileFromStorage(filePath: string): Promise<{
   data: Buffer;
   contentType: string;
 }> {
-  const storage = getStorageClient();
-  const bucketName = getStorageBucketName();
+  const objectPath = normalizeStorageObjectPath(filePath);
 
-  const bucket = storage.bucket(bucketName);
-  const file = bucket.file(filePath);
+  try {
+    const storage = getStorageClient();
+    const bucketName = getStorageBucketName();
 
-  // ファイルのメタデータを取得
-  const [metadata] = await file.getMetadata();
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(objectPath);
 
-  // ファイルデータをダウンロード
-  const [data] = await file.download();
+    // ファイルのメタデータを取得
+    const [metadata] = await file.getMetadata();
 
-  return {
-    data,
-    contentType: metadata.contentType || 'application/octet-stream',
-  };
+    // ファイルデータをダウンロード
+    const [data] = await file.download();
+
+    return {
+      data,
+      contentType: metadata.contentType || 'application/octet-stream',
+    };
+  } catch (error) {
+    console.warn('[gcp-storage] SDK download failed; falling back to local V4 signed URL fetch:', error instanceof Error ? error.message : String(error));
+    const fallback = await fetchFileFromStorageViaSignedUrl(objectPath);
+    return {
+      data: fallback.data,
+      contentType: fallback.contentType,
+    };
+  }
 }
 
 /**

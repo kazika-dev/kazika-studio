@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
-import { getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
+import { fetchFileFromStorageViaSignedUrl, getFileFromStorage, getStorageBucketName, getStorageClient } from '@/lib/gcp-storage';
 
 function contentDispositionFilename(filePath: string) {
   const rawName = filePath.split('/').filter(Boolean).pop() || 'download';
@@ -121,39 +121,55 @@ export async function GET(
     // Video/audio elements commonly request byte ranges. Without 206 responses,
     // Safari/iOS and some Chromium cases fail to start playback from this proxy.
     if (rangeHeader) {
-      const storage = getStorageClient();
-      const bucketName = getStorageBucketName();
-      const file = storage.bucket(bucketName).file(filePath);
-      const [metadata] = await file.getMetadata();
-      const size = Number(metadata.size || 0);
-      const contentType = metadata.contentType || 'application/octet-stream';
-      const parsedRange = parseRange(rangeHeader, size);
+      try {
+        const storage = getStorageClient();
+        const bucketName = getStorageBucketName();
+        const file = storage.bucket(bucketName).file(filePath);
+        const [metadata] = await file.getMetadata();
+        const size = Number(metadata.size || 0);
+        const contentType = metadata.contentType || 'application/octet-stream';
+        const parsedRange = parseRange(rangeHeader, size);
 
-      if (!parsedRange) {
-        return new NextResponse(null, {
-          status: 416,
+        if (!parsedRange) {
+          return new NextResponse(null, {
+            status: 416,
+            headers: {
+              'Content-Range': `bytes */${size}`,
+              'Accept-Ranges': 'bytes',
+            },
+          });
+        }
+
+        const { start, end } = parsedRange;
+        const { data } = await getFileRangeFromStorage(bucketName, filePath, start, end);
+        console.log('Storage proxy: Range retrieved successfully, bucket:', bucketName, 'content-type:', contentType, 'range:', `${start}-${end}/${size}`, 'size:', data.length);
+
+        return new NextResponse(new Uint8Array(data), {
+          status: 206,
           headers: {
-            'Content-Range': `bytes */${size}`,
+            'Content-Type': contentType,
+            'Cache-Control': 'private, max-age=3600',
             'Accept-Ranges': 'bytes',
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Content-Length': data.length.toString(),
+            ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
+          },
+        });
+      } catch (rangeError) {
+        console.warn('[Storage Proxy] SDK range fetch failed; falling back to signed URL server fetch:', rangeError instanceof Error ? rangeError.message : String(rangeError));
+        const fallback = await fetchFileFromStorageViaSignedUrl(filePath, rangeHeader);
+        return new NextResponse(new Uint8Array(fallback.data), {
+          status: fallback.status === 206 ? 206 : 200,
+          headers: {
+            'Content-Type': fallback.contentType,
+            'Cache-Control': 'private, max-age=3600',
+            'Accept-Ranges': 'bytes',
+            ...(fallback.contentRange ? { 'Content-Range': fallback.contentRange } : {}),
+            'Content-Length': fallback.data.length.toString(),
+            ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
           },
         });
       }
-
-      const { start, end } = parsedRange;
-      const { data } = await getFileRangeFromStorage(bucketName, filePath, start, end);
-      console.log('Storage proxy: Range retrieved successfully, bucket:', bucketName, 'content-type:', contentType, 'range:', `${start}-${end}/${size}`, 'size:', data.length);
-
-      return new NextResponse(new Uint8Array(data), {
-        status: 206,
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': 'private, max-age=3600',
-          'Accept-Ranges': 'bytes',
-          'Content-Range': `bytes ${start}-${end}/${size}`,
-          'Content-Length': data.length.toString(),
-          ...(download ? { 'Content-Disposition': contentDispositionFilename(filePath) } : {}),
-        },
-      });
     }
 
     // GCPストレージからファイルを取得
