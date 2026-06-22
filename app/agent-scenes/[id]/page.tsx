@@ -1951,6 +1951,7 @@ function dialogueVideoGenerationMode(line: AnyRow) {
 }
 
 function explicitVideoGenerationProvider(line: AnyRow) {
+  if (typeof line.video_generation_provider === 'string') return line.video_generation_provider;
   const metadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
   const nested = metadata.video_generation_settings && typeof metadata.video_generation_settings === 'object'
     ? metadata.video_generation_settings as AnyRow

@@ -110,36 +110,47 @@ export async function PATCH(
       ...(hasSpeakerPatch ? { speaker_changed_from_agent_scene: true } : {}),
     };
 
+    const existingVideoSettings = metadataPatch.video_generation_settings && typeof metadataPatch.video_generation_settings === 'object'
+      ? (metadataPatch.video_generation_settings as Record<string, unknown>)
+      : {};
+    const existingProvider = typeof line.video_generation_provider === 'string' ? line.video_generation_provider
+      : typeof metadataPatch.video_generation_provider === 'string' ? metadataPatch.video_generation_provider
+      : typeof metadataPatch.dialogue_video_generation_provider === 'string' ? metadataPatch.dialogue_video_generation_provider
+      : typeof existingVideoSettings.video_generation_provider === 'string' ? existingVideoSettings.video_generation_provider
+      : typeof existingVideoSettings.video_provider === 'string' ? existingVideoSettings.video_provider
+      : 'ltx_2_3_flf2v';
+    const nextVideoGenerationProvider = videoGenerationProvider || existingProvider;
+
+    // The provider/model now lives in script_lines.video_generation_provider.
+    // Remove legacy metadata mirrors to keep the DB/UI unambiguous.
+    delete metadataPatch.video_generation_provider;
+    delete metadataPatch.dialogue_video_generation_provider;
+    const sanitizedVideoSettings: Record<string, unknown> = { ...existingVideoSettings };
+    delete sanitizedVideoSettings.video_generation_provider;
+    delete sanitizedVideoSettings.video_provider;
+    delete sanitizedVideoSettings.ltx_workflow_mode;
+    delete sanitizedVideoSettings.ltx_flf2v_first_frame_source;
+    delete sanitizedVideoSettings.ltx_flf2v_end_frame_source;
+    delete sanitizedVideoSettings.ltx_flf2v_use_same_primary_image_for_first_and_last_frame;
+    if (Object.keys(sanitizedVideoSettings).length > 0) {
+      metadataPatch.video_generation_settings = sanitizedVideoSettings;
+    } else {
+      delete metadataPatch.video_generation_settings;
+    }
+
     if (videoGenerationMode || videoGenerationProvider) {
-      const existingVideoSettings = metadataPatch.video_generation_settings && typeof metadataPatch.video_generation_settings === 'object'
-        ? (metadataPatch.video_generation_settings as Record<string, unknown>)
-        : {};
       const existingVideoMode = typeof metadataPatch.dialogue_video_generation_mode === 'string' ? metadataPatch.dialogue_video_generation_mode
-        : typeof existingVideoSettings.dialogue_video_mode === 'string' ? existingVideoSettings.dialogue_video_mode
+        : typeof sanitizedVideoSettings.dialogue_video_mode === 'string' ? sanitizedVideoSettings.dialogue_video_mode
         : 'lipsync';
-      const existingProvider = typeof metadataPatch.video_generation_provider === 'string' ? metadataPatch.video_generation_provider
-        : typeof metadataPatch.dialogue_video_generation_provider === 'string' ? metadataPatch.dialogue_video_generation_provider
-        : typeof existingVideoSettings.video_generation_provider === 'string' ? existingVideoSettings.video_generation_provider
-        : typeof existingVideoSettings.video_provider === 'string' ? existingVideoSettings.video_provider
-        : 'grok';
       const nextVideoMode = videoGenerationMode || existingVideoMode;
-      const nextProvider = videoGenerationProvider || existingProvider;
       metadataPatch.dialogue_video_generation_mode = nextVideoMode;
-      metadataPatch.video_generation_provider = nextProvider;
-      metadataPatch.dialogue_video_generation_provider = nextProvider;
       metadataPatch.video_generation_settings = {
-        ...existingVideoSettings,
+        ...sanitizedVideoSettings,
         dialogue_video_mode: nextVideoMode,
-        video_generation_provider: nextProvider,
-        video_provider: nextProvider,
         no_grok_voice: nextVideoMode === 'silent_back_view_then_mux',
         back_view_only: nextVideoMode === 'silent_back_view_then_mux',
         hide_mouth: nextVideoMode === 'silent_back_view_then_mux',
         mux_db_audio_after: true,
-        ltx_workflow_mode: nextProvider === 'ltx_2_3_flf2v' ? 'flf2v' : null,
-        ltx_flf2v_first_frame_source: nextProvider === 'ltx_2_3_flf2v' ? 'primary_dialogue_image' : null,
-        ltx_flf2v_end_frame_source: nextProvider === 'ltx_2_3_flf2v' ? 'primary_dialogue_image' : null,
-        ltx_flf2v_use_same_primary_image_for_first_and_last_frame: nextProvider === 'ltx_2_3_flf2v',
       };
     }
 
@@ -161,6 +172,7 @@ export async function PATCH(
             speaker_name = $13,
             agent_character_id = $14,
             line_type = $15,
+            video_generation_provider = $16,
             updated_at = now()
         where id = $1
         returning *
@@ -181,6 +193,7 @@ export async function PATCH(
         nextSpeakerName || null,
         nextAgentCharacterId,
         nextLineType,
+        nextVideoGenerationProvider,
       ]
     );
 
