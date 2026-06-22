@@ -2045,7 +2045,9 @@ function EditableDialogueLine({
   const effectiveTtsText = customTts ? (ttsText.trim() || text.trim()) : text.trim();
   const normalizedTimingCues = useMemo(() => normalizeCueInputs(timingCues), [timingCues]);
   const recommendedVideoGenerationProviderState = recommendedVideoGenerationProvider(lineType, normalizedTimingCues);
-  const videoGenerationProviderState = videoGenerationProviderOverride ?? (hasExplicitVideoGenerationProvider ? savedVideoGenerationProvider : recommendedVideoGenerationProviderState);
+  const videoGenerationProviderState = lineType === 'dialogue'
+    ? VIDEO_GENERATION_PROVIDER_GROK
+    : videoGenerationProviderOverride ?? (hasExplicitVideoGenerationProvider ? savedVideoGenerationProvider : recommendedVideoGenerationProviderState);
   const dirty = text !== savedText
     || effectiveTtsText !== savedTtsText
     || speakerName !== savedSpeakerName

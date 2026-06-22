@@ -119,7 +119,10 @@ export async function PATCH(
       : typeof existingVideoSettings.video_generation_provider === 'string' ? existingVideoSettings.video_generation_provider
       : typeof existingVideoSettings.video_provider === 'string' ? existingVideoSettings.video_provider
       : 'ltx_2_3_flf2v';
-    const nextVideoGenerationProvider = videoGenerationProvider || existingProvider;
+    const requestedVideoGenerationProvider = videoGenerationProvider || existingProvider;
+    const nextVideoGenerationProvider = nextLineType === 'dialogue'
+      ? 'grok'
+      : requestedVideoGenerationProvider;
 
     // The provider/model now lives in script_lines.video_generation_provider.
     // Remove legacy metadata mirrors to keep the DB/UI unambiguous.
