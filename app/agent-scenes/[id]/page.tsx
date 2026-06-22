@@ -41,6 +41,40 @@ type TimingCueInput = {
   sfx_asset_metadata?: AnyRow;
 };
 
+
+type ImageGenerationSettings = {
+  background: string;
+  character_placement: string;
+  props: string;
+  camera_composition: string;
+  lighting: string;
+  style_rules: string;
+  negative_prompt: string;
+  notes: string;
+};
+
+const IMAGE_GENERATION_SETTING_FIELDS: Array<{ key: keyof ImageGenerationSettings; label: string; placeholder: string; rows?: number }> = [
+  { key: 'background', label: '背景 / ロケーション', placeholder: '例: 放課後の教室。窓際に夕焼け、机は少し乱れていて、黒板には日直の名前が残っている。', rows: 3 },
+  { key: 'character_placement', label: 'キャラ配置', placeholder: '例: 主人公は画面右手前で背中向き、ヒロインは窓際の席に座る。2人の距離は遠め。', rows: 3 },
+  { key: 'props', label: '小物・象徴アイテム', placeholder: '例: 机の上に古いスマホ、未回収プリント、折れたシャーペン芯。スマホ画面は読めない程度に光る。', rows: 3 },
+  { key: 'camera_composition', label: 'カメラ / 構図', placeholder: '例: 16:9、ローアングル寄りのミディアムワイド。机と窓枠で奥行きを作る。', rows: 2 },
+  { key: 'lighting', label: '光・時間帯・空気感', placeholder: '例: 夕方の斜光、埃が少し浮く、全体は低彩度で静かな緊張感。', rows: 2 },
+  { key: 'style_rules', label: '絵柄・生成ルール', placeholder: '例: Japanese full-color TV anime still, clean line art, cinematic shadows。文字・字幕・吹き出しなし。', rows: 3 },
+  { key: 'negative_prompt', label: 'NG / 禁止事項', placeholder: '例: no text, no captions, no speech balloons, no split screen, no extra fingers, no gore。', rows: 2 },
+  { key: 'notes', label: '制作メモ', placeholder: '例: このシーンは「言葉にしない孤独」を小物で見せる。スマホ通知は読ませない。', rows: 2 },
+];
+
+const EMPTY_IMAGE_GENERATION_SETTINGS: ImageGenerationSettings = {
+  background: '',
+  character_placement: '',
+  props: '',
+  camera_composition: '',
+  lighting: '',
+  style_rules: '',
+  negative_prompt: '',
+  notes: '',
+};
+
 export default function AgentSceneDetailPage() {
   const params = useParams();
   const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -62,6 +96,8 @@ export default function AgentSceneDetailPage() {
   const [primaryError, setPrimaryError] = useState('');
   const [dialogueError, setDialogueError] = useState('');
   const [subtitleError, setSubtitleError] = useState('');
+  const [imagePromptSettingsError, setImagePromptSettingsError] = useState('');
+  const [savingImagePromptSettings, setSavingImagePromptSettings] = useState(false);
   const [savingSubtitles, setSavingSubtitles] = useState(false);
   const [savingSubtitleClipId, setSavingSubtitleClipId] = useState('');
   const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
@@ -145,6 +181,11 @@ export default function AgentSceneDetailPage() {
     return groups;
   }, [materialAssets]);
 
+  const sceneImageGenerationSettings = useMemo(
+    () => normalizeImageGenerationSettings(data?.scene),
+    [data?.scene]
+  );
+
 
   const relinkableAssets = useMemo(
     () => (data?.assets || []).filter((asset) => isRelinkableAsset(asset)).sort(sortSceneAssets),
@@ -165,6 +206,32 @@ export default function AgentSceneDetailPage() {
     }
     return groups;
   }, [relinkableAssets]);
+
+  const persistImageGenerationSettings = async (nextSettings: ImageGenerationSettings) => {
+    if (!Number.isFinite(sceneId)) return;
+    setSavingImagePromptSettings(true);
+    setImagePromptSettingsError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_prompt_settings: nextSettings }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '画像生成プロンプト設定の保存に失敗しました');
+      }
+      const updatedScene = result.data?.scene;
+      setData((current) => current && updatedScene ? {
+        ...current,
+        scene: { ...current.scene, ...updatedScene },
+      } : current);
+    } catch (err) {
+      setImagePromptSettingsError(err instanceof Error ? err.message : '画像生成プロンプト設定の保存に失敗しました');
+    } finally {
+      setSavingImagePromptSettings(false);
+    }
+  };
 
   const persistAssetLineLink = async (asset: AnyRow, nextLineId: string) => {
     if (!Number.isFinite(sceneId)) return;
@@ -695,6 +762,16 @@ export default function AgentSceneDetailPage() {
               )}
             </Panel>
 
+            <Panel title="画像生成プロンプト設定" icon={<Sparkles size={18} />}>
+              <ImageGenerationSettingsEditor
+                scene={scene}
+                settings={sceneImageGenerationSettings}
+                saving={savingImagePromptSettings}
+                error={imagePromptSettingsError}
+                onSave={persistImageGenerationSettings}
+              />
+            </Panel>
+
             <Panel title="キャラクター配置図" icon={<Layers size={18} />}>
               {sceneLayouts.length === 0 && layoutAssets.length === 0 ? (
                 <Empty>まだ配置図がありません。シーン作成時に layout_reference asset として登録します。</Empty>
@@ -1044,6 +1121,146 @@ function PromptBox({ label, text }: { label: string; text: string }) {
       <p className="line-clamp-4 text-xs leading-5 text-slate-600 dark:text-slate-300">{text}</p>
     </div>
   );
+}
+
+function ImageGenerationSettingsEditor({
+  scene,
+  settings,
+  saving,
+  error,
+  onSave,
+}: {
+  scene: AnyRow;
+  settings: ImageGenerationSettings;
+  saving: boolean;
+  error: string;
+  onSave: (settings: ImageGenerationSettings) => void;
+}) {
+  const [draft, setDraft] = useState<ImageGenerationSettings>(settings);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings]);
+
+  const normalizedDraft = normalizeImageGenerationSettings(draft);
+  const dirty = JSON.stringify(normalizedDraft) !== JSON.stringify(settings);
+  const hasAnyValue = Object.values(settings).some((value) => value.trim());
+  const promptPreview = buildSceneImagePrompt(scene, normalizedDraft);
+
+  const updateField = (key: keyof ImageGenerationSettings, value: string) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const copyPrompt = async () => {
+    if (!promptPreview) return;
+    await navigator.clipboard.writeText(promptPreview);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-indigo-50 px-3 py-2 text-xs leading-5 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
+        背景・配置・小物・構図など、画像生成前に固定したい設計をここに保存します。保存先はシーンの正式カラムなので、あとで生成スクリプトからそのまま拾えます。
+      </div>
+      {!hasAnyValue && (
+        <p className="rounded-xl border border-dashed border-indigo-200 px-3 py-2 text-xs text-slate-500 dark:border-indigo-900 dark:text-slate-400">
+          まだ未設定です。まずは背景・小物・NGだけでも入れておくと生成がだいぶ安定します。
+        </p>
+      )}
+      <div className="grid gap-3 md:grid-cols-2">
+        {IMAGE_GENERATION_SETTING_FIELDS.map((field) => (
+          <label key={field.key} className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {field.label}
+            <textarea
+              value={draft[field.key]}
+              onChange={(event) => updateField(field.key, event.target.value)}
+              rows={field.rows || 2}
+              placeholder={field.placeholder}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-800 dark:focus:ring-indigo-950"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">統合プロンプトプレビュー</p>
+          <button
+            type="button"
+            onClick={copyPrompt}
+            disabled={!promptPreview}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? 'copied' : 'copy prompt'}
+          </button>
+        </div>
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-[11px] leading-5 text-slate-700 dark:bg-slate-900 dark:text-slate-200">{promptPreview || 'まだプレビューできる内容がありません。'}</pre>
+      </div>
+      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-300">{error}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={saving || !dirty}
+          onClick={() => onSave(normalizedDraft)}
+          className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+        >
+          {saving ? '保存中...' : '保存'}
+        </button>
+        <button
+          type="button"
+          disabled={saving || !dirty}
+          onClick={() => setDraft(settings)}
+          className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+          取り消し
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function normalizeImageGenerationSettings(value: unknown): ImageGenerationSettings {
+  const source = isRecord(value) ? value : {};
+  const columnByKey: Record<keyof ImageGenerationSettings, string> = {
+    background: 'image_prompt_background',
+    character_placement: 'image_prompt_character_placement',
+    props: 'image_prompt_props',
+    camera_composition: 'image_prompt_camera_composition',
+    lighting: 'image_prompt_lighting',
+    style_rules: 'image_prompt_style_rules',
+    negative_prompt: 'image_prompt_negative',
+    notes: 'image_prompt_notes',
+  };
+
+  return IMAGE_GENERATION_SETTING_FIELDS.reduce<ImageGenerationSettings>((settings, field) => {
+    const raw = source[columnByKey[field.key]];
+    settings[field.key] = typeof raw === 'string' ? raw.trim() : '';
+    return settings;
+  }, { ...EMPTY_IMAGE_GENERATION_SETTINGS });
+}
+
+function buildSceneImagePrompt(scene: AnyRow, settings: ImageGenerationSettings) {
+  const sceneMetadata = isRecord(scene.metadata) ? scene.metadata : {};
+  const projectKey = typeof sceneMetadata.project_key === 'string' ? sceneMetadata.project_key : '';
+  const lines = [
+    `Scene: ${String(scene.title || '').trim()}`,
+    scene.summary || scene.description ? `Scene summary: ${String(scene.summary || scene.description).trim()}` : '',
+    [scene.location, scene.time_of_day, scene.mood].filter(Boolean).length
+      ? `Location/time/mood: ${[scene.location, scene.time_of_day, scene.mood].filter(Boolean).join(', ')}`
+      : '',
+    projectKey ? `Project key: ${projectKey}` : '',
+    settings.background ? `Background/location: ${settings.background}` : '',
+    settings.character_placement ? `Character placement: ${settings.character_placement}` : '',
+    settings.props ? `Props/symbolic items: ${settings.props}` : '',
+    settings.camera_composition ? `Camera/composition: ${settings.camera_composition}` : '',
+    settings.lighting ? `Lighting/atmosphere: ${settings.lighting}` : '',
+    settings.style_rules ? `Style/generation rules: ${settings.style_rules}` : '',
+    settings.negative_prompt ? `Negative prompt / avoid: ${settings.negative_prompt}` : '',
+    settings.notes ? `Production notes: ${settings.notes}` : '',
+  ];
+  return lines.filter((line) => typeof line === 'string' && line.trim()).join('\n');
 }
 
 function MiniCount({ label, value }: { label: string; value: number }) {

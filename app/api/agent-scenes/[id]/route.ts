@@ -2,6 +2,32 @@ import { NextResponse } from 'next/server';
 import { createKazikaClient } from '@/lib/kazika-db-client';
 import { query } from '@/lib/db';
 
+const IMAGE_PROMPT_SETTING_KEYS = [
+  'background',
+  'character_placement',
+  'props',
+  'camera_composition',
+  'lighting',
+  'style_rules',
+  'negative_prompt',
+  'notes',
+] as const;
+
+function sanitizeImagePromptSettings(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+  const settings: Record<string, string> = {};
+  for (const key of IMAGE_PROMPT_SETTING_KEYS) {
+    const raw = source[key];
+    settings[key] = typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  return settings;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -322,6 +348,83 @@ export async function GET(
   } catch (error: unknown) {
     console.error('Failed to fetch agent scene:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch agent scene';
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const db = await createKazikaClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const sceneId = Number.parseInt(id, 10);
+    if (!Number.isFinite(sceneId)) {
+      return NextResponse.json({ success: false, error: 'Invalid scene id' }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const imagePromptSettings = sanitizeImagePromptSettings(body?.image_prompt_settings);
+    if (!imagePromptSettings) {
+      return NextResponse.json({ success: false, error: 'Invalid image generation settings' }, { status: 400 });
+    }
+
+    const result = await query(
+      `
+        update kazika_studio_agents.story_scenes_domain ssd
+        set
+          image_prompt_background = nullif($3, ''),
+          image_prompt_character_placement = nullif($4, ''),
+          image_prompt_props = nullif($5, ''),
+          image_prompt_camera_composition = nullif($6, ''),
+          image_prompt_lighting = nullif($7, ''),
+          image_prompt_style_rules = nullif($8, ''),
+          image_prompt_negative = nullif($9, ''),
+          image_prompt_notes = nullif($10, ''),
+          image_prompt_updated_at = now(),
+          updated_at = now()
+        from kazika_studio_agents.stories st
+        where ssd.id = $1
+          and st.id = ssd.story_id
+          and st.user_id = $2
+        returning ssd.*, st.title as story_title, st.user_id, st.description as story_description
+      `,
+      [
+        sceneId,
+        user.id,
+        imagePromptSettings.background,
+        imagePromptSettings.character_placement,
+        imagePromptSettings.props,
+        imagePromptSettings.camera_composition,
+        imagePromptSettings.lighting,
+        imagePromptSettings.style_rules,
+        imagePromptSettings.negative_prompt,
+        imagePromptSettings.notes,
+      ]
+    );
+
+    const scene = result.rows[0];
+    if (!scene) {
+      return NextResponse.json({ success: false, error: 'Scene not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: { scene } });
+  } catch (error: unknown) {
+    console.error('Failed to update agent scene:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update agent scene';
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
