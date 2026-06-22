@@ -118,11 +118,11 @@ export async function PATCH(
       : typeof metadataPatch.dialogue_video_generation_provider === 'string' ? metadataPatch.dialogue_video_generation_provider
       : typeof existingVideoSettings.video_generation_provider === 'string' ? existingVideoSettings.video_generation_provider
       : typeof existingVideoSettings.video_provider === 'string' ? existingVideoSettings.video_provider
-      : 'ltx_2_3_flf2v';
-    const requestedVideoGenerationProvider = videoGenerationProvider || existingProvider;
-    const nextVideoGenerationProvider = nextLineType === 'dialogue'
-      ? 'grok'
-      : requestedVideoGenerationProvider;
+      : recommendedVideoGenerationProvider(nextLineType);
+    const lineTypeChanged = nextLineType !== line.line_type;
+    const nextVideoGenerationProvider = videoGenerationProvider
+      || (lineTypeChanged ? recommendedVideoGenerationProvider(nextLineType) : existingProvider)
+      || recommendedVideoGenerationProvider(nextLineType);
 
     // The provider/model now lives in script_lines.video_generation_provider.
     // Remove legacy metadata mirrors to keep the DB/UI unambiguous.
@@ -648,6 +648,10 @@ function parseVideoGenerationProvider(value: unknown) {
     throw new Error('動画生成エンジンが不正です');
   }
   return value;
+}
+
+function recommendedVideoGenerationProvider(lineType: unknown) {
+  return lineType === 'dialogue' || lineType === 'action' ? 'grok' : 'ltx_2_3_flf2v';
 }
 
 const VALID_CUE_TYPES = new Set(['motion', 'camera', 'sfx', 'dialogue', 'transition', 'hold', 'other']);
