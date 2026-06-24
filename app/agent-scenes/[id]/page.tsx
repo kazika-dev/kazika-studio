@@ -2049,6 +2049,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 const DIALOGUE_VIDEO_MODE_LIPSYNC = 'lipsync';
 const DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT = 'silent_back_view_then_mux';
 const VIDEO_GENERATION_PROVIDER_GROK = 'grok';
+const VIDEO_GENERATION_PROVIDER_LTX_I2V = 'ltx_2_3_i2v';
 const VIDEO_GENERATION_PROVIDER_LTX_FLF2V = 'ltx_2_3_flf2v';
 
 function dialogueVideoGenerationMode(line: AnyRow) {
@@ -2077,6 +2078,7 @@ function explicitVideoGenerationProvider(line: AnyRow) {
 
 function videoGenerationProvider(line: AnyRow, cues: TimingCueInput[] = []) {
   const raw = explicitVideoGenerationProvider(line);
+  if (raw === VIDEO_GENERATION_PROVIDER_LTX_I2V) return VIDEO_GENERATION_PROVIDER_LTX_I2V;
   if (raw === VIDEO_GENERATION_PROVIDER_LTX_FLF2V) return VIDEO_GENERATION_PROVIDER_LTX_FLF2V;
   if (raw === VIDEO_GENERATION_PROVIDER_GROK) return VIDEO_GENERATION_PROVIDER_GROK;
   return recommendedVideoGenerationProvider(String(line.line_type || 'dialogue'), cues);
@@ -2093,6 +2095,7 @@ function shouldPreferLtxFlf2v(lineType: string, cues: TimingCueInput[] = []) {
 }
 
 function videoGenerationProviderLabel(provider: string) {
+  if (provider === VIDEO_GENERATION_PROVIDER_LTX_I2V) return 'LTX 2.3 i2v（画像→動画）';
   return provider === VIDEO_GENERATION_PROVIDER_LTX_FLF2V ? 'LTX 2.3 flf2v（同一画像 start/end）' : 'Grok';
 }
 
@@ -2245,6 +2248,7 @@ function EditableDialogueLine({
               className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
+              <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v</option>
             </select>
           </label>
@@ -2431,6 +2435,7 @@ function EditableDialogueLine({
             className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-violet-900 dark:bg-slate-950 dark:text-slate-100"
           >
             <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
+            <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v（画像1枚から動画化）</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v（同一画像をfirst/endに使う）</option>
           </select>
           <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">推奨: {videoGenerationProviderLabel(recommendedVideoGenerationProviderState)}。scene_only/内省で動作キューがないものはLTX flf2v寄せ。</span>
@@ -2452,6 +2457,11 @@ function EditableDialogueLine({
         {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_LTX_FLF2V && (
           <p className="mt-2 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-violet-700 dark:bg-slate-950/60 dark:text-violet-200">
             LTX flf2vはprimary dialogue画像をfirst frame/end frameの両方に同じ画像として渡す想定。セリフ本文ではなく、静かな視覚モーションだけを短いpromptにします。
+          </p>
+        )}
+        {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_LTX_I2V && (
+          <p className="mt-2 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-violet-700 dark:bg-slate-950/60 dark:text-violet-200">
+            LTX i2vはprimary dialogue画像1枚をsource imageとして動画化します。first/end固定が不要で、1枚絵から自然な微動を付けたい時用。
           </p>
         )}
       </div>
