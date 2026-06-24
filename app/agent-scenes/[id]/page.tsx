@@ -53,6 +53,8 @@ type ImageGenerationSettings = {
   notes: string;
 };
 
+type LineFilterMode = 'incomplete' | 'image_unconfirmed' | 'audio_unconfirmed' | 'all';
+
 const IMAGE_GENERATION_SETTING_FIELDS: Array<{ key: keyof ImageGenerationSettings; label: string; placeholder: string; rows?: number }> = [
   { key: 'background', label: '背景 / ロケーション', placeholder: '例: 放課後の教室。窓際に夕焼け、机は少し乱れていて、黒板には日直の名前が残っている。', rows: 3 },
   { key: 'character_placement', label: 'キャラ配置', placeholder: '例: 主人公は画面右手前で背中向き、ヒロインは窓際の席に座る。2人の距離は遠め。', rows: 3 },
@@ -90,7 +92,8 @@ export default function AgentSceneDetailPage() {
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
   const [savingLineCompletionId, setSavingLineCompletionId] = useState('');
   const [mergingScriptId, setMergingScriptId] = useState('');
-  const [showIncompleteOnly, setShowIncompleteOnly] = useState(true);
+  const [lineFilterMode, setLineFilterMode] = useState<LineFilterMode>('incomplete');
+  const [savingLineConfirmationKey, setSavingLineConfirmationKey] = useState('');
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
@@ -405,6 +408,36 @@ export default function AgentSceneDetailPage() {
     }
   };
 
+
+  const persistLineConfirmation = async (line: AnyRow, kind: 'image' | 'audio', confirmed: boolean) => {
+    if (!Number.isFinite(sceneId)) return;
+    const lineId = String(line.id || '');
+    if (!lineId) return;
+    const savingKey = `${lineId}:${kind}`;
+    setSavingLineConfirmationKey(savingKey);
+    setDialogueError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/script-lines/${lineId}/completion`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(kind === 'image' ? { image_confirmed: confirmed } : { audio_confirmed: confirmed }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `${kind === 'image' ? '画像' : '音声'}確定の保存に失敗しました`);
+      }
+      const updatedLine = result.data?.scriptLine;
+      setData((current) => current && updatedLine ? {
+        ...current,
+        scriptLines: current.scriptLines.map((row) => String(row.id) === String(updatedLine.id) ? { ...row, ...updatedLine } : row),
+      } : current);
+    } catch (err) {
+      setDialogueError(err instanceof Error ? err.message : `${kind === 'image' ? '画像' : '音声'}確定の保存に失敗しました`);
+    } finally {
+      setSavingLineConfirmationKey('');
+    }
+  };
+
   const deleteDialogueLine = async (line: AnyRow) => {
     if (!Number.isFinite(sceneId)) return;
     const lineId = String(line.id || '');
@@ -711,6 +744,18 @@ export default function AgentSceneDetailPage() {
   const finalSourceVideoCount = new Set(assets.filter(isFinalRenderSourceVideo).map((asset) => String(asset.script_line_id || asset.id))).size;
   const completedScriptLineCount = scriptLines.filter(isScriptLineCompleted).length;
   const incompleteScriptLineCount = Math.max(0, scriptLines.length - completedScriptLineCount);
+  const imageConfirmedScriptLineCount = scriptLines.filter(isScriptLineImageConfirmed).length;
+  const imageUnconfirmedScriptLineCount = Math.max(0, scriptLines.length - imageConfirmedScriptLineCount);
+  const audioConfirmedScriptLineCount = scriptLines.filter(isScriptLineAudioConfirmed).length;
+  const audioUnconfirmedScriptLineCount = Math.max(0, scriptLines.length - audioConfirmedScriptLineCount);
+  const lineFilterOptions: Array<{ mode: LineFilterMode; label: string; empty: string }> = [
+    { mode: 'incomplete', label: '未完成', empty: 'このscriptの未完成lineはありません。' },
+    { mode: 'image_unconfirmed', label: '画像未確定', empty: 'このscriptの画像未確定lineはありません。' },
+    { mode: 'audio_unconfirmed', label: '音声未確定', empty: 'このscriptの音声未確定lineはありません。' },
+    { mode: 'all', label: '全て', empty: '表示できるlineがありません。' },
+  ];
+  const currentLineFilter = lineFilterOptions.find((option) => option.mode === lineFilterMode) || lineFilterOptions[0];
+  const lineFilterButtonClass = (mode: LineFilterMode) => `rounded-full border px-3 py-1 font-medium transition ${lineFilterMode === mode ? 'border-blue-300 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950 dark:hover:text-blue-300'}`;
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -836,19 +881,24 @@ export default function AgentSceneDetailPage() {
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
                     <span className="text-slate-500 dark:text-slate-400">
-                      完成 {completedScriptLineCount} / 未完成 {incompleteScriptLineCount} / 全 {scriptLines.length}
+                      完成 {completedScriptLineCount} / 未完成 {incompleteScriptLineCount} / 画像未確定 {imageUnconfirmedScriptLineCount} / 音声未確定 {audioUnconfirmedScriptLineCount} / 全 {scriptLines.length}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowIncompleteOnly((value) => !value)}
-                      className={`rounded-full border px-3 py-1 font-medium transition ${showIncompleteOnly ? 'border-blue-300 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950 dark:hover:text-blue-300'}`}
-                    >
-                      {showIncompleteOnly ? '全て表示' : '未完成のみ表示'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {lineFilterOptions.map((option) => (
+                        <button
+                          key={option.mode}
+                          type="button"
+                          onClick={() => setLineFilterMode(option.mode)}
+                          className={lineFilterButtonClass(option.mode)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   {scripts.map((script) => {
                     const scriptRows = scriptLines.filter((line) => line.script_id === script.id);
-                    const visibleScriptRows = showIncompleteOnly ? scriptRows.filter((line) => !isScriptLineCompleted(line)) : scriptRows;
+                    const visibleScriptRows = scriptRows.filter((line) => matchesLineFilter(line, lineFilterMode));
                     const scriptCompletedCount = scriptRows.filter(isScriptLineCompleted).length;
                     return (
                       <div key={String(script.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
@@ -868,12 +918,14 @@ export default function AgentSceneDetailPage() {
                         </div>
                         {visibleScriptRows.length === 0 ? (
                           <p className="rounded-lg border border-dashed border-blue-200 bg-blue-50 px-3 py-4 text-center text-xs text-blue-600 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
-                            {showIncompleteOnly ? 'このscriptの未完成lineはありません。' : '表示できるlineがありません。'}
+                            {currentLineFilter.empty}
                           </p>
                         ) : (
                           <div className="space-y-2">
                             {visibleScriptRows.map((line) => {
                               const completed = isScriptLineCompleted(line);
+                              const imageConfirmed = isScriptLineImageConfirmed(line);
+                              const audioConfirmed = isScriptLineAudioConfirmed(line);
                               const lineAssets = assetsByLineId.get(String(line.id)) || [];
                               const lineImageAssets = lineAssets.filter((asset) => isVisualAsset(asset));
                               const lineAudioAssets = lineAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
@@ -895,6 +947,32 @@ export default function AgentSceneDetailPage() {
                                       />
                                       <Check size={12} />
                                       {savingLineCompletionId === String(line.id) ? '保存中...' : completed ? '完成' : '未完成'}
+                                    </label>
+                                    <label className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 font-medium transition ${imageConfirmed ? 'border-emerald-300 bg-emerald-600 text-white dark:border-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950 dark:hover:text-emerald-300'}`}
+                                      title="このlineの画像確定状態を切り替え"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={imageConfirmed}
+                                        disabled={savingLineConfirmationKey === `${line.id}:image`}
+                                        onChange={(event) => persistLineConfirmation(line, 'image', event.target.checked)}
+                                        className="sr-only"
+                                      />
+                                      <ImageIcon size={12} />
+                                      {savingLineConfirmationKey === `${line.id}:image` ? '保存中...' : imageConfirmed ? '画像確定' : '画像未確定'}
+                                    </label>
+                                    <label className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 font-medium transition ${audioConfirmed ? 'border-emerald-300 bg-emerald-600 text-white dark:border-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950 dark:hover:text-emerald-300'}`}
+                                      title="このlineの音声確定状態を切り替え"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={audioConfirmed}
+                                        disabled={savingLineConfirmationKey === `${line.id}:audio`}
+                                        onChange={(event) => persistLineConfirmation(line, 'audio', event.target.checked)}
+                                        className="sr-only"
+                                      />
+                                      <Mic2 size={12} />
+                                      {savingLineConfirmationKey === `${line.id}:audio` ? '保存中...' : audioConfirmed ? '音声確定' : '音声未確定'}
                                     </label>
                                     <span>#{line.line_index}</span>
                                     <CopyDialogueIdButton dialogueId={line.id} />
@@ -1584,6 +1662,28 @@ function isScriptLineCompleted(line: AnyRow) {
     || metadata.completed === 'true'
     || metadata.final_completed === true
     || metadata.final_completed === 'true';
+}
+
+
+function isConfirmedValue(value: unknown) {
+  return value === true || value === 'true';
+}
+
+function isScriptLineImageConfirmed(line: AnyRow) {
+  const metadata = lineMetadata(line);
+  return isConfirmedValue(metadata.script_line_image_confirmed) || isConfirmedValue(metadata.image_confirmed);
+}
+
+function isScriptLineAudioConfirmed(line: AnyRow) {
+  const metadata = lineMetadata(line);
+  return isConfirmedValue(metadata.script_line_audio_confirmed) || isConfirmedValue(metadata.audio_confirmed);
+}
+
+function matchesLineFilter(line: AnyRow, mode: LineFilterMode) {
+  if (mode === 'all') return true;
+  if (mode === 'image_unconfirmed') return !isScriptLineImageConfirmed(line);
+  if (mode === 'audio_unconfirmed') return !isScriptLineAudioConfirmed(line);
+  return !isScriptLineCompleted(line);
 }
 
 function LineTimestampBadges({ line }: { line: AnyRow }) {

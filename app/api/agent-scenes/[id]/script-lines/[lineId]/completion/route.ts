@@ -25,8 +25,11 @@ export async function PATCH(
     }
 
     const body = await request.json().catch(() => ({}));
-    if (typeof body.completed !== 'boolean') {
-      return NextResponse.json({ success: false, error: 'completed must be boolean' }, { status: 400 });
+    const hasCompleted = typeof body.completed === 'boolean';
+    const hasImageConfirmed = typeof body.image_confirmed === 'boolean';
+    const hasAudioConfirmed = typeof body.audio_confirmed === 'boolean';
+    if (!hasCompleted && !hasImageConfirmed && !hasAudioConfirmed) {
+      return NextResponse.json({ success: false, error: 'completed, image_confirmed, or audio_confirmed must be boolean' }, { status: 400 });
     }
 
     const lineResult = await query(
@@ -55,14 +58,37 @@ export async function PATCH(
 
     const now = new Date().toISOString();
     const existingMetadata = line.metadata && typeof line.metadata === 'object' ? line.metadata : {};
-    const nextMetadata = {
-      ...existingMetadata,
-      script_line_completed: body.completed,
-      script_line_completed_at: body.completed ? now : null,
-      script_line_completed_by: body.completed ? user.id : null,
-      script_line_completed_updated_at: now,
-      script_line_completed_updated_by: user.id,
-    };
+    const nextMetadata = { ...existingMetadata };
+
+    if (hasCompleted) {
+      Object.assign(nextMetadata, {
+        script_line_completed: body.completed,
+        script_line_completed_at: body.completed ? now : null,
+        script_line_completed_by: body.completed ? user.id : null,
+        script_line_completed_updated_at: now,
+        script_line_completed_updated_by: user.id,
+      });
+    }
+
+    if (hasImageConfirmed) {
+      Object.assign(nextMetadata, {
+        script_line_image_confirmed: body.image_confirmed,
+        script_line_image_confirmed_at: body.image_confirmed ? now : null,
+        script_line_image_confirmed_by: body.image_confirmed ? user.id : null,
+        script_line_image_confirmed_updated_at: now,
+        script_line_image_confirmed_updated_by: user.id,
+      });
+    }
+
+    if (hasAudioConfirmed) {
+      Object.assign(nextMetadata, {
+        script_line_audio_confirmed: body.audio_confirmed,
+        script_line_audio_confirmed_at: body.audio_confirmed ? now : null,
+        script_line_audio_confirmed_by: body.audio_confirmed ? user.id : null,
+        script_line_audio_confirmed_updated_at: now,
+        script_line_audio_confirmed_updated_by: user.id,
+      });
+    }
 
     const updatedLineResult = await query(
       `
