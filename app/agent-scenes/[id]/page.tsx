@@ -1686,6 +1686,7 @@ function matchesLineFilter(line: AnyRow, mode: LineFilterMode) {
   return !isScriptLineCompleted(line);
 }
 
+
 function LineTimestampBadges({ line }: { line: AnyRow }) {
   const createdAt = dateValue(line.created_at ?? lineMetadata(line).created_at);
   const recreatedAt = scriptLineRecreatedAt(line);
@@ -2766,8 +2767,8 @@ function LineAssetBundle({
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
-          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
-          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
+          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
           <LineAssetColumn title="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
           <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} />
         </div>
@@ -2781,6 +2782,7 @@ function LineAssetColumn({
   icon,
   assets,
   empty,
+  confirmed = false,
   allLines,
   savingLinkAssetId,
   savingPrimaryAssetId,
@@ -2796,6 +2798,7 @@ function LineAssetColumn({
   icon: ReactNode;
   assets: AnyRow[];
   empty: string;
+  confirmed?: boolean;
   allLines: AnyRow[];
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
@@ -2812,8 +2815,12 @@ function LineAssetColumn({
   const nonPrimaryAssets = assets.filter((asset) => !asset.is_primary);
   const visibleAssets = [...primaryAssets, ...(showNonPrimary ? nonPrimaryAssets : [])];
 
+  const columnClass = confirmed
+    ? 'min-w-0 rounded-xl border border-emerald-200 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30'
+    : 'min-w-0 rounded-xl border border-transparent bg-slate-50 p-2 dark:bg-slate-950';
+
   return (
-    <div className="min-w-0 rounded-xl bg-slate-50 p-2 dark:bg-slate-950">
+    <div className={columnClass}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
           {icon}{title}<Badge>{assets.length}</Badge>
