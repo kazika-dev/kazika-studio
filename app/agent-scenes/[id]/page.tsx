@@ -746,8 +746,9 @@ export default function AgentSceneDetailPage() {
   const incompleteScriptLineCount = Math.max(0, scriptLines.length - completedScriptLineCount);
   const imageConfirmedScriptLineCount = scriptLines.filter(isScriptLineImageConfirmed).length;
   const imageUnconfirmedScriptLineCount = Math.max(0, scriptLines.length - imageConfirmedScriptLineCount);
-  const audioConfirmedScriptLineCount = scriptLines.filter(isScriptLineAudioConfirmed).length;
-  const audioUnconfirmedScriptLineCount = Math.max(0, scriptLines.length - audioConfirmedScriptLineCount);
+  const audioExpectedScriptLines = scriptLines.filter(isScriptLineAudioExpected);
+  const audioConfirmedScriptLineCount = audioExpectedScriptLines.filter(isScriptLineAudioConfirmed).length;
+  const audioUnconfirmedScriptLineCount = Math.max(0, audioExpectedScriptLines.length - audioConfirmedScriptLineCount);
   const lineFilterOptions: Array<{ mode: LineFilterMode; label: string; empty: string }> = [
     { mode: 'incomplete', label: '未完成', empty: 'このscriptの未完成lineはありません。' },
     { mode: 'image_unconfirmed', label: '画像未確定', empty: 'このscriptの画像未確定lineはありません。' },
@@ -1679,10 +1680,20 @@ function isScriptLineAudioConfirmed(line: AnyRow) {
   return isConfirmedValue(metadata.script_line_audio_confirmed) || isConfirmedValue(metadata.audio_confirmed);
 }
 
+
+function isScriptLineAudioExpected(line: AnyRow) {
+  const metadata = lineMetadata(line);
+  if (isConfirmedValue(metadata.no_audio) || isConfirmedValue(metadata.audio_not_required) || isConfirmedValue(metadata.skip_audio_generation)) {
+    return false;
+  }
+  const lineType = String(line.line_type || 'dialogue');
+  return lineType === 'dialogue' || lineType === 'inner_monologue' || lineType === 'narration';
+}
+
 function matchesLineFilter(line: AnyRow, mode: LineFilterMode) {
   if (mode === 'all') return true;
   if (mode === 'image_unconfirmed') return !isScriptLineImageConfirmed(line);
-  if (mode === 'audio_unconfirmed') return !isScriptLineAudioConfirmed(line);
+  if (mode === 'audio_unconfirmed') return isScriptLineAudioExpected(line) && !isScriptLineAudioConfirmed(line);
   return !isScriptLineCompleted(line);
 }
 
