@@ -134,7 +134,7 @@ export async function GET(
              or a.script_id in (select id from kazika_studio_agents.scripts where agent_story_scene_id = $1)
              or a.shot_id in (select id from kazika_studio_agents.shots where agent_story_scene_id = $1)
           order by a.created_at desc, a.id desc
-          limit 200
+          limit 500
         `,
         [scene.id, scene.source_story_scene_id]
       ),
