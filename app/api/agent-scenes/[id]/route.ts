@@ -121,6 +121,8 @@ export async function GET(
             a.*,
             sl.line_index,
             sl.speaker_name,
+            sl.line_type as script_line_type,
+            sl.metadata as script_line_metadata,
             sh.shot_index,
             gj.provider,
             gj.model,

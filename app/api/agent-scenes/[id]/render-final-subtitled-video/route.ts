@@ -40,7 +40,16 @@ type VideoAssetRow = {
   duration_seconds: number | string | null;
   line_index: number | null;
   line_type: string | null;
+  line_metadata: Record<string, unknown> | null;
+  asset_type: string | null;
+  mime_type: string | null;
+  audio_storage_path: string | null;
+  audio_url: string | null;
+  audio_duration_seconds: number | string | null;
 };
+
+const FINAL_RENDER_MODE_STILL_IMAGE_3S = 'still_image_3s';
+const STILL_IMAGE_DEFAULT_DURATION_SECONDS = 3;
 
 type SubtitleRow = {
   id: number;
@@ -215,6 +224,10 @@ function concatFileLine(filePath: string) {
   return `file '${filePath.replace(/'/g, `'\\''`)}'`;
 }
 
+function storageProxyUrl(storagePath: string) {
+  return `/api/storage/${storagePath.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/')}`;
+}
+
 function runFfmpeg(ffmpegPath: string, args: string[], timeout = 240_000) {
   return new Promise<void>((resolve, reject) => {
     execFile(ffmpegPath, args, { timeout, maxBuffer: 1024 * 1024 * 8 }, (error, _stdout, stderr) => {
@@ -286,6 +299,12 @@ async function loadSourceVideos(sceneId: number) {
           a.duration_seconds,
           sl.line_index,
           sl.line_type,
+          sl.metadata as line_metadata,
+          a.asset_type,
+          a.mime_type,
+          primary_audio.storage_path as audio_storage_path,
+          primary_audio.url as audio_url,
+          primary_audio.duration_seconds as audio_duration_seconds,
           row_number() over (
             partition by a.script_line_id
             order by a.is_primary desc, a.created_at desc, a.id desc
@@ -293,17 +312,39 @@ async function loadSourceVideos(sceneId: number) {
         from kazika_studio_agents.assets a
         join kazika_studio_agents.script_lines sl on sl.id = a.script_line_id
         join kazika_studio_agents.scripts sc on sc.id = sl.script_id
+        left join lateral (
+          select pa.storage_path, pa.url, pa.duration_seconds
+          from kazika_studio_agents.assets pa
+          where pa.script_line_id = sl.id
+            and pa.asset_type = 'audio'
+            and coalesce(pa.mime_type, '') like 'audio/%'
+            and coalesce(pa.metadata->>'deleted', 'false') <> 'true'
+            and coalesce(pa.metadata->>'logical_deleted', 'false') <> 'true'
+          order by pa.is_primary desc, pa.created_at desc, pa.id desc
+          limit 1
+        ) primary_audio on true
         where a.agent_story_scene_id = $1
           and a.script_line_id is not null
           and (
-            a.asset_type in ('video', 'talking_video', 'synced_video')
-            or a.mime_type like 'video/%'
+            (
+              coalesce(sl.metadata->>'final_render_mode', 'video') = 'still_image_3s'
+              and (a.asset_type in ('image', 'thumbnail') or coalesce(a.mime_type, '') like 'image/%')
+            )
+            or (
+              coalesce(sl.metadata->>'final_render_mode', 'video') <> 'still_image_3s'
+              and (
+                a.asset_type in ('video', 'talking_video', 'synced_video')
+                or coalesce(a.mime_type, '') like 'video/%'
+              )
+              and a.asset_type <> 'final_video'
+              and coalesce(a.metadata->>'burned_in_subtitles', 'false') <> 'true'
+            )
           )
-          and a.asset_type <> 'final_video'
-          and coalesce(a.metadata->>'burned_in_subtitles', 'false') <> 'true'
+          and coalesce(a.metadata->>'deleted', 'false') <> 'true'
+          and coalesce(a.metadata->>'logical_deleted', 'false') <> 'true'
           and (sc.agent_story_scene_id = $1 or sc.story_scene_id = (select source_story_scene_id from kazika_studio_agents.story_scenes_domain where id = $1))
       )
-      select id, script_line_id, storage_path, url, duration_seconds, line_index, line_type
+      select id, script_line_id, storage_path, url, duration_seconds, line_index, line_type, line_metadata, asset_type, mime_type, audio_storage_path, audio_url, audio_duration_seconds
       from ranked
       where rn = 1
       order by line_index asc, id asc
@@ -382,6 +423,18 @@ async function loadSfxCues(sceneId: number, lineIds: number[]) {
 function isDialogueLineType(lineType: string | null | undefined) {
   const normalized = String(lineType || 'dialogue');
   return normalized === 'dialogue' || normalized === 'inner_monologue';
+}
+
+function finalRenderMode(asset: VideoAssetRow) {
+  const metadata = asset.line_metadata && typeof asset.line_metadata === 'object' ? asset.line_metadata : {};
+  return metadata.final_render_mode === FINAL_RENDER_MODE_STILL_IMAGE_3S ? FINAL_RENDER_MODE_STILL_IMAGE_3S : 'video';
+}
+
+function isImageSourceAsset(asset: VideoAssetRow) {
+  return finalRenderMode(asset) === FINAL_RENDER_MODE_STILL_IMAGE_3S
+    && (String(asset.asset_type || '') === 'image'
+      || String(asset.asset_type || '') === 'thumbnail'
+      || String(asset.mime_type || '').startsWith('image/'));
 }
 
 function fallbackSubtitleTextForLine(line: ScriptLineRow | undefined) {
@@ -481,7 +534,7 @@ export async function POST(
 
     const sourceVideos = await loadSourceVideos(sceneId);
     if (sourceVideos.length === 0) {
-      return NextResponse.json({ success: false, error: 'No source videos found for this scene.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'No source videos or still-image lines found for this scene.' }, { status: 400 });
     }
 
     const sourceLineIds = sourceVideos.map((asset) => asset.script_line_id);
@@ -504,13 +557,14 @@ export async function POST(
     let targetHeight = 1920;
 
     for (const [index, asset] of sourceVideos.entries()) {
-      const videoPath = normalizeStoragePath(String(asset.storage_path || asset.url || ''));
-      if (!videoPath) throw new Error(`Video storage path not found for asset #${asset.id}`);
+      const sourcePath = normalizeStoragePath(String(asset.storage_path || asset.url || ''));
+      if (!sourcePath) throw new Error(`Source storage path not found for asset #${asset.id}`);
 
-      const video = await getFileFromStorage(videoPath);
-      const inputPath = path.join(workDir, `input-${index}.mp4`);
+      const source = await getFileFromStorage(sourcePath);
+      const inputExtension = path.extname(sourcePath) || (isImageSourceAsset(asset) ? '.png' : '.mp4');
+      const inputPath = path.join(workDir, `input-${index}${inputExtension}`);
       const outputPath = path.join(workDir, `normalized-${index}.mp4`);
-      await writeFile(inputPath, video.data);
+      await writeFile(inputPath, source.data);
 
       const probe = await probeMedia(ffmpegPath, inputPath);
       if (index === 0 && probe.width && probe.height) {
@@ -518,11 +572,68 @@ export async function POST(
         targetHeight = probe.height % 2 === 0 ? probe.height : probe.height - 1;
       }
       const assetDurationSeconds = Number(asset.duration_seconds || 0);
-      const durationSeconds = assetDurationSeconds > 0 ? assetDurationSeconds : (probe.durationSeconds || 6);
+      const audioDurationSeconds = Number(asset.audio_duration_seconds || 0);
+      const durationSeconds = isImageSourceAsset(asset)
+        ? Math.max(STILL_IMAGE_DEFAULT_DURATION_SECONDS, audioDurationSeconds > 0 ? audioDurationSeconds : 0, assetDurationSeconds > 0 ? assetDurationSeconds : 0)
+        : (assetDurationSeconds > 0 ? assetDurationSeconds : (probe.durationSeconds || 6));
       normalizedDurationsMs.push(Math.round(durationSeconds * 1000));
 
       const videoFilter = `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p`;
-      const args = probe.hasAudio
+      let stillAudioInputPath = '';
+      if (isImageSourceAsset(asset)) {
+        const audioPath = normalizeStoragePath(String(asset.audio_storage_path || asset.audio_url || ''));
+        if (audioPath) {
+          const audio = await getFileFromStorage(audioPath);
+          const audioExtension = path.extname(audioPath) || '.m4a';
+          stillAudioInputPath = path.join(workDir, `input-${index}-audio${audioExtension}`);
+          await writeFile(stillAudioInputPath, audio.data);
+        }
+      }
+
+      const args = isImageSourceAsset(asset)
+        ? stillAudioInputPath
+          ? [
+              '-y',
+              '-loop', '1',
+              '-t', durationSeconds.toFixed(3),
+              '-i', inputPath,
+              '-i', stillAudioInputPath,
+              '-map', '0:v:0',
+              '-map', '1:a:0',
+              '-vf', videoFilter,
+              '-af', 'apad',
+              '-t', durationSeconds.toFixed(3),
+              '-c:v', 'libx264',
+              '-preset', 'veryfast',
+              '-crf', '20',
+              '-c:a', 'aac',
+              '-ar', '48000',
+              '-ac', '2',
+              '-movflags', '+faststart',
+              outputPath,
+            ]
+          : [
+              '-y',
+              '-loop', '1',
+              '-t', durationSeconds.toFixed(3),
+              '-i', inputPath,
+              '-f', 'lavfi',
+              '-t', durationSeconds.toFixed(3),
+              '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
+              '-map', '0:v:0',
+              '-map', '1:a:0',
+              '-vf', videoFilter,
+              '-c:v', 'libx264',
+              '-preset', 'veryfast',
+              '-crf', '20',
+              '-c:a', 'aac',
+              '-ar', '48000',
+              '-ac', '2',
+              '-shortest',
+              '-movflags', '+faststart',
+              outputPath,
+            ]
+        : probe.hasAudio
         ? [
             '-y',
             '-i', inputPath,
@@ -673,7 +784,17 @@ export async function POST(
       filename,
       `scenes/scene-${sceneId}/final-renders`
     );
-    const signedUrl = await getSignedUrl(storagePath, 24 * 60);
+    let previewUrl = storageProxyUrl(storagePath);
+    try {
+      previewUrl = await getSignedUrl(storagePath, 24 * 60);
+    } catch (error) {
+      // The final render is already uploaded at this point. A signed URL is a
+      // convenience for preview/download, not a reason to fail the whole concat.
+      // Some runtimes surface GCS signing/URL parsing failures as the opaque
+      // DOMException: "The string did not match the expected pattern." Falling
+      // back to the authenticated storage proxy keeps the rendered asset usable.
+      console.warn('[render-final-subtitled-video] signed URL fallback:', error);
+    }
 
     await syncKazikaAgentIdSequence('generation_jobs');
     const jobResult = await query(
@@ -749,8 +870,8 @@ export async function POST(
         subtitleCount: includeSubtitles ? subtitleEvents.length : 0,
         sfxCount: sfxMixEvents.length,
         burnedInSubtitles: includeSubtitles,
-        signedUrl,
-        previewUrl: signedUrl,
+        signedUrl: previewUrl,
+        previewUrl,
       },
     });
   } catch (error) {

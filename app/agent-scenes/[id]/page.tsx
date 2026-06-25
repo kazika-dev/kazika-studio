@@ -1083,7 +1083,6 @@ export default function AgentSceneDetailPage() {
                       key={type}
                       type={type}
                       rows={rows}
-                      showAssetHistory={showAssetHistory}
                       enabledSceneImageAssets={enabledSceneImageAssets}
                       savingDisplayAssetId={savingDisplayAssetId}
                       allLines={scriptLines}
@@ -1839,21 +1838,16 @@ type AssetRowProps = {
 type AssetGroupSectionProps = Omit<AssetRowProps, 'asset'> & {
   type: string;
   rows: AnyRow[];
-  showAssetHistory: boolean;
 };
 
-function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: AssetGroupSectionProps) {
-  const [showNonPrimary, setShowNonPrimary] = useState(false);
+function AssetGroupSection({ type, rows, ...assetRowProps }: AssetGroupSectionProps) {
   const [page, setPage] = useState(1);
-  const primaryRows = rows.filter((asset) => Boolean(asset.is_primary));
-  const nonPrimaryRows = rows.filter((asset) => !asset.is_primary);
-  const visibleRows = [...primaryRows, ...(showNonPrimary ? nonPrimaryRows : [])];
-  const pageSize = showAssetHistory ? 24 : 8;
+  const visibleRows = rows;
+  const pageSize = 10;
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const startIndex = (safePage - 1) * pageSize;
   const pagedRows = visibleRows.slice(startIndex, startIndex + pageSize);
-  const hiddenCount = nonPrimaryRows.length;
   const canPagePrev = safePage > 1;
   const canPageNext = safePage < pageCount;
 
@@ -1863,38 +1857,23 @@ function AssetGroupSection({ type, rows, showAssetHistory, ...assetRowProps }: A
         <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
           {assetIcon(type)} {type} <span className="text-xs text-slate-400">{rows.length}</span>
         </h3>
-        <div className="flex flex-wrap items-center gap-2">
-          {visibleRows.length > pageSize && (
-            <AssetPaginationControls
-              page={safePage}
-              pageCount={pageCount}
-              startIndex={startIndex}
-              visibleCount={pagedRows.length}
-              totalCount={visibleRows.length}
-              canPrev={canPagePrev}
-              canNext={canPageNext}
-              onPrev={() => setPage((value) => Math.max(1, value - 1))}
-              onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
-            />
-          )}
-          {hiddenCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowNonPrimary((value) => !value);
-                setPage(1);
-              }}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-            >
-              {showNonPrimary ? <EyeOff size={12} /> : <Eye size={12} />}
-              {showNonPrimary ? `primary以外を隠す (${hiddenCount})` : `primary以外を表示 (${hiddenCount})`}
-            </button>
-          )}
-        </div>
+        {visibleRows.length > pageSize && (
+          <AssetPaginationControls
+            page={safePage}
+            pageCount={pageCount}
+            startIndex={startIndex}
+            visibleCount={pagedRows.length}
+            totalCount={visibleRows.length}
+            canPrev={canPagePrev}
+            canNext={canPageNext}
+            onPrev={() => setPage((value) => Math.max(1, value - 1))}
+            onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
+          />
+        )}
       </div>
       {pagedRows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">
-          primary素材なし。必要なら「primary以外を表示」で候補を確認できます。
+          表示できる素材がありません。
         </p>
       ) : (
         <div className="space-y-2">
@@ -2852,10 +2831,15 @@ function LineAssetColumn({
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
-  const [showNonPrimary, setShowNonPrimary] = useState(false);
-  const primaryAssets = assets.filter((asset) => Boolean(asset.is_primary));
-  const nonPrimaryAssets = assets.filter((asset) => !asset.is_primary);
-  const visibleAssets = [...primaryAssets, ...(showNonPrimary ? nonPrimaryAssets : [])];
+  const [page, setPage] = useState(1);
+  const visibleAssets = assets;
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(visibleAssets.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const startIndex = (safePage - 1) * pageSize;
+  const pagedAssets = visibleAssets.slice(startIndex, startIndex + pageSize);
+  const canPagePrev = safePage > 1;
+  const canPageNext = safePage < pageCount;
 
   const columnClass = confirmed
     ? 'min-w-0 rounded-xl border border-emerald-200 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30'
@@ -2867,26 +2851,25 @@ function LineAssetColumn({
         <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
           {icon}{title}<Badge>{assets.length}</Badge>
         </div>
-        {nonPrimaryAssets.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowNonPrimary((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-          >
-            {showNonPrimary ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showNonPrimary ? `候補を隠す (${nonPrimaryAssets.length})` : `候補を表示 (${nonPrimaryAssets.length})`}
-          </button>
+        {visibleAssets.length > pageSize && (
+          <AssetPaginationControls
+            page={safePage}
+            pageCount={pageCount}
+            startIndex={startIndex}
+            visibleCount={pagedAssets.length}
+            totalCount={visibleAssets.length}
+            canPrev={canPagePrev}
+            canNext={canPageNext}
+            onPrev={() => setPage((value) => Math.max(1, value - 1))}
+            onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
+          />
         )}
       </div>
       {assets.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">{empty}</p>
-      ) : visibleAssets.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">
-          primaryなし。候補を見るには「候補を表示」を押してください。
-        </p>
       ) : (
         <div className="space-y-2">
-          {visibleAssets.map((asset) => (
+          {pagedAssets.map((asset) => (
             <LinkedAssetCard
               key={String(asset.id)}
               asset={asset}
@@ -2902,6 +2885,21 @@ function LineAssetColumn({
               onRenderSubtitledVideo={onRenderSubtitledVideo}
             />
           ))}
+          {visibleAssets.length > pageSize && (
+            <div className="pt-1">
+              <AssetPaginationControls
+                page={safePage}
+                pageCount={pageCount}
+                startIndex={startIndex}
+                visibleCount={pagedAssets.length}
+                totalCount={visibleAssets.length}
+                canPrev={canPagePrev}
+                canNext={canPageNext}
+                onPrev={() => setPage((value) => Math.max(1, value - 1))}
+                onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
