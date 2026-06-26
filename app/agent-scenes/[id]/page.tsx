@@ -1030,7 +1030,6 @@ export default function AgentSceneDetailPage() {
                                     assets={lineAssets}
                                     allAssets={relinkableAssets}
                                     allLines={scriptLines}
-                                    showAssetHistory={showAssetHistory}
                                     savingLinkAssetId={savingLinkAssetId}
                                     savingPrimaryAssetId={savingPrimaryAssetId}
                                     onRelinkAsset={persistAssetLineLink}
@@ -2782,7 +2781,6 @@ function LineAssetBundle({
   assets,
   allAssets,
   allLines,
-  showAssetHistory,
   savingLinkAssetId,
   savingPrimaryAssetId,
   subtitleClips = [],
@@ -2798,7 +2796,6 @@ function LineAssetBundle({
   assets: AnyRow[];
   allAssets: AnyRow[];
   allLines: AnyRow[];
-  showAssetHistory: boolean;
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
   subtitleClips?: AnyRow[];
@@ -2810,11 +2807,10 @@ function LineAssetBundle({
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
 }) {
-  const visibleAssets = showAssetHistory ? assets : assets.filter(isPrimaryAsset);
-  const imageAssets = visibleAssets.filter((asset) => isVisualAsset(asset));
-  const audioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
-  const sfxAssets = visibleAssets.filter(isSfxAsset);
-  const videoAssets = visibleAssets.filter((asset) => isVideoAsset(asset));
+  const imageAssets = assets.filter((asset) => isVisualAsset(asset));
+  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+  const sfxAssets = assets.filter(isSfxAsset);
+  const videoAssets = assets.filter((asset) => isVideoAsset(asset));
   const linkedAssetIds = new Set(assets.map((asset) => String(asset.id)));
   const candidateAssets = allAssets.filter((asset) => !linkedAssetIds.has(String(asset.id)));
 
@@ -2824,6 +2820,7 @@ function LineAssetBundle({
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
           <Link2 size={14} />
           このセリフの素材セット
+          <Badge>履歴込み</Badge>
           <LinkedAssetCount icon={<ImageIcon size={13} />} count={imageAssets.length} />
           <LinkedAssetCount icon={<Mic2 size={13} />} count={audioAssets.length} />
           <LinkedAssetCount icon={<Sparkles size={13} />} count={sfxAssets.length} />
@@ -2838,11 +2835,9 @@ function LineAssetBundle({
           />
         </div>
       </div>
-      {visibleAssets.length === 0 ? (
+      {assets.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          {showAssetHistory
-            ? 'まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。'
-            : 'primary素材はありません。履歴を含めて確認する場合は右側の「履歴表示」をONにしてください。'}
+          まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
