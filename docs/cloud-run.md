@@ -1,7 +1,7 @@
 # Cloud Run deployment
 
-Kazika Studio keeps the Vercel deployment settings unchanged. Cloud Run uses the
-separate `Dockerfile.cloudrun` and `cloudbuild.cloudrun.yaml` files.
+Kazika Studio deploys via Cloud Run. The repository no longer keeps Vercel deployment
+configuration; use `Dockerfile.cloudrun` and `cloudbuild.cloudrun.yaml` for production deploys.
 
 ## One-time setup
 
@@ -85,8 +85,7 @@ For an existing Cloud Run service, `gcloud run deploy` normally preserves curren
 environment variables. Set secrets once with `gcloud run services update` or the
 Cloud Run console.
 
-## Why a separate Dockerfile?
+## Cloud Run Dockerfile behavior
 
-`Dockerfile.cloudrun` builds Next.js with `NEXT_OUTPUT_STANDALONE=true`, which
-enables Next's standalone server output only for Cloud Run. Vercel builds do not
-set that variable, so Vercel behavior remains unchanged.
+`Dockerfile.cloudrun` builds Next.js with `NEXT_OUTPUT_STANDALONE=true`, which enables
+Next's standalone server output for Cloud Run.

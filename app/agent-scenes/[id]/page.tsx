@@ -135,19 +135,8 @@ export default function AgentSceneDetailPage() {
 
   const currentAssets = useMemo(() => {
     const allAssets = data?.assets || [];
-    const activeLayoutAssetIds = new Set((data?.sceneLayouts || []).map((layout) => String(layout.asset_id || '')));
-
-    return allAssets.filter((asset) => {
-      const type = String(asset.asset_type || 'unknown');
-      if (type === 'layout_reference' || type === 'placement_diagram') {
-        return Boolean(asset.is_primary) || activeLayoutAssetIds.has(String(asset.id));
-      }
-      if (type === 'audio') return Boolean(asset.is_primary);
-      if (isSceneImageAsset(asset)) return Boolean(asset.is_primary);
-      if (isRenderedFinalVideoAsset(asset)) return true;
-      return Boolean(asset.is_primary);
-    }).sort(sortSceneAssets);
-  }, [data?.assets, data?.sceneLayouts]);
+    return allAssets.filter(isPrimaryAsset).sort(sortSceneAssets);
+  }, [data?.assets]);
 
   const visibleAssets = useMemo(() => (showAssetHistory ? data?.assets || [] : currentAssets), [currentAssets, data?.assets, showAssetHistory]);
 
@@ -1000,6 +989,7 @@ export default function AgentSceneDetailPage() {
                                     assets={lineAssets}
                                     allAssets={relinkableAssets}
                                     allLines={scriptLines}
+                                    showAssetHistory={showAssetHistory}
                                     savingLinkAssetId={savingLinkAssetId}
                                     savingPrimaryAssetId={savingPrimaryAssetId}
                                     onRelinkAsset={persistAssetLineLink}
@@ -1059,7 +1049,7 @@ export default function AgentSceneDetailPage() {
                   <div className="space-y-2 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-slate-500 dark:text-slate-400">
-                        {showAssetHistory ? `履歴を含めて ${materialAssets.length} 件表示中` : `使用中素材のみ ${materialAssets.length} 件表示中`}
+                        {showAssetHistory ? `履歴を含めて ${materialAssets.length} 件表示中` : `primary素材のみ ${materialAssets.length} 件表示中`}
                       </span>
                       <button
                         type="button"
@@ -1612,6 +1602,10 @@ function canRemakeCheckAsset(asset: AnyRow) {
 
 function isRelinkableAsset(asset: AnyRow) {
   return isVisualAsset(asset) || isAudioAsset(asset) || isVideoAsset(asset);
+}
+
+function isPrimaryAsset(asset: AnyRow) {
+  return Boolean(asset.is_primary);
 }
 
 function assetSupportsDialoguePrimary(asset: AnyRow) {
@@ -2716,6 +2710,7 @@ function LineAssetBundle({
   assets,
   allAssets,
   allLines,
+  showAssetHistory,
   savingLinkAssetId,
   savingPrimaryAssetId,
   subtitleClips = [],
@@ -2730,6 +2725,7 @@ function LineAssetBundle({
   assets: AnyRow[];
   allAssets: AnyRow[];
   allLines: AnyRow[];
+  showAssetHistory: boolean;
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
   subtitleClips?: AnyRow[];
@@ -2741,10 +2737,11 @@ function LineAssetBundle({
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const imageAssets = assets.filter((asset) => isVisualAsset(asset));
-  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
-  const sfxAssets = assets.filter(isSfxAsset);
-  const videoAssets = assets.filter((asset) => isVideoAsset(asset));
+  const visibleAssets = showAssetHistory ? assets : assets.filter(isPrimaryAsset);
+  const imageAssets = visibleAssets.filter((asset) => isVisualAsset(asset));
+  const audioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+  const sfxAssets = visibleAssets.filter(isSfxAsset);
+  const videoAssets = visibleAssets.filter((asset) => isVideoAsset(asset));
   const linkedAssetIds = new Set(assets.map((asset) => String(asset.id)));
   const candidateAssets = allAssets.filter((asset) => !linkedAssetIds.has(String(asset.id)));
 
@@ -2782,9 +2779,11 @@ function LineAssetBundle({
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
           サムネイル・動画・音声プレイヤーは「素材セットを表示」を押した時だけ描画します。
         </p>
-      ) : assets.length === 0 ? (
+      ) : visibleAssets.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。
+          {showAssetHistory
+            ? 'まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。'
+            : 'primary素材はありません。履歴を含めて確認する場合は右側の「履歴表示」をONにしてください。'}
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">

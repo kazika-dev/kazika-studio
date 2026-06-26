@@ -1,6 +1,5 @@
 # Cloud Run compatibility entrypoint.
-# The actual Cloud Run Dockerfile is kept in Dockerfile.cloudrun so Vercel-related
-# deployment settings can stay separate.
+# The Cloud Run build pipeline uses Dockerfile.cloudrun.
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
