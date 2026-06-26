@@ -93,6 +93,7 @@ export default function AgentSceneDetailPage() {
   const [savingLineCompletionId, setSavingLineCompletionId] = useState('');
   const [mergingScriptId, setMergingScriptId] = useState('');
   const [lineFilterMode, setLineFilterMode] = useState<LineFilterMode>('incomplete');
+  const [linePageByScriptId, setLinePageByScriptId] = useState<Record<string, number>>({});
   const [savingLineConfirmationKey, setSavingLineConfirmationKey] = useState('');
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
@@ -132,6 +133,10 @@ export default function AgentSceneDetailPage() {
   useEffect(() => {
     void loadScene();
   }, [loadScene]);
+
+  useEffect(() => {
+    setLinePageByScriptId({});
+  }, [lineFilterMode]);
 
   const currentAssets = useMemo(() => {
     const allAssets = data?.assets || [];
@@ -738,6 +743,7 @@ export default function AgentSceneDetailPage() {
   const audioExpectedScriptLines = scriptLines.filter(isScriptLineAudioExpected);
   const audioConfirmedScriptLineCount = audioExpectedScriptLines.filter(isScriptLineAudioConfirmed).length;
   const audioUnconfirmedScriptLineCount = Math.max(0, audioExpectedScriptLines.length - audioConfirmedScriptLineCount);
+  const linePageSize = 10;
   const lineFilterOptions: Array<{ mode: LineFilterMode; label: string; empty: string }> = [
     { mode: 'incomplete', label: '未完成', empty: 'このscriptの未完成lineはありません。' },
     { mode: 'image_unconfirmed', label: '画像未確定', empty: 'このscriptの画像未確定lineはありません。' },
@@ -889,6 +895,19 @@ export default function AgentSceneDetailPage() {
                   {scripts.map((script) => {
                     const scriptRows = scriptLines.filter((line) => line.script_id === script.id);
                     const visibleScriptRows = scriptRows.filter((line) => matchesLineFilter(line, lineFilterMode));
+                    const scriptKey = String(script.id);
+                    const scriptLinePageCount = Math.max(1, Math.ceil(visibleScriptRows.length / linePageSize));
+                    const scriptLinePage = Math.min(linePageByScriptId[scriptKey] || 1, scriptLinePageCount);
+                    const scriptLineStartIndex = (scriptLinePage - 1) * linePageSize;
+                    const pagedScriptRows = visibleScriptRows.slice(scriptLineStartIndex, scriptLineStartIndex + linePageSize);
+                    const canLinePagePrev = scriptLinePage > 1;
+                    const canLinePageNext = scriptLinePage < scriptLinePageCount;
+                    const setScriptLinePage = (nextPage: number) => {
+                      setLinePageByScriptId((current) => ({
+                        ...current,
+                        [scriptKey]: Math.min(Math.max(1, nextPage), scriptLinePageCount),
+                      }));
+                    };
                     const scriptCompletedCount = scriptRows.filter(isScriptLineCompleted).length;
                     return (
                       <div key={String(script.id)} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
@@ -912,7 +931,20 @@ export default function AgentSceneDetailPage() {
                           </p>
                         ) : (
                           <div className="space-y-2">
-                            {visibleScriptRows.map((line) => {
+                            {visibleScriptRows.length > linePageSize && (
+                              <AssetPaginationControls
+                                page={scriptLinePage}
+                                pageCount={scriptLinePageCount}
+                                startIndex={scriptLineStartIndex}
+                                visibleCount={pagedScriptRows.length}
+                                totalCount={visibleScriptRows.length}
+                                canPrev={canLinePagePrev}
+                                canNext={canLinePageNext}
+                                onPrev={() => setScriptLinePage(scriptLinePage - 1)}
+                                onNext={() => setScriptLinePage(scriptLinePage + 1)}
+                              />
+                            )}
+                            {pagedScriptRows.map((line) => {
                               const completed = isScriptLineCompleted(line);
                               const imageConfirmed = isScriptLineImageConfirmed(line);
                               const audioConfirmed = isScriptLineAudioConfirmed(line);
@@ -1003,6 +1035,21 @@ export default function AgentSceneDetailPage() {
                                 </div>
                               );
                             })}
+                            {visibleScriptRows.length > linePageSize && (
+                              <div className="pt-1">
+                                <AssetPaginationControls
+                                  page={scriptLinePage}
+                                  pageCount={scriptLinePageCount}
+                                  startIndex={scriptLineStartIndex}
+                                  visibleCount={pagedScriptRows.length}
+                                  totalCount={visibleScriptRows.length}
+                                  canPrev={canLinePagePrev}
+                                  canNext={canLinePageNext}
+                                  onPrev={() => setScriptLinePage(scriptLinePage - 1)}
+                                  onNext={() => setScriptLinePage(scriptLinePage + 1)}
+                                />
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
