@@ -230,6 +230,15 @@ export default function AgentSceneDetailPage() {
     }
   };
 
+  const updateAssetInSceneData = useCallback((updatedAsset: AnyRow) => {
+    const updatedAssetId = String(updatedAsset.id || '');
+    if (!updatedAssetId) return;
+    setData((current) => current ? {
+      ...current,
+      assets: current.assets.map((row) => String(row.id) === updatedAssetId ? { ...row, ...updatedAsset } : row),
+    } : current);
+  }, []);
+
   const persistAssetLineLink = async (asset: AnyRow, nextLineId: string) => {
     if (!Number.isFinite(sceneId)) return;
     const assetId = String(asset.id || '');
@@ -824,7 +833,7 @@ export default function AgentSceneDetailPage() {
                   {layoutAssets.length > 0 && (
                     <div className="space-y-2">
                       {layoutAssets.slice(0, 3).map((asset) => (
-                        <AssetRow key={String(asset.id)} asset={asset} />
+                        <AssetRow key={String(asset.id)} asset={asset} onUpdateAsset={updateAssetInSceneData} />
                       ))}
                     </div>
                   )}
@@ -845,7 +854,7 @@ export default function AgentSceneDetailPage() {
                       : '現在使用中の primary 背景設定画のみ表示中。過去版は右側の「履歴表示」をONにすると確認できます。'}
                   </p>
                   {backgroundReferenceAssets.map((asset) => (
-                    <AssetRow key={String(asset.id)} asset={asset} />
+                    <AssetRow key={String(asset.id)} asset={asset} onUpdateAsset={updateAssetInSceneData} />
                   ))}
                 </div>
               )}
@@ -864,7 +873,7 @@ export default function AgentSceneDetailPage() {
                       : '現在使用中の primary 絵コンテのみ表示中。過去版は右側の「履歴表示」をONにすると確認できます。'}
                   </p>
                   {storyboardAssets.map((asset) => (
-                    <AssetRow key={String(asset.id)} asset={asset} />
+                    <AssetRow key={String(asset.id)} asset={asset} onUpdateAsset={updateAssetInSceneData} />
                   ))}
                 </div>
               )}
@@ -1031,6 +1040,7 @@ export default function AgentSceneDetailPage() {
                                     renderingSubtitleAssetId={renderingSubtitleAssetId}
                                     onSaveSubtitleClip={saveSubtitleClip}
                                     onRenderSubtitledVideo={renderSubtitledVideo}
+                                    onUpdateAsset={updateAssetInSceneData}
                                   />
                                 </div>
                               );
@@ -1132,6 +1142,7 @@ export default function AgentSceneDetailPage() {
                       renderingSubtitleAssetId={renderingSubtitleAssetId}
                       onSaveSubtitleClip={saveSubtitleClip}
                       onRenderSubtitledVideo={renderSubtitledVideo}
+                      onUpdateAsset={updateAssetInSceneData}
                     />
                   ))}
                 </div>
@@ -1876,6 +1887,7 @@ type AssetRowProps = {
   onMoveSceneImage?: (asset: AnyRow, direction: -1 | 1) => void;
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
+  onUpdateAsset?: (asset: AnyRow) => void;
 };
 
 type AssetGroupSectionProps = Omit<AssetRowProps, 'asset'> & {
@@ -1990,7 +2002,7 @@ function AssetPaginationControls({
   );
 }
 
-function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo }: AssetRowProps) {
+function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo, onUpdateAsset }: AssetRowProps) {
   const isAudio = isAudioAsset(asset);
   const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram' || isBackgroundReferenceAsset(asset);
@@ -2050,7 +2062,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
           onRenderSubtitledVideo={onRenderSubtitledVideo}
         />
       )}
-      {canRemakeCheck && <RemakeCheckControl asset={asset} />}
+      {canRemakeCheck && <RemakeCheckControl asset={asset} onUpdateAsset={onUpdateAsset} />}
       {isAudio && <AudioPlayer asset={asset} />}
       {!isAudio && src && (
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
@@ -2770,6 +2782,7 @@ function LineAssetBundle({
   onSetPrimaryAsset,
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
+  onUpdateAsset,
 }: {
   line: AnyRow;
   assets: AnyRow[];
@@ -2785,6 +2798,7 @@ function LineAssetBundle({
   onSetPrimaryAsset: (asset: AnyRow) => void;
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
+  onUpdateAsset?: (asset: AnyRow) => void;
 }) {
   const visibleAssets = showAssetHistory ? assets : assets.filter(isPrimaryAsset);
   const imageAssets = visibleAssets.filter((asset) => isVisualAsset(asset));
@@ -2822,10 +2836,10 @@ function LineAssetBundle({
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
-          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
-          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
-          <LineAssetColumn title="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} />
-          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} />
+          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} onUpdateAsset={onUpdateAsset} />
         </div>
       )}
     </div>
@@ -2848,6 +2862,7 @@ function LineAssetColumn({
   onSetPrimaryAsset,
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
+  onUpdateAsset,
 }: {
   title: string;
   icon: ReactNode;
@@ -2864,6 +2879,7 @@ function LineAssetColumn({
   onSetPrimaryAsset: (asset: AnyRow) => void;
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
+  onUpdateAsset?: (asset: AnyRow) => void;
 }) {
   const [page, setPage] = useState(1);
   const visibleAssets = assets;
@@ -2917,6 +2933,7 @@ function LineAssetColumn({
               renderingSubtitleAssetId={renderingSubtitleAssetId}
               onSaveSubtitleClip={onSaveSubtitleClip}
               onRenderSubtitledVideo={onRenderSubtitledVideo}
+              onUpdateAsset={onUpdateAsset}
             />
           ))}
           {visibleAssets.length > pageSize && (
@@ -2952,6 +2969,7 @@ function LinkedAssetCard({
   onSetPrimaryAsset,
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
+  onUpdateAsset,
 }: {
   asset: AnyRow;
   allLines: AnyRow[];
@@ -2964,6 +2982,7 @@ function LinkedAssetCard({
   onSetPrimaryAsset: (asset: AnyRow) => void;
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
+  onUpdateAsset?: (asset: AnyRow) => void;
 }) {
   const src = assetUrl(asset);
   const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
@@ -2999,7 +3018,7 @@ function LinkedAssetCard({
         />
       )}
       <AssetLineLinkControl asset={asset} allLines={allLines} saving={saving} compact onChange={(nextLineId) => onRelinkAsset(asset, nextLineId)} />
-      {canRemakeCheckAsset(asset) && <RemakeCheckControl asset={asset} />}
+      {canRemakeCheckAsset(asset) && <RemakeCheckControl asset={asset} onUpdateAsset={onUpdateAsset} />}
     </div>
   );
 }
@@ -3483,7 +3502,7 @@ function VideoPlayer({ asset, subtitleClips = [], compact = false }: { asset: An
   );
 }
 
-function RemakeCheckControl({ asset }: { asset: AnyRow }) {
+function RemakeCheckControl({ asset, onUpdateAsset }: { asset: AnyRow; onUpdateAsset?: (asset: AnyRow) => void }) {
   const metadata: Record<string, unknown> = useMemo(
     () => isRecord(asset.metadata) ? asset.metadata : {},
     [asset.metadata]
@@ -3541,6 +3560,8 @@ function RemakeCheckControl({ asset }: { asset: AnyRow }) {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました');
       }
+      const updatedAsset = result.data?.asset;
+      if (updatedAsset) onUpdateAsset?.(updatedAsset);
       setSavedNote(note.trim());
       if (isImageLike) setSavedReferenceMode(referenceMode);
     } catch (err) {
