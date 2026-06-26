@@ -614,7 +614,7 @@ type ParsedTimingCue = {
 };
 
 const VALID_VIDEO_GENERATION_MODES = new Set(['lipsync', 'silent_back_view_then_mux']);
-const VALID_VIDEO_GENERATION_PROVIDERS = new Set(['grok', 'ltx_2_3_i2v', 'ltx_2_3_flf2v']);
+const VALID_VIDEO_GENERATION_PROVIDERS = new Set(['grok', 'ltx_2_3_i2v', 'ltx_2_3_flf2v', 'ltx_2_3_flf2v_lipsync']);
 const VALID_LINE_TYPES = new Set(['dialogue', 'action', 'inner_monologue', 'narration', 'scene_only', 'system']);
 
 function parseLineType(value: unknown, fallback: string) {
