@@ -1383,6 +1383,7 @@ function CharacterCard({ character }: { character: AnyRow }) {
               className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-offset-2 transition hover:ring-2 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900 dark:ring-offset-slate-950"
               aria-label={`${characterName}のキャラシを拡大`}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic character media can be a local proxy or external storage URL. */}
               <img src={imageUrl} alt={characterName} className="h-full w-full object-contain" loading="lazy" />
               <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition group-hover:opacity-100 group-focus:opacity-100">
                 <Maximize2 size={16} className="text-white" />
@@ -1469,6 +1470,7 @@ function CharacterCard({ character }: { character: AnyRow }) {
               </div>
             </div>
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-100 p-2 dark:bg-slate-900/70 sm:p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element -- Preview uses the original dynamic media URL. */}
               <img
                 src={activePreviewUrl}
                 alt={`${characterName} character sheet`}
@@ -1955,6 +1957,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
     <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
       {isImage && src && (
         <a href={src} target="_blank" rel="noreferrer" className="mb-3 block max-w-full overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Scene assets are dynamic user/media storage URLs. */}
           <img src={src} alt={`asset ${String(asset.id)}`} className={`${shouldContainImage ? 'aspect-square object-contain' : 'aspect-[3/4] object-cover'} h-auto w-full max-w-full transition hover:scale-[1.01]`} loading="lazy" />
         </a>
       )}
@@ -2921,6 +2924,7 @@ function LinkedAssetCard({
     <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-800 dark:bg-slate-900">
       {isVisualAsset(asset) && src && (
         <a href={src} target="_blank" rel="noreferrer" className="mb-2 flex max-h-72 items-center justify-center overflow-hidden rounded-md bg-slate-100 dark:bg-slate-950">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Linked line assets are dynamic user/media storage URLs. */}
           <img src={src} alt={`asset ${String(asset.id)}`} className="h-auto max-h-72 w-full object-contain" loading="lazy" />
         </a>
       )}
