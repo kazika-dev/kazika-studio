@@ -2807,14 +2807,12 @@ function LineAssetBundle({
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
 }) {
-  const [showHistory, setShowHistory] = useState(false);
   const primaryAssets = assets.filter(isPrimaryAsset);
   const historyAssets = assets.filter((asset) => !isPrimaryAsset(asset));
-  const visibleAssets = showHistory ? assets : primaryAssets;
-  const imageAssets = visibleAssets.filter((asset) => isVisualAsset(asset));
-  const audioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
-  const sfxAssets = visibleAssets.filter(isSfxAsset);
-  const videoAssets = visibleAssets.filter((asset) => isVideoAsset(asset));
+  const imageAssets = assets.filter((asset) => isVisualAsset(asset));
+  const audioAssets = assets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
+  const sfxAssets = assets.filter(isSfxAsset);
+  const videoAssets = assets.filter((asset) => isVideoAsset(asset));
   const linkedAssetIds = new Set(assets.map((asset) => String(asset.id)));
   const candidateAssets = allAssets.filter((asset) => !linkedAssetIds.has(String(asset.id)));
 
@@ -2824,22 +2822,14 @@ function LineAssetBundle({
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
           <Link2 size={14} />
           このセリフの素材セット
-          <Badge>{showHistory ? `履歴込み ${assets.length}` : `primaryのみ ${primaryAssets.length}`}</Badge>
-          {!showHistory && historyAssets.length > 0 && <Badge>過去 {historyAssets.length}</Badge>}
+          <Badge>primary {primaryAssets.length}</Badge>
+          {historyAssets.length > 0 && <Badge>過去 {historyAssets.length}</Badge>}
           <LinkedAssetCount icon={<ImageIcon size={13} />} count={imageAssets.length} />
           <LinkedAssetCount icon={<Mic2 size={13} />} count={audioAssets.length} />
           <LinkedAssetCount icon={<Sparkles size={13} />} count={sfxAssets.length} />
           <LinkedAssetCount icon={<Film size={13} />} count={videoAssets.length} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowHistory((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-600 px-3 py-1 text-[11px] font-medium text-white shadow-sm transition hover:bg-indigo-700 dark:border-indigo-800 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {showHistory ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showHistory ? '過去のアセット履歴を隠す' : `過去のアセット履歴を表示${historyAssets.length > 0 ? ` (${historyAssets.length})` : ''}`}
-          </button>
           <AttachAssetSelect
             line={line}
             assets={candidateAssets}
@@ -2848,18 +2838,16 @@ function LineAssetBundle({
           />
         </div>
       </div>
-      {visibleAssets.length === 0 ? (
+      {assets.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          {assets.length === 0
-            ? 'まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。'
-            : 'primary素材はありません。過去素材は「過去のアセット履歴を表示」で確認できます。'}
+          まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
-          <LineAssetColumn title="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
-          <LineAssetColumn title="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
-          <LineAssetColumn title="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
-          <LineAssetColumn title="リップシンク/動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="画像" historyLabel="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="音声" historyLabel="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="SE" historyLabel="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="リップシンク/動画" historyLabel="動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} onUpdateAsset={onUpdateAsset} />
         </div>
       )}
     </div>
@@ -2868,6 +2856,7 @@ function LineAssetBundle({
 
 function LineAssetColumn({
   title,
+  historyLabel,
   icon,
   assets,
   empty,
@@ -2885,6 +2874,7 @@ function LineAssetColumn({
   onUpdateAsset,
 }: {
   title: string;
+  historyLabel: string;
   icon: ReactNode;
   assets: AnyRow[];
   empty: string;
@@ -2902,7 +2892,10 @@ function LineAssetColumn({
   onUpdateAsset?: (asset: AnyRow) => void;
 }) {
   const [page, setPage] = useState(1);
-  const visibleAssets = assets;
+  const [showHistory, setShowHistory] = useState(false);
+  const primaryAssets = assets.filter(isPrimaryAsset);
+  const historyAssets = assets.filter((asset) => !isPrimaryAsset(asset));
+  const visibleAssets = showHistory ? assets : primaryAssets;
   const pageSize = 10;
   const pageCount = Math.max(1, Math.ceil(visibleAssets.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -2918,11 +2911,25 @@ function LineAssetColumn({
   return (
     <div className={columnClass}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-          {icon}{title}<Badge>{assets.length}</Badge>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+          {icon}{title}<Badge>{showHistory ? `履歴込み ${assets.length}` : `primary ${primaryAssets.length}`}</Badge>
+          {!showHistory && historyAssets.length > 0 && <Badge>過去 {historyAssets.length}</Badge>}
         </div>
-        {visibleAssets.length > pageSize && (
-          <AssetPaginationControls
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={historyAssets.length === 0}
+            onClick={() => {
+              setPage(1);
+              setShowHistory((value) => !value);
+            }}
+            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-600 px-2.5 py-1 text-[10px] font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500 dark:border-indigo-800 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:disabled:border-slate-800 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+          >
+            {showHistory ? <EyeOff size={11} /> : <Eye size={11} />}
+            {showHistory ? `${historyLabel}履歴を隠す` : historyAssets.length > 0 ? `${historyLabel}履歴を表示 (${historyAssets.length})` : `${historyLabel}履歴なし`}
+          </button>
+          {visibleAssets.length > pageSize && (
+            <AssetPaginationControls
             page={safePage}
             pageCount={pageCount}
             startIndex={startIndex}
@@ -2932,11 +2939,14 @@ function LineAssetColumn({
             canNext={canPageNext}
             onPrev={() => setPage((value) => Math.max(1, value - 1))}
             onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
-          />
-        )}
+            />
+          )}
+        </div>
       </div>
-      {assets.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">{empty}</p>
+      {visibleAssets.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-800">
+          {assets.length === 0 ? empty : `primary ${title}なし。過去素材は「${historyLabel}履歴を表示」で確認できます。`}
+        </p>
       ) : (
         <div className="space-y-2">
           {pagedAssets.map((asset) => (
