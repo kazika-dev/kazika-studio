@@ -2809,6 +2809,7 @@ function LineAssetBundle({
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const primaryAssets = assets.filter(isPrimaryAsset);
+  const historyAssets = assets.filter((asset) => !isPrimaryAsset(asset));
   const visibleAssets = showHistory ? assets : primaryAssets;
   const imageAssets = visibleAssets.filter((asset) => isVisualAsset(asset));
   const audioAssets = visibleAssets.filter((asset) => asset.asset_type === 'audio' && !isSfxAsset(asset));
@@ -2823,7 +2824,8 @@ function LineAssetBundle({
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
           <Link2 size={14} />
           このセリフの素材セット
-          <Badge>{showHistory ? '履歴込み' : 'primaryのみ'}</Badge>
+          <Badge>{showHistory ? `履歴込み ${assets.length}` : `primaryのみ ${primaryAssets.length}`}</Badge>
+          {!showHistory && historyAssets.length > 0 && <Badge>過去 {historyAssets.length}</Badge>}
           <LinkedAssetCount icon={<ImageIcon size={13} />} count={imageAssets.length} />
           <LinkedAssetCount icon={<Mic2 size={13} />} count={audioAssets.length} />
           <LinkedAssetCount icon={<Sparkles size={13} />} count={sfxAssets.length} />
@@ -2833,10 +2835,10 @@ function LineAssetBundle({
           <button
             type="button"
             onClick={() => setShowHistory((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-900 dark:text-indigo-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950"
+            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-600 px-3 py-1 text-[11px] font-medium text-white shadow-sm transition hover:bg-indigo-700 dark:border-indigo-800 dark:bg-indigo-500 dark:hover:bg-indigo-400"
           >
             {showHistory ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showHistory ? '履歴を隠す' : '履歴も表示'}
+            {showHistory ? '過去のアセット履歴を隠す' : `過去のアセット履歴を表示${historyAssets.length > 0 ? ` (${historyAssets.length})` : ''}`}
           </button>
           <AttachAssetSelect
             line={line}
@@ -2850,7 +2852,7 @@ function LineAssetBundle({
         <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
           {assets.length === 0
             ? 'まだ素材が紐付いていません。右上の「素材を追加」から、このセリフに画像・音声・動画を紐付けできます。'
-            : 'primary素材はありません。過去素材は「履歴も表示」で確認できます。'}
+            : 'primary素材はありません。過去素材は「過去のアセット履歴を表示」で確認できます。'}
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
