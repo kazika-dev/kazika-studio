@@ -2082,6 +2082,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
 
 const DIALOGUE_VIDEO_MODE_LIPSYNC = 'lipsync';
 const DIALOGUE_VIDEO_MODE_BACK_VIEW_SILENT = 'silent_back_view_then_mux';
+const VIDEO_GENERATION_PROVIDER_NONE = 'none';
 const VIDEO_GENERATION_PROVIDER_GROK = 'grok';
 const VIDEO_GENERATION_PROVIDER_LTX_I2V = 'ltx_2_3_i2v';
 const VIDEO_GENERATION_PROVIDER_LTX_FLF2V = 'ltx_2_3_flf2v';
@@ -2114,6 +2115,7 @@ function explicitVideoGenerationProvider(line: AnyRow) {
 
 function videoGenerationProvider(line: AnyRow, cues: TimingCueInput[] = []) {
   const raw = explicitVideoGenerationProvider(line);
+  if (raw === VIDEO_GENERATION_PROVIDER_NONE) return VIDEO_GENERATION_PROVIDER_NONE;
   if (raw === VIDEO_GENERATION_PROVIDER_LTX_I2V) return VIDEO_GENERATION_PROVIDER_LTX_I2V;
   if (raw === VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8) return VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8;
   if (raw === VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC) return VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC;
@@ -2133,6 +2135,7 @@ function shouldPreferLtxFlf2v(lineType: string, cues: TimingCueInput[] = []) {
 }
 
 function videoGenerationProviderLabel(provider: string) {
+  if (provider === VIDEO_GENERATION_PROVIDER_NONE) return '動画生成なし';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_I2V) return 'LTX 2.3 i2v（画像→動画）';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8) return 'LTX LipSync FP8（RunPod 1024x576）';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC) return 'ltx-flf2v-lipsync（LTX 2.3 FLF2V口パク補助）';
@@ -2287,6 +2290,7 @@ function EditableDialogueLine({
               )}
               className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
+              <option value={VIDEO_GENERATION_PROVIDER_NONE}>動画生成なし</option>
               <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v</option>
@@ -2476,6 +2480,7 @@ function EditableDialogueLine({
             onChange={(event) => setVideoGenerationProviderOverride(event.target.value)}
             className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-xs text-slate-800 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-violet-900 dark:bg-slate-950 dark:text-slate-100"
           >
+            <option value={VIDEO_GENERATION_PROVIDER_NONE}>動画生成なし</option>
             <option value={VIDEO_GENERATION_PROVIDER_GROK}>Grok</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v（画像1枚から動画化）</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v（同一画像をfirst/endに使う）</option>
@@ -2484,6 +2489,11 @@ function EditableDialogueLine({
           </select>
           <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">推奨: {videoGenerationProviderLabel(recommendedVideoGenerationProviderState)}。scene_only/内省で動作キューがないものはLTX flf2v寄せ。</span>
         </label>
+        {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_NONE && (
+          <p className="mt-2 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-violet-700 dark:bg-slate-950/60 dark:text-violet-200">
+            このlineでは動画生成を行いません。既存の画像・音声・手動登録素材だけを使う、または動画不要のlineとして扱う時に選びます。
+          </p>
+        )}
         {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_GROK && (
           <label className="mt-2 flex items-start gap-2 text-xs leading-5 text-violet-800 dark:text-violet-200">
             <input
