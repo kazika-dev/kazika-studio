@@ -1680,6 +1680,18 @@ function assetKindLabel(asset: AnyRow) {
   return String(asset.asset_type || '素材');
 }
 
+function durationSecondsLabel(value: unknown) {
+  if (value == null || value === '') return '';
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
+  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
+}
+
+function assetDurationLabel(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return durationSecondsLabel(asset.duration_seconds ?? metadata.duration_seconds);
+}
+
 function sortLinkedLineAssets(a: AnyRow, b: AnyRow) {
   const order = (assetTypeOrder(a) - assetTypeOrder(b));
   if (order !== 0) return order;
@@ -2031,7 +2043,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
         {asset.shot_index != null && <span>shot #{asset.shot_index}</span>}
         {asset.line_index != null && <span>line #{asset.line_index}</span>}
         {asset.speaker_name && <span>{asset.speaker_name}</span>}
-        {asset.duration_seconds != null && <span>{Number(asset.duration_seconds).toFixed(1)}s</span>}
+        {assetDurationLabel(asset) && <span>{assetDurationLabel(asset)}</span>}
         {asset.generation_status && <span>{asset.generation_status}</span>}
       </div>
       {isRelinkableAsset(asset) && onRelinkAsset && (
@@ -2933,6 +2945,7 @@ function LineAssetColumn({
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
           {icon}{title}<Badge>{showHistory ? `履歴込み ${assets.length}` : `primary ${primaryAssets.length}`}</Badge>
+          {!showHistory && primaryAssets.length === 1 && assetDurationLabel(primaryAssets[0]) && <Badge>{assetDurationLabel(primaryAssets[0])}</Badge>}
           {!showHistory && historyAssets.length > 0 && <Badge>過去 {historyAssets.length}</Badge>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -3048,7 +3061,10 @@ function LinkedAssetCard({
       {isAudioAsset(asset) && <AudioPlayer asset={asset} compact />}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
-        {asset.is_primary && <Badge>primary</Badge>}
+        <div className="flex flex-wrap items-center gap-1">
+          {assetDurationLabel(asset) && <Badge>{assetDurationLabel(asset)}</Badge>}
+          {asset.is_primary && <Badge>primary</Badge>}
+        </div>
       </div>
       {assetSupportsDialoguePrimary(asset) && (
         <DialoguePrimaryControl
@@ -3130,7 +3146,7 @@ function AttachAssetSelect({
         <option value="">素材を追加</option>
         {assets.map((asset) => (
           <option key={String(asset.id)} value={String(asset.id)}>
-            {assetKindLabel(asset)} #{asset.id}{asset.line_index ? ` / 現在 line ${asset.line_index}` : ' / 未紐付け'}
+            {assetKindLabel(asset)} #{asset.id}{assetDurationLabel(asset) ? ` / ${assetDurationLabel(asset)}` : ''}{asset.line_index ? ` / 現在 line ${asset.line_index}` : ' / 未紐付け'}
           </option>
         ))}
       </select>
@@ -3722,6 +3738,7 @@ function AudioPlayer({ asset, compact = false }: { asset: AnyRow; compact?: bool
         <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">asset #{asset.id}</span>
           <div className="flex shrink-0 items-center gap-1">
+            {assetDurationLabel(asset) && <Badge>{assetDurationLabel(asset)}</Badge>}
             <DownloadAudioButton asset={asset} src={src} />
             <CopyAssetIdButton assetId={asset.id} />
           </div>
