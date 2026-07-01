@@ -1006,7 +1006,7 @@ export default function AgentSceneDetailPage() {
                                       {savingLineConfirmationKey === `${line.id}:audio` ? '保存中...' : audioConfirmed ? '音声確定' : '音声未確定'}
                                     </label>
                                     <span>#{line.line_index}</span>
-                                    <CopyDialogueIdButton dialogueId={line.id} />
+                                    <CopyScriptLineIdButton scriptLineId={line.id} />
                                     <span>{line.line_type}</span>
                                     <LineTimestampBadges line={line} />
                                     {line.speaker_name && <span className="font-medium text-indigo-600 dark:text-indigo-300">{line.speaker_name}</span>}
@@ -3788,9 +3788,9 @@ function CopySceneIdButton({ sceneId }: { sceneId: ReactNode }) {
   return <CopyPrefixedIdButton label="scene_id" value={value} idleText={`scene_id: ${value}`} title="scene_id: 形式でコピー" />;
 }
 
-function CopyDialogueIdButton({ dialogueId }: { dialogueId: ReactNode }) {
-  const value = String(dialogueId ?? '');
-  return <CopyPrefixedIdButton label="dialogue_id" value={value} idleText={`dialogue_id: ${value}`} title="dialogue_id: 形式でコピー" />;
+function CopyScriptLineIdButton({ scriptLineId }: { scriptLineId: ReactNode }) {
+  const value = String(scriptLineId ?? '');
+  return <CopyPrefixedIdButton label="script_line_id" value={value} idleText={`script_line_id: ${value}`} title="script_line_id: 形式でコピー" />;
 }
 
 function CopyPrefixedIdButton({ label, value, idleText, title }: { label: string; value: string; idleText: string; title: string }) {
