@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, FlipHorizontal2, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -89,6 +89,7 @@ export default function AgentSceneDetailPage() {
   const [savingDisplayAssetId, setSavingDisplayAssetId] = useState('');
   const [savingLinkAssetId, setSavingLinkAssetId] = useState('');
   const [savingPrimaryAssetId, setSavingPrimaryAssetId] = useState('');
+  const [savingFlipAssetId, setSavingFlipAssetId] = useState('');
   const [savingDialogueLineId, setSavingDialogueLineId] = useState('');
   const [savingLineCompletionId, setSavingLineCompletionId] = useState('');
   const [mergingScriptId, setMergingScriptId] = useState('');
@@ -98,6 +99,7 @@ export default function AgentSceneDetailPage() {
   const [displayError, setDisplayError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [primaryError, setPrimaryError] = useState('');
+  const [flipError, setFlipError] = useState('');
   const [dialogueError, setDialogueError] = useState('');
   const [subtitleError, setSubtitleError] = useState('');
   const [imagePromptSettingsError, setImagePromptSettingsError] = useState('');
@@ -303,6 +305,31 @@ export default function AgentSceneDetailPage() {
       setPrimaryError(err instanceof Error ? err.message : 'primary変更に失敗しました');
     } finally {
       setSavingPrimaryAssetId('');
+    }
+  };
+
+  const flipAssetHorizontal = async (asset: AnyRow) => {
+    if (!Number.isFinite(sceneId)) return;
+    const assetId = String(asset.id || '');
+    if (!assetId) return;
+    if (!window.confirm(`asset #${assetId} の元画像データを左右反転して差し替えます。\n\n見た目だけではなく、この素材の storage_path/url が反転済み画像に変わります。`)) return;
+    setSavingFlipAssetId(assetId);
+    setFlipError('');
+    try {
+      const response = await fetch(`/api/agent-scenes/${sceneId}/assets/${assetId}/flip-horizontal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '画像の左右反転に失敗しました');
+      }
+      const updatedAsset = result.data?.asset;
+      if (updatedAsset) updateAssetInSceneData(updatedAsset);
+    } catch (err) {
+      setFlipError(err instanceof Error ? err.message : '画像の左右反転に失敗しました');
+    } finally {
+      setSavingFlipAssetId('');
     }
   };
 
@@ -1032,6 +1059,7 @@ export default function AgentSceneDetailPage() {
                                     allLines={scriptLines}
                                     savingLinkAssetId={savingLinkAssetId}
                                     savingPrimaryAssetId={savingPrimaryAssetId}
+                                    savingFlipAssetId={savingFlipAssetId}
                                     onRelinkAsset={persistAssetLineLink}
                                     onSetPrimaryAsset={persistDialoguePrimaryAsset}
                                     subtitleClips={subtitleClips}
@@ -1040,6 +1068,7 @@ export default function AgentSceneDetailPage() {
                                     onSaveSubtitleClip={saveSubtitleClip}
                                     onRenderSubtitledVideo={renderSubtitledVideo}
                                     onUpdateAsset={updateAssetInSceneData}
+                                    onFlipHorizontal={flipAssetHorizontal}
                                   />
                                 </div>
                               );
@@ -1121,6 +1150,7 @@ export default function AgentSceneDetailPage() {
                     {displayError && <p className="text-red-600 dark:text-red-300">{displayError}</p>}
                     {linkError && <p className="text-red-600 dark:text-red-300">{linkError}</p>}
                     {primaryError && <p className="text-red-600 dark:text-red-300">{primaryError}</p>}
+                    {flipError && <p className="text-red-600 dark:text-red-300">{flipError}</p>}
                     {dialogueError && <p className="text-red-600 dark:text-red-300">{dialogueError}</p>}
                     {subtitleError && <p className="text-red-600 dark:text-red-300">{subtitleError}</p>}
                   </div>
@@ -1133,6 +1163,7 @@ export default function AgentSceneDetailPage() {
                       savingDisplayAssetId={savingDisplayAssetId}
                       allLines={scriptLines}
                       savingLinkAssetId={savingLinkAssetId}
+                      savingFlipAssetId={savingFlipAssetId}
                       onRelinkAsset={persistAssetLineLink}
                       onToggleSceneImage={toggleSceneImage}
                       onMoveSceneImage={moveSceneImage}
@@ -1142,6 +1173,7 @@ export default function AgentSceneDetailPage() {
                       onSaveSubtitleClip={saveSubtitleClip}
                       onRenderSubtitledVideo={renderSubtitledVideo}
                       onUpdateAsset={updateAssetInSceneData}
+                      onFlipHorizontal={flipAssetHorizontal}
                     />
                   ))}
                 </div>
@@ -1624,6 +1656,14 @@ function isVisualAsset(asset: AnyRow) {
   return type === 'image' || type === 'thumbnail' || type === 'storyboard';
 }
 
+function canFlipHorizontalAsset(asset: AnyRow) {
+  const type = String(asset.asset_type || '');
+  return isVisualAsset(asset)
+    || type === 'layout_reference'
+    || type === 'placement_diagram'
+    || isBackgroundReferenceAsset(asset);
+}
+
 function isVideoAsset(asset: AnyRow) {
   const type = String(asset.asset_type || '');
   return type === 'video' || type === 'talking_video' || type === 'synced_video' || type === 'final_video' || String(asset.mime_type || '').includes('video');
@@ -1808,6 +1848,41 @@ function formatSceneDateTime(value: Date) {
   }).format(value);
 }
 
+function assetUpdatedAt(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return dateValue(
+    asset.updated_at
+      ?? metadata.updated_at
+      ?? metadata.asset_updated_at
+      ?? asset.created_at
+      ?? metadata.created_at
+  );
+}
+
+function assetCreatedAt(asset: AnyRow) {
+  const metadata = assetMetadata(asset);
+  return dateValue(asset.created_at ?? metadata.created_at);
+}
+
+function assetTimestampTitle(asset: AnyRow) {
+  const updatedAt = assetUpdatedAt(asset);
+  const createdAt = assetCreatedAt(asset);
+  const parts = [];
+  if (updatedAt) parts.push(`更新: ${updatedAt.toISOString()}`);
+  if (createdAt) parts.push(`作成: ${createdAt.toISOString()}`);
+  return parts.join('\n') || undefined;
+}
+
+function AssetUpdatedText({ asset }: { asset: AnyRow }) {
+  const updatedAt = assetUpdatedAt(asset);
+  if (!updatedAt) return null;
+  return (
+    <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500" title={assetTimestampTitle(asset)}>
+      更新 {formatSceneDateTime(updatedAt)}
+    </div>
+  );
+}
+
 function subtitleText(clip: AnyRow) {
   const metadata = subtitleMetadata(clip);
   const raw = metadata.text ?? clip.text ?? clip.title ?? '';
@@ -1890,6 +1965,7 @@ type AssetRowProps = {
   savingDisplayAssetId?: string;
   allLines?: AnyRow[];
   savingLinkAssetId?: string;
+  savingFlipAssetId?: string;
   subtitleClips?: AnyRow[];
   savingSubtitleClipId?: string;
   renderingSubtitleAssetId?: string;
@@ -1899,6 +1975,7 @@ type AssetRowProps = {
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
+  onFlipHorizontal?: (asset: AnyRow) => void;
 };
 
 type AssetGroupSectionProps = Omit<AssetRowProps, 'asset'> & {
@@ -2013,13 +2090,14 @@ function AssetPaginationControls({
   );
 }
 
-function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo, onUpdateAsset }: AssetRowProps) {
+function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = '', allLines = [], savingLinkAssetId = '', savingFlipAssetId = '', subtitleClips = [], savingSubtitleClipId = '', renderingSubtitleAssetId = '', onRelinkAsset, onToggleSceneImage, onMoveSceneImage, onSaveSubtitleClip, onRenderSubtitledVideo, onUpdateAsset, onFlipHorizontal }: AssetRowProps) {
   const isAudio = isAudioAsset(asset);
   const isVideo = isVideoAsset(asset);
   const isImage = asset.asset_type === 'image' || asset.asset_type === 'thumbnail' || asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram' || isBackgroundReferenceAsset(asset);
   const shouldContainImage = asset.asset_type === 'storyboard' || asset.asset_type === 'layout_reference' || asset.asset_type === 'placement_diagram' || isBackgroundReferenceAsset(asset);
   const canRemakeCheck = canRemakeCheckAsset(asset);
   const canEditSceneImageDisplay = isSceneImageAsset(asset) && Boolean(onToggleSceneImage && onMoveSceneImage);
+  const canFlipHorizontal = canFlipHorizontalAsset(asset) && Boolean(onFlipHorizontal);
   const src = assetUrl(asset);
   const downloadSrc = storageDownloadUrl(src);
   const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
@@ -2032,6 +2110,7 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
         </a>
       )}
       {isVideo && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} />}
+      {(isImage || isVideo) && <AssetUpdatedText asset={asset} />}
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-100">asset #{asset.id}</span>
         <div className="flex shrink-0 items-center gap-2">
@@ -2061,6 +2140,12 @@ function AssetRow({ asset, enabledSceneImageAssets = [], savingDisplayAssetId = 
           saving={savingDisplayAssetId === String(asset.id)}
           onToggle={() => onToggleSceneImage?.(asset)}
           onMove={(direction) => onMoveSceneImage?.(asset, direction)}
+        />
+      )}
+      {canFlipHorizontal && (
+        <HorizontalFlipControl
+          saving={savingFlipAssetId === String(asset.id)}
+          onFlip={() => onFlipHorizontal?.(asset)}
         />
       )}
       {isVideo && (
@@ -2815,6 +2900,7 @@ function LineAssetBundle({
   allLines,
   savingLinkAssetId,
   savingPrimaryAssetId,
+  savingFlipAssetId,
   subtitleClips = [],
   savingSubtitleClipId = '',
   renderingSubtitleAssetId = '',
@@ -2823,6 +2909,7 @@ function LineAssetBundle({
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
   onUpdateAsset,
+  onFlipHorizontal,
 }: {
   line: AnyRow;
   assets: AnyRow[];
@@ -2830,6 +2917,7 @@ function LineAssetBundle({
   allLines: AnyRow[];
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
+  savingFlipAssetId: string;
   subtitleClips?: AnyRow[];
   savingSubtitleClipId?: string;
   renderingSubtitleAssetId?: string;
@@ -2838,6 +2926,7 @@ function LineAssetBundle({
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
+  onFlipHorizontal?: (asset: AnyRow) => void;
 }) {
   const primaryAssets = assets.filter(isPrimaryAsset);
   const historyAssets = assets.filter((asset) => !isPrimaryAsset(asset));
@@ -2876,7 +2965,7 @@ function LineAssetBundle({
         </p>
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
-          <LineAssetColumn title="画像" historyLabel="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
+          <LineAssetColumn title="画像" historyLabel="画像" icon={<ImageIcon size={14} />} assets={imageAssets} empty="画像なし" confirmed={isScriptLineImageConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} savingFlipAssetId={savingFlipAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} onFlipHorizontal={onFlipHorizontal} />
           <LineAssetColumn title="音声" historyLabel="音声" icon={<Mic2 size={14} />} assets={audioAssets} empty="音声なし" confirmed={isScriptLineAudioConfirmed(line)} allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
           <LineAssetColumn title="SE" historyLabel="SE" icon={<Mic2 size={14} />} assets={sfxAssets} empty="SEなし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onUpdateAsset={onUpdateAsset} />
           <LineAssetColumn title="リップシンク/動画" historyLabel="動画" icon={<Film size={14} />} assets={videoAssets} empty="動画なし" allLines={allLines} savingLinkAssetId={savingLinkAssetId} savingPrimaryAssetId={savingPrimaryAssetId} subtitleClips={subtitleClips} savingSubtitleClipId={savingSubtitleClipId} renderingSubtitleAssetId={renderingSubtitleAssetId} onRelinkAsset={onRelinkAsset} onSetPrimaryAsset={onSetPrimaryAsset} onSaveSubtitleClip={onSaveSubtitleClip} onRenderSubtitledVideo={onRenderSubtitledVideo} onUpdateAsset={onUpdateAsset} />
@@ -2896,6 +2985,7 @@ function LineAssetColumn({
   allLines,
   savingLinkAssetId,
   savingPrimaryAssetId,
+  savingFlipAssetId = '',
   subtitleClips = [],
   savingSubtitleClipId = '',
   renderingSubtitleAssetId = '',
@@ -2904,6 +2994,7 @@ function LineAssetColumn({
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
   onUpdateAsset,
+  onFlipHorizontal,
 }: {
   title: string;
   historyLabel: string;
@@ -2914,6 +3005,7 @@ function LineAssetColumn({
   allLines: AnyRow[];
   savingLinkAssetId: string;
   savingPrimaryAssetId: string;
+  savingFlipAssetId?: string;
   subtitleClips?: AnyRow[];
   savingSubtitleClipId?: string;
   renderingSubtitleAssetId?: string;
@@ -2922,6 +3014,7 @@ function LineAssetColumn({
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
+  onFlipHorizontal?: (asset: AnyRow) => void;
 }) {
   const [page, setPage] = useState(1);
   const [showHistory, setShowHistory] = useState(false);
@@ -2989,6 +3082,7 @@ function LineAssetColumn({
               allLines={allLines}
               saving={savingLinkAssetId === String(asset.id)}
               primarySaving={savingPrimaryAssetId === String(asset.id)}
+              flipSaving={savingFlipAssetId === String(asset.id)}
               onRelinkAsset={onRelinkAsset}
               onSetPrimaryAsset={onSetPrimaryAsset}
               subtitleClips={subtitleClips}
@@ -2997,6 +3091,7 @@ function LineAssetColumn({
               onSaveSubtitleClip={onSaveSubtitleClip}
               onRenderSubtitledVideo={onRenderSubtitledVideo}
               onUpdateAsset={onUpdateAsset}
+              onFlipHorizontal={onFlipHorizontal}
             />
           ))}
           {visibleAssets.length > pageSize && (
@@ -3025,6 +3120,7 @@ function LinkedAssetCard({
   allLines,
   saving,
   primarySaving,
+  flipSaving,
   subtitleClips = [],
   savingSubtitleClipId = '',
   renderingSubtitleAssetId = '',
@@ -3033,11 +3129,13 @@ function LinkedAssetCard({
   onSaveSubtitleClip,
   onRenderSubtitledVideo,
   onUpdateAsset,
+  onFlipHorizontal,
 }: {
   asset: AnyRow;
   allLines: AnyRow[];
   saving: boolean;
   primarySaving: boolean;
+  flipSaving: boolean;
   subtitleClips?: AnyRow[];
   savingSubtitleClipId?: string;
   renderingSubtitleAssetId?: string;
@@ -3046,6 +3144,7 @@ function LinkedAssetCard({
   onSaveSubtitleClip?: (clip: AnyRow, nextText: string, nextEnabled: boolean) => void;
   onRenderSubtitledVideo?: (asset: AnyRow) => void;
   onUpdateAsset?: (asset: AnyRow) => void;
+  onFlipHorizontal?: (asset: AnyRow) => void;
 }) {
   const src = assetUrl(asset);
   const assetSubtitleClips = subtitleClipsForAsset(asset, subtitleClips);
@@ -3059,6 +3158,7 @@ function LinkedAssetCard({
       )}
       {isVideoAsset(asset) && src && <VideoPlayer asset={asset} subtitleClips={assetSubtitleClips} compact />}
       {isAudioAsset(asset) && <AudioPlayer asset={asset} compact />}
+      {(isVisualAsset(asset) || isVideoAsset(asset) || isAudioAsset(asset)) && <AssetUpdatedText asset={asset} />}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium text-slate-700 dark:text-slate-200">asset #{asset.id}</span>
         <div className="flex flex-wrap items-center gap-1">
@@ -3066,6 +3166,9 @@ function LinkedAssetCard({
           {asset.is_primary && <Badge>primary</Badge>}
         </div>
       </div>
+      {canFlipHorizontalAsset(asset) && onFlipHorizontal && (
+        <HorizontalFlipControl saving={flipSaving} onFlip={() => onFlipHorizontal(asset)} />
+      )}
       {assetSupportsDialoguePrimary(asset) && (
         <DialoguePrimaryControl
           asset={asset}
@@ -3277,6 +3380,29 @@ function SceneImageDisplayControl({
       <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
         {enabled ? '通常表示ではこの順番で並びます。' : '通常表示から外れます。履歴表示をONにすると再度選べます。'}
       </p>
+    </div>
+  );
+}
+
+function HorizontalFlipControl({
+  saving,
+  onFlip,
+}: {
+  saving: boolean;
+  onFlip: () => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onFlip}
+        disabled={saving}
+        className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900/70"
+        title="見た目だけでなく、このassetの画像データを左右反転した画像に差し替え"
+      >
+        <FlipHorizontal2 size={12} /> {saving ? '左右反転中...' : '左右反転して保存'}
+      </button>
+      <span className="text-[11px] text-slate-400">元画像データを差し替え</span>
     </div>
   );
 }
