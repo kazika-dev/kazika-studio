@@ -1143,7 +1143,7 @@ export default function AgentSceneDetailPage() {
           </div>
 
           <div className="min-w-0 space-y-6">
-            <Panel title="素材" icon={<Layers size={18} />}>
+            <Panel title="素材" icon={<Layers size={18} />} defaultCollapsed>
               {assets.length === 0 ? (
                 <Empty>まだ assets がありません。</Empty>
               ) : (
