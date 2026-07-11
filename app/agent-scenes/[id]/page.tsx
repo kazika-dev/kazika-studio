@@ -1810,12 +1810,18 @@ function isConfirmedValue(value: unknown) {
 
 function isScriptLineImageConfirmed(line: AnyRow) {
   const metadata = lineMetadata(line);
-  return isConfirmedValue(metadata.script_line_image_confirmed) || isConfirmedValue(metadata.image_confirmed);
+  if (Object.prototype.hasOwnProperty.call(metadata, 'script_line_image_confirmed')) {
+    return isConfirmedValue(metadata.script_line_image_confirmed);
+  }
+  return isConfirmedValue(metadata.image_confirmed);
 }
 
 function isScriptLineAudioConfirmed(line: AnyRow) {
   const metadata = lineMetadata(line);
-  return isConfirmedValue(metadata.script_line_audio_confirmed) || isConfirmedValue(metadata.audio_confirmed);
+  if (Object.prototype.hasOwnProperty.call(metadata, 'script_line_audio_confirmed')) {
+    return isConfirmedValue(metadata.script_line_audio_confirmed);
+  }
+  return isConfirmedValue(metadata.audio_confirmed);
 }
 
 
