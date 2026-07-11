@@ -108,6 +108,7 @@ export default function AgentSceneDetailPage() {
   const [savingSubtitleClipId, setSavingSubtitleClipId] = useState('');
   const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
   const [renderingFinalSubtitledVideo, setRenderingFinalSubtitledVideo] = useState(false);
+  const [titlePanelCollapsed, setTitlePanelCollapsed] = useState(true);
 
   const loadScene = useCallback(async () => {
     if (!Number.isFinite(sceneId)) {
@@ -800,29 +801,37 @@ export default function AgentSceneDetailPage() {
         </div>
 
         <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{scene.story_title}</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
+          <button
+            type="button"
+            aria-expanded={!titlePanelCollapsed}
+            onClick={() => setTitlePanelCollapsed((value) => !value)}
+            className="flex w-full min-w-0 items-center gap-3 text-left"
+          >
+            <h1 className="min-w-0 flex-1 text-3xl font-bold text-slate-900 dark:text-white">{scene.title}</h1>
+            <ChevronDown size={20} className={`shrink-0 text-slate-400 transition-transform ${titlePanelCollapsed ? '-rotate-90' : ''}`} />
+          </button>
+          {!titlePanelCollapsed && (
+            <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{scene.story_title}</p>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  {scene.summary || scene.description || 'シーン概要は未設定です。'}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  {scene.location && <Badge>{scene.location}</Badge>}
+                  {scene.time_of_day && <Badge>{scene.time_of_day}</Badge>}
+                  {scene.mood && <Badge>{scene.mood}</Badge>}
+                  {scene.source_story_scene_id && <Badge>source #{scene.source_story_scene_id}</Badge>}
+                </div>
               </div>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {scene.summary || scene.description || 'シーン概要は未設定です。'}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                {scene.location && <Badge>{scene.location}</Badge>}
-                {scene.time_of_day && <Badge>{scene.time_of_day}</Badge>}
-                {scene.mood && <Badge>{scene.mood}</Badge>}
-                {scene.source_story_scene_id && <Badge>source #{scene.source_story_scene_id}</Badge>}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[420px]">
+                <Stat icon={<ScrollText size={17} />} label="台本" value={scripts.length} />
+                <Stat icon={<Clapperboard size={17} />} label="ショット" value={shots.length} />
+                <Stat icon={<Layers size={17} />} label="素材" value={assets.length} />
+                <Stat icon={<Sparkles size={17} />} label="生成Job" value={generationJobs.length} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[420px]">
-              <Stat icon={<ScrollText size={17} />} label="台本" value={scripts.length} />
-              <Stat icon={<Clapperboard size={17} />} label="ショット" value={shots.length} />
-              <Stat icon={<Layers size={17} />} label="素材" value={assets.length} />
-              <Stat icon={<Sparkles size={17} />} label="生成Job" value={generationJobs.length} />
-            </div>
-          </div>
+          )}
         </section>
 
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
