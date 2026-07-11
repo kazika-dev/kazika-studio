@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, FlipHorizontal2, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,6 +109,7 @@ export default function AgentSceneDetailPage() {
   const [renderingSubtitleAssetId, setRenderingSubtitleAssetId] = useState('');
   const [renderingFinalSubtitledVideo, setRenderingFinalSubtitledVideo] = useState(false);
   const [titlePanelCollapsed, setTitlePanelCollapsed] = useState(true);
+  const scriptPanelRef = useRef<HTMLDivElement>(null);
 
   const loadScene = useCallback(async () => {
     if (!Number.isFinite(sceneId)) {
@@ -915,6 +916,7 @@ export default function AgentSceneDetailPage() {
               )}
             </Panel>
 
+            <div ref={scriptPanelRef} className="scroll-mt-4">
             <Panel title="台本 / セリフ" icon={<ScrollText size={18} />}>
               {scripts.length === 0 && scriptLines.length === 0 ? (
                 <Empty>まだ scripts / script_lines がありません。</Empty>
@@ -948,10 +950,15 @@ export default function AgentSceneDetailPage() {
                     const canLinePagePrev = scriptLinePage > 1;
                     const canLinePageNext = scriptLinePage < scriptLinePageCount;
                     const setScriptLinePage = (nextPage: number) => {
+                      const clampedPage = Math.min(Math.max(1, nextPage), scriptLinePageCount);
+                      if (clampedPage === scriptLinePage) return;
                       setLinePageByScriptId((current) => ({
                         ...current,
-                        [scriptKey]: Math.min(Math.max(1, nextPage), scriptLinePageCount),
+                        [scriptKey]: clampedPage,
                       }));
+                      window.requestAnimationFrame(() => {
+                        scriptPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      });
                     };
                     const scriptCompletedCount = scriptRows.filter(isScriptLineCompleted).length;
                     return (
@@ -1105,6 +1112,7 @@ export default function AgentSceneDetailPage() {
                 </div>
               )}
             </Panel>
+            </div>
 
             <Panel title="ショット" icon={<Clapperboard size={18} />}>
               {shots.length === 0 ? (
