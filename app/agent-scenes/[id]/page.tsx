@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, FlipHorizontal2, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Clapperboard, Clock, Copy, Download, Eye, EyeOff, Film, FlipHorizontal2, ImageIcon, Layers, Maximize2, Mic2, ScrollText, Link2, Sparkles, Subtitles, Trash2, Unlink, Users, X } from 'lucide-react';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
@@ -827,7 +827,7 @@ export default function AgentSceneDetailPage() {
 
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div className="min-w-0 space-y-6">
-            <Panel title="登場キャラクター" icon={<Users size={18} />}>
+            <Panel title="登場キャラクター" icon={<Users size={18} />} defaultCollapsed>
               {characters.length === 0 ? (
                 <Empty>まだ登場キャラクター情報がありません。</Empty>
               ) : (
@@ -839,7 +839,7 @@ export default function AgentSceneDetailPage() {
               )}
             </Panel>
 
-            <Panel title="画像生成プロンプト設定" icon={<Sparkles size={18} />}>
+            <Panel title="画像生成プロンプト設定" icon={<Sparkles size={18} />} defaultCollapsed>
               <ImageGenerationSettingsEditor
                 scene={scene}
                 settings={sceneImageGenerationSettings}
@@ -849,7 +849,7 @@ export default function AgentSceneDetailPage() {
               />
             </Panel>
 
-            <Panel title="キャラクター配置図" icon={<Layers size={18} />}>
+            <Panel title="キャラクター配置図" icon={<Layers size={18} />} defaultCollapsed>
               {sceneLayouts.length === 0 && layoutAssets.length === 0 ? (
                 <Empty>まだ配置図がありません。シーン作成時に layout_reference asset として登録します。</Empty>
               ) : (
@@ -868,7 +868,7 @@ export default function AgentSceneDetailPage() {
               )}
             </Panel>
 
-            <Panel title="背景設定" icon={<ImageIcon size={18} />}>
+            <Panel title="背景設定" icon={<ImageIcon size={18} />} defaultCollapsed>
               {allBackgroundReferenceAssets.length === 0 ? (
                 <Empty>まだ背景設定画がありません。background_reference asset として登録するとここに表示されます。</Empty>
               ) : backgroundReferenceAssets.length === 0 ? (
@@ -887,7 +887,7 @@ export default function AgentSceneDetailPage() {
               )}
             </Panel>
 
-            <Panel title="絵コンテ" icon={<Clapperboard size={18} />}>
+            <Panel title="絵コンテ" icon={<Clapperboard size={18} />} defaultCollapsed>
               {allStoryboardAssets.length === 0 ? (
                 <Empty>まだ絵コンテがありません。storyboard asset として登録するとここに表示されます。</Empty>
               ) : storyboardAssets.length === 0 ? (
@@ -1244,11 +1244,28 @@ export default function AgentSceneDetailPage() {
   );
 }
 
-function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+function Panel({ title, icon, children, defaultCollapsed = false }: { title: string; icon: ReactNode; children: ReactNode; defaultCollapsed?: boolean }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
   return (
     <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-      <h2 className="mb-4 flex min-w-0 items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">{icon}{title}</h2>
-      {children}
+      <h2 className={`${collapsed ? '' : 'mb-4'} text-lg font-semibold text-slate-900 dark:text-white`}>
+        {defaultCollapsed ? (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+            className="flex w-full min-w-0 items-center gap-2 text-left"
+          >
+            {icon}
+            <span className="min-w-0 flex-1">{title}</span>
+            <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+          </button>
+        ) : (
+          <span className="flex min-w-0 items-center gap-2">{icon}{title}</span>
+        )}
+      </h2>
+      {!collapsed && children}
     </section>
   );
 }
