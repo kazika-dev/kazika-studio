@@ -2276,7 +2276,7 @@ function shouldPreferLtxFlf2v(lineType: string, cues: TimingCueInput[] = []) {
 function videoGenerationProviderLabel(provider: string) {
   if (provider === VIDEO_GENERATION_PROVIDER_NONE) return '動画生成なし';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_I2V) return 'LTX 2.3 i2v（画像→動画）';
-  if (provider === VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8) return 'LTX LipSync FP8（RunPod 1024x576）';
+  if (provider === VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8) return 'ltx-FP8 マスク 音声 リップシンク';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_TALKING_FLF2V) return 'ltx_talking_flf2v（マスク付き音声同時生成）';
   if (provider === VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC) return 'ltx-flf2v-lipsync（LTX 2.3 FLF2V口パク補助）';
   return provider === VIDEO_GENERATION_PROVIDER_LTX_FLF2V ? 'LTX 2.3 flf2v（同一画像 start/end）' : 'Grok';
@@ -2435,7 +2435,7 @@ function EditableDialogueLine({
               <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_TALKING_FLF2V}>ltx_talking_flf2v</option>
-              <option value={VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8}>LTX LipSync FP8</option>
+              <option value={VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8}>ltx-FP8 マスク 音声 リップシンク</option>
               <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC}>ltx-flf2v-lipsync</option>
             </select>
           </label>
@@ -2626,7 +2626,7 @@ function EditableDialogueLine({
             <option value={VIDEO_GENERATION_PROVIDER_LTX_I2V}>LTX 2.3 i2v（画像1枚から動画化）</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V}>LTX 2.3 flf2v（同一画像をfirst/endに使う）</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_TALKING_FLF2V}>ltx_talking_flf2v（顔マスク＋台詞prompt）</option>
-            <option value={VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8}>LTX LipSync FP8（RunPod / 1024x576）</option>
+            <option value={VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8}>ltx-FP8 マスク 音声 リップシンク</option>
             <option value={VIDEO_GENERATION_PROVIDER_LTX_FLF2V_LIPSYNC}>ltx-flf2v-lipsync（口パク補助）</option>
           </select>
           <span className="mt-1 block text-[11px] text-violet-600 dark:text-violet-300">推奨: {videoGenerationProviderLabel(recommendedVideoGenerationProviderState)}。scene_only/内省で動作キューがないものはLTX flf2v寄せ。</span>
@@ -2667,7 +2667,7 @@ function EditableDialogueLine({
         )}
         {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_LTX_LIPSYNC_FP8 && (
           <p className="mt-2 rounded-lg bg-white/70 px-2 py-1 text-[11px] leading-5 text-violet-700 dark:bg-slate-950/60 dark:text-violet-200">
-            LTX LipSync FP8はprimary画像＋primary会話音声をRunPod endpoint sy12z29ln8pr18へ渡し、原則1024x576で生成します。声の内容・尺はDB音声を基準にし、カメラ固定・口元だけの自然な動きに寄せる想定。
+            ltx-FP8 マスク 音声 リップシンクはprimary画像＋primary会話音声＋同一end frame＋顔マスクをRunPod endpoint sy12z29ln8pr18のmasked_lipsync_flf2vへ渡します。0.5秒pre-roll後に先頭12フレームを切り、DBのprimary音声を先頭からmuxする想定です。
           </p>
         )}
         {videoGenerationProviderState === VIDEO_GENERATION_PROVIDER_LTX_I2V && (
